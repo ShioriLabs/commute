@@ -105,6 +105,12 @@ data class TripState(
      * one creeping up the platform after standing is still short of the point.
      */
     val stoodAt: String? = null,
+    /**
+     * When the fixes reading the train standing at [stoodAt] began (epoch milliseconds), and whether
+     * they've held long enough to believe: a fix under a roof reads it standing while it still brakes.
+     */
+    val standingSinceMs: Long? = null,
+    val standingHeld: Boolean = false,
     val pullingOutFixes: Int = 0,
     /** The speed of the last of those fixes: one slower than it is braking in, and starts the count again. */
     val pullingOutSpeed: Float? = null,

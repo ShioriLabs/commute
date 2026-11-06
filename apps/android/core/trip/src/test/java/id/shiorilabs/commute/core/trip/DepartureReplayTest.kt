@@ -13,7 +13,14 @@ import java.util.zip.GZIPInputStream
  */
 class DepartureReplayTest {
 
-    private class Dwell(val name: String, val lastStillUs: Long, val firstMovingUs: Long, val jalanUs: Long?) {
+    private class Dwell(
+        val name: String,
+        val lastStillUs: Long,
+        val firstMovingUs: Long,
+        val jalanUs: Long?,
+        /** Where the engine arms it once standing has held, when that isn't the samples' zero. */
+        val heldUs: Long = 0,
+    ) {
         val samples = mutableListOf<Sample>()
     }
 
@@ -26,7 +33,13 @@ class DepartureReplayTest {
             val parts = line.split(' ')
             if (parts[0] == "dwell") {
                 val facts = parts.drop(2).associate { it.substringBefore('=') to it.substringAfter('=') }
-                dwells += Dwell(parts[1], facts.getValue("lastStill").toLong(), facts.getValue("firstMoving").toLong(), facts["jalan"]?.toLongOrNull())
+                dwells += Dwell(
+                    parts[1],
+                    facts.getValue("lastStill").toLong(),
+                    facts.getValue("firstMoving").toLong(),
+                    facts["jalan"]?.toLongOrNull(),
+                    facts["held"]?.toLong() ?: 0,
+                )
             } else {
                 dwells.last().samples += Sample(parts[1].toLong(), parts[0] == "g", FloatArray(3) { parts[2 + it].toFloat() })
             }
@@ -35,11 +48,15 @@ class DepartureReplayTest {
         return dwells
     }
 
-    /** When the detector said so, and the onset it gave, in microseconds since arming; `null` if it never did. */
-    private fun replay(dwell: Dwell): Pair<Long, Long>? {
+    /**
+     * When the detector said so, and the onset it gave, in the samples' microseconds, armed at [armUs];
+     * `null` if it never did.
+     */
+    private fun replay(dwell: Dwell, armUs: Long = 0): Pair<Long, Long>? {
         val detector = DepartureDetector()
-        detector.arm(BASE)
+        detector.arm(BASE + armUs * 1000)
         for (sample in dwell.samples) {
+            if (sample.us < armUs) continue
             val nanos = BASE + sample.us * 1000
             if (sample.gyro) {
                 detector.onGyroscope(nanos, sample.v)
@@ -84,6 +101,39 @@ class DepartureReplayTest {
         assertEquals(listOf("oct16-1", "oct16-3"), missed)
     }
 
+    /*
+     * 5 Nov evening, Sudirman to Kranji, in a pocket: the samples count from when the satellites
+     * (GPS_PROVIDER, every second) first read the train standing; `held` is where the engine arms
+     * now, standing fixes 3 s apart.
+     */
+
+    @Test
+    fun `armed once standing has held, each stop is caught as the train left`() {
+        val all = dwells("krl-2026-11-05.txt.gz")
+        val wrong = all.mapNotNull { dwell ->
+            val (saidUs, onsetUs) = replay(dwell, dwell.heldUs) ?: return@mapNotNull "${dwell.name}: missed"
+            when {
+                saidUs < dwell.lastStillUs - EARLY_OF_SECOND_FIXES_US -> "${dwell.name}: ${(saidUs - dwell.lastStillUs) / 1e6} s before it left"
+                onsetUs > dwell.firstMovingUs -> "${dwell.name}: onset ${(onsetUs - dwell.firstMovingUs) / 1e6} s after the satellites saw it move"
+                else -> null
+            }
+        }
+        assertEquals(6, all.size)
+        assertEquals(emptyList<String>(), wrong)
+    }
+
+    @Test
+    fun `armed while the train still brakes, its stopping reads as a pull`() {
+        // Why the engine waits for standing to hold: Manggarai on 5 Nov's morning, armed on a fix
+        // reading 0.62 m/s under the roof, said the train had left 5½ minutes before it did.
+        val early = dwells("krl-2026-11-05.txt.gz").map { dwell ->
+            val (saidUs, _) = requireNotNull(replay(dwell, armUs = -15_000_000)) { dwell.name }
+            dwell.name to (saidUs < dwell.lastStillUs - 20_000_000)
+        }
+
+        assertEquals(early.map { it.first to true }, early)
+    }
+
     private companion object {
         const val BASE = 1_000_000_000_000L
 
@@ -99,5 +149,8 @@ class DepartureReplayTest {
          * read 0.15 m/s, 4 s before the train was doing 4.2. Left, but a jolt said it first.
          */
         const val EARLY_OF_STANDING_US = 3_000_000L
+
+        /** Fixes every second read a train under 0.3 m/s for its first seconds out: on 5 Nov each pull was felt up to 8 s before. */
+        const val EARLY_OF_SECOND_FIXES_US = 10_000_000L
     }
 }
