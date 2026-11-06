@@ -22,7 +22,8 @@ import org.junit.runner.RunWith
  * on, onto the home feed (flung hard both ways, then pulled to refresh), then search for a station,
  * open it, its crowding legend, timetable and a line page, plan a trip there with OTW (departure
  * chips, a route's detail, saving the route), then open the saved station and the saved route from
- * the feed through their shared-element transitions, and last the settings and the theme switch.
+ * the feed through their shared-element transitions, then the integration map (panned, zoomed, a
+ * station opened), and last the settings and the theme switch.
  * It doesn't rely on the device's saved stations; the search path finds its own. Every step past
  * launch is allowed to fail: the content comes from the network, and a profile missing a path is
  * still valid, where a failed generation run is not.
@@ -77,6 +78,8 @@ class BaselineProfileGenerator {
             // A saved station and a saved route from the feed: their pages flying in.
             openStationFromFeed()
             openRouteFromFeed()
+
+            openMap()
 
             openSettings()
         }
@@ -198,6 +201,45 @@ class BaselineProfileGenerator {
             scrollStationPage()
             device.pressBack()
             device.waitForIdle()
+        }
+    }
+
+    /**
+     * The integration map from the rail: panned, pinched in and out, a station tapped open into its
+     * sheet and the sheet's fare check. Without Vulkan the screen says so instead and this no-ops.
+     */
+    private fun MacrobenchmarkScope.openMap() {
+        runCatching {
+            // The steps before leave home or one screen off it; the rail's card is the way in.
+            backToHome()
+            device.wait(Until.hasObject(By.desc(MAP_CARD_DESCRIPTION)), CONTENT_TIMEOUT_MS)
+            device.findObject(By.desc(MAP_CARD_DESCRIPTION))?.click() ?: return@runCatching
+            device.wait(Until.hasObject(By.desc(MAP_DESCRIPTION)), CONTENT_TIMEOUT_MS)
+            runCatching {
+                val map = device.findObject(By.desc(MAP_DESCRIPTION)) ?: return@runCatching
+                map.setGestureMargin(device.displayWidth / 10)
+                map.pinchOpen(MAP_PINCH_PERCENT)
+                device.waitForIdle()
+                repeat(MAP_PANS) {
+                    device.swipe(
+                        device.displayWidth * 3 / 4, device.displayHeight / 2,
+                        device.displayWidth / 4, device.displayHeight / 2,
+                        MAP_PAN_STEPS,
+                    )
+                    device.waitForIdle()
+                }
+                map.pinchClose(MAP_PINCH_PERCENT)
+                device.waitForIdle()
+                // A tap on the map's centre lands on whichever station or hub is nearest; none is fine.
+                device.click(device.displayWidth / 2, device.displayHeight / 2)
+                device.waitForIdle()
+            }
+            runCatching {
+                device.wait(Until.hasObject(By.text(MAP_CHECK_ROUTE)), CONTENT_TIMEOUT_MS)
+                device.findObject(By.text(MAP_CHECK_ROUTE))?.click()
+                device.waitForIdle()
+            }
+            backToHome()
         }
     }
 
@@ -355,6 +397,18 @@ class BaselineProfileGenerator {
         /** A line badge (line_badge_description) and a branch toggle (line_branch_description). */
         const val LINE_BADGE_DESCRIPTION = "Lihat "
         const val LINE_BRANCH_DESCRIPTION = "Tampilkan rute arah"
+
+        /** The rail's map card (saved_nav_map_description) and the map itself (map_description). */
+        const val MAP_CARD_DESCRIPTION = "Lihat peta integrasi"
+        const val MAP_DESCRIPTION = "Peta integrasi transportasi Jakarta"
+
+        /** A station sheet's fare check (map_check_route). */
+        const val MAP_CHECK_ROUTE = "Cek rute dan tarif"
+
+        /** Map gestures: pinch size as a fraction of the map, swipes in a row, and a swipe's steps. */
+        const val MAP_PINCH_PERCENT = 0.5f
+        const val MAP_PANS = 3
+        const val MAP_PAN_STEPS = 20
 
         /** The rail's settings card (saved_nav_settings_description) and the pages under it. */
         const val SETTINGS_CARD_DESCRIPTION = "Pengaturan aplikasi"
