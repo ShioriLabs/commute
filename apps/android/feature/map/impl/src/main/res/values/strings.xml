@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="map_back">Kembali</string>
+    <string name="map_close">Tutup peta</string>
     <string name="map_description">Peta integrasi transportasi Jakarta</string>
     <string name="map_unsupported">Peta belum bisa ditampilkan di perangkat ini.</string>
-    <string name="map_load_failed">Peta tidak bisa dimuat.</string>
+    <string name="map_load_failed">Gagal memuat peta integrasi</string>
     <string name="map_retry">Coba lagi</string>
     <string name="map_line_choices">Ada beberapa lin di sini</string>
     <string name="map_line_choices_title">Pilih lin</string>
@@ -11,4 +11,14 @@
     <string name="map_pick_origin">Pilih stasiun keberangkatan</string>
     <string name="map_pick_destination">Pilih stasiun tujuan</string>
     <string name="map_pick_cancel">Batal memilih</string>
+    <string name="map_title">Peta Integrasi</string>
+    <string name="map_recenter">Kembali ke tampilan penuh</string>
+    <string name="map_attribution_open">Lihat atribusi peta</string>
+    <string name="map_attribution_title">Peta Integrasi Jakarta</string>
+    <string name="map_attribution_credit">© Forum Diskusi Transportasi Jakarta (FDTJ)</string>
+    <!-- %1$s is the map edition, e.g. 2026-08c. -->
+    <string name="map_attribution_version">Versi %1$s</string>
+    <string name="map_lost_title">Peta terputus</string>
+    <string name="map_lost_body">Perangkat kehabisan memori grafis. Tutup aplikasi lain, lalu coba lagi</string>
+    <string name="map_lost_retry">Muat ulang peta</string>
 </resources>
