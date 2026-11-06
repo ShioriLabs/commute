@@ -90,6 +90,12 @@ class MapController(
     /** A tap opened something: the screen showing the map plays its haptic. */
     var onHit: () -> Unit = {}
 
+    /**
+     * While an end of OTW's pair is being picked on the map: a station tapped, by its id, instead
+     * of opened; whether it was taken. Nothing but a station answers a tap meanwhile.
+     */
+    var pickStation: ((stationId: String) -> Boolean)? = null
+
     /** Whether the map can draw on this device: false once Vulkan has said it can't. */
     val isSupported: StateFlow<Boolean> get() = supported
     private val supported = MutableStateFlow(true)
@@ -150,8 +156,7 @@ class MapController(
     private var routePills: List<Pill> = emptyList()
     private val routeRamp = Ramp()
     private val dimRamp = Ramp()
-    // The pair drawn; the pair the camera last framed, and a framing still to fly.
-    private var routePair: Pair<String?, String?>? = null
+    // The pair the camera last framed, and a framing still to fly.
     private var fittedPair: String? = null
     private var pendingFit: RouteOverlayModel? = null
     private val corridors by lazy { data.corridors?.corridors?.let(::prepareCorridors).orEmpty() }
@@ -334,7 +339,6 @@ class MapController(
         val model = buildRouteOverlayModel(legs, fromId, toId, data.points, ::lineColor, corridors, linePaths, connectors)
         val now = SystemClock.uptimeMillis()
         route = model
-        routePair = if (model != null) fromId to toId else null
         // Without one, the last paint fades out.
         if (model != null) routePills = routeDrawItems(model.overlay).map { it.pill() }
         val hasLine = model?.overlay?.segments?.isNotEmpty() == true
@@ -357,9 +361,6 @@ class MapController(
     }
 
     fun clearRoute() = setRoute(emptyList(), null, null)
-
-    /** Whether the route from [fromId] to [toId] is the one drawn. */
-    fun drawsPair(fromId: String?, toId: String?): Boolean = routePair == (fromId to toId)
 
     private fun lineColor(lineKey: String): String? = lineColorOf(lineKey) ?: data.lines.lineOf(lineKey)?.color
 
@@ -407,6 +408,17 @@ class MapController(
         viewport?.let { setSheetInset(it.height * Viewport.PEEK_FRACTION) }
         invalidate()
         return true
+    }
+
+    /** Opens OTW's sheet over the route, standing down a spotlight or an isolated line. */
+    fun openRouteSheet() {
+        choices.value = emptyList()
+        val now = SystemClock.uptimeMillis()
+        spotlight?.exit(now)
+        isolate?.exit(now)
+        selected.value = MapSelection.Route
+        viewport?.let { setSheetInset(it.height * Viewport.PEEK_FRACTION) }
+        invalidate()
     }
 
     /** One of [lineChoices] picked. */
@@ -651,6 +663,14 @@ class MapController(
         val worldX = t.worldX(x)
         val worldY = t.worldY(y)
         val slop = TOUCH_HIT_SLOP_DP / t.scale
+        pickStation?.let { pick ->
+            val station = hitTest(worldX, worldY, data.points, data.labels, slop) as? MapHit.Station
+            if (station != null && pick(station.point.stationId)) {
+                gestures.forgetTap()
+                onHit()
+            }
+            return
+        }
         val opened = when (val hit = hitTest(worldX, worldY, data.points, data.labels, slop)) {
             is MapHit.Station -> {
                 select(MapSelection.Station(hit.point.stationId, hit.point), null)
