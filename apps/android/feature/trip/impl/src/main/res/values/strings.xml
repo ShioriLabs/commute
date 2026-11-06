@@ -56,6 +56,7 @@
     <string name="trip_live_close">Tutup</string>
     <string name="trip_bar_open">buka perjalanan</string>
     <string name="trip_live_details">Lihat detail rute</string>
+    <string name="trip_live_map">Lihat di peta</string>
     <string name="trip_alert_rerouted_title">Naik yang %1$s aja</string>
     <string name="trip_alert_rerouted">Yang %1$s udah lewat. %2$s berikutnya berangkat %3$s dari %4$s.</string>
     <string name="trip_alert_rerouted_ahead">Soalnya yang %1$s gak keburu. %2$s berikutnya berangkat %3$s dari %4$s.</string>
