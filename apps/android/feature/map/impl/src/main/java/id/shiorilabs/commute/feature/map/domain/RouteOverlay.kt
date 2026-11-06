@@ -36,9 +36,16 @@ data class RouteBounds(val minX: Double, val minY: Double, val maxX: Double, val
 /**
  * Where ride [legIndex] runs, as one polyline in travel order, and the arc length along it of each
  * of its stops ([stopArcs], parallel to [RouteLeg.Ride.stopIds]); a stop the map doesn't draw is
- * placed between its neighbours by count. What a running trip's position is drawn along.
+ * placed between its neighbours by count. What a running trip's position is drawn along, at the
+ * ride's [halfWidth] and in its [color].
  */
-class RidePath(val legIndex: Int, val path: List<WorldPoint>, val stopArcs: DoubleArray)
+class RidePath(
+    val legIndex: Int,
+    val path: List<WorldPoint>,
+    val stopArcs: DoubleArray,
+    val halfWidth: Double = ROUTE_LINE_HALF_WIDTH_WORLD,
+    val color: Rgb = Rgb.Neutral,
+)
 
 data class RouteOverlayModel(val overlay: RouteOverlay, val bounds: RouteBounds, val rides: List<RidePath>)
 
@@ -295,7 +302,13 @@ fun buildRouteOverlayModel(
                     // A pair skipped for sitting on one spot shares its neighbour's place.
                     for (i in 1 until arcs.size) if (arcs[i] < arcs[i - 1]) arcs[i] = arcs[i - 1]
                 }
-                rides += RidePath(legIndex, ridePolyline(segments.subList(firstSegment, segments.size), marks), stopArcsOf(leg.stopIds.size, vertices, arcs))
+                rides += RidePath(
+                    legIndex = legIndex,
+                    path = ridePolyline(segments.subList(firstSegment, segments.size), marks),
+                    stopArcs = stopArcsOf(leg.stopIds.size, vertices, arcs),
+                    halfWidth = halfWidth,
+                    color = color,
+                )
 
                 // The walk in reaches where this leg is drawn, not the centroid it was matched from.
                 val arrivedFrom = cursor

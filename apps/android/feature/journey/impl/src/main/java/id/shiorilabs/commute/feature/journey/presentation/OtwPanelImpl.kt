@@ -1,20 +1,33 @@
 package id.shiorilabs.commute.feature.journey.presentation
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.feature.journey.presentation.components.RecentRoutes
 import id.shiorilabs.commute.feature.journey.presentation.components.SaveRoutePlate
@@ -77,6 +90,11 @@ class OtwPanelImpl @Inject constructor() : OtwPanel {
                             modifier = Modifier.padding(top = 16.dp),
                         )
                     }
+                    val fromId = state.pair.fromId
+                    val toId = state.pair.toId
+                    if (fromId != null && toId != null) {
+                        MapLink(onClick = { navigator.goTo(Route.Map(fromId = fromId, toId = toId)) })
+                    }
                 },
             )
             if (state.pair.fromId == null || state.pair.toId == null) {
@@ -89,5 +107,26 @@ class OtwPanelImpl @Inject constructor() : OtwPanel {
                 )
             }
         }
+    }
+}
+
+/** "Lihat di peta": the pair's route drawn on the integration map, OTW in its sheet. */
+@Composable
+private fun MapLink(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(imageVector = CommuteIcons.Map, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(
+            text = stringResource(R.string.journey_open_map),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }

@@ -12,6 +12,7 @@
     <string name="journey_map_sheet_close">Tutup rute</string>
     <string name="journey_map_chip_open">Buka rute</string>
     <string name="journey_map_chip_clear">Hapus rute</string>
+    <string name="journey_open_map">Lihat di peta</string>
     <string name="journey_share_description">Bagikan rute ini</string>
     <!-- The trip page's buttons under its header; TalkBack reads the longer descriptions instead -->
     <!-- The share sheet's title -->

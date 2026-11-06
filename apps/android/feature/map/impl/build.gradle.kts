@@ -97,8 +97,10 @@ dependencies {
     implementation(project(":feature:hub:api"))
     // LineSheet: an isolated line's sheet.
     implementation(project(":feature:line:api"))
-    // JourneyRepository and Journey: the journeys of a route drawn over the map.
+    // MapRouteSheet, Journey: OTW in the map's sheet, and the journey drawn.
     implementation(project(":feature:journey:api"))
+    // TripController: the running trip, drawn with the rider on it.
+    implementation(project(":feature:trip:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)

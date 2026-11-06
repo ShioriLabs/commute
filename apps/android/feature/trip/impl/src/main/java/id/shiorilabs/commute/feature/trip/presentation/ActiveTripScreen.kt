@@ -151,6 +151,8 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onNameHidden = viewModel::onBoardNameHidden,
         onOpenStation = { stop -> navigator.goTo(Route.Station(stop.id, title = stop.name)) },
         onRouteBack = { origin -> navigator.goTo(Route.Otw(fromId = origin.toId, toId = origin.fromId)) },
+        // The map draws the running trip, the rider on it.
+        onOpenMap = { navigator.goTo(Route.Map()) },
         manualMarks = manualMarks,
         platformMarks = platformMarks,
         onMark = viewModel::mark,
@@ -180,6 +182,7 @@ private fun ActiveTripContent(
     onNameHidden: (Boolean) -> Unit,
     onOpenStation: (TripStop) -> Unit,
     onRouteBack: (Route.Trip) -> Unit,
+    onOpenMap: () -> Unit = {},
     manualMarks: Boolean = false,
     platformMarks: Boolean = false,
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
@@ -321,7 +324,18 @@ private fun ActiveTripContent(
                 }
             }
             item(key = "details") {
-                DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp))
+                DetailsRow(
+                    text = stringResource(R.string.trip_live_details),
+                    onClick = { onDetails(trip) },
+                    modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp),
+                )
+            }
+            item(key = "map") {
+                DetailsRow(
+                    text = stringResource(R.string.trip_live_map),
+                    onClick = onOpenMap,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+                )
             }
         }
         Column(
@@ -692,9 +706,9 @@ private fun RiderChevron() {
     }
 }
 
-/** The way to the journey's own page, as a row like the app's other links. */
+/** A way off the trip (the journey's own page, the map), as a row like the app's other links. */
 @Composable
-private fun DetailsRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun DetailsRow(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -705,7 +719,7 @@ private fun DetailsRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = stringResource(R.string.trip_live_details),
+            text = text,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
