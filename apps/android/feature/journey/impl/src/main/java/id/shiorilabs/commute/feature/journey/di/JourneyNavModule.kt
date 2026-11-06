@@ -7,6 +7,8 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.feature.journey.navigation.JourneyNavContribution
+import id.shiorilabs.commute.feature.journey.presentation.MapRouteSheet
+import id.shiorilabs.commute.feature.journey.presentation.MapRouteSheetImpl
 import id.shiorilabs.commute.feature.journey.presentation.OtwPanel
 import id.shiorilabs.commute.feature.journey.presentation.OtwPanelImpl
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
@@ -23,6 +25,10 @@ abstract class JourneyNavModule {
     /** What search's OTW tab renders. */
     @Binds
     abstract fun bindOtwPanel(impl: OtwPanelImpl): OtwPanel
+
+    /** OTW in the map's sheet. */
+    @Binds
+    abstract fun bindMapRouteSheet(impl: MapRouteSheetImpl): MapRouteSheet
 
     /** What home renders for a saved pair. */
     @Binds

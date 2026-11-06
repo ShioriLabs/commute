@@ -7,6 +7,11 @@
     <!-- Stands in for the route bar when the journey has no ride to draw (a walk only) -->
     <string name="journey_trip_detail_title">Detail OTW</string>
     <string name="journey_close_description">Tutup perjalanan</string>
+    <string name="journey_back_description">Kembali ke pilihan rute</string>
+    <string name="journey_map_sheet_title">Cek Tarif</string>
+    <string name="journey_map_sheet_close">Tutup rute</string>
+    <string name="journey_map_chip_open">Buka rute</string>
+    <string name="journey_map_chip_clear">Hapus rute</string>
     <string name="journey_share_description">Bagikan rute ini</string>
     <!-- The trip page's buttons under its header; TalkBack reads the longer descriptions instead -->
     <!-- The share sheet's title -->
@@ -178,6 +183,7 @@
 
     <!-- The picker's "near you". -->
     <string name="journey_picker_use_location">Pakai lokasi kamu</string>
+    <string name="journey_picker_on_map">Pilih di peta</string>
     <string name="journey_picker_locating">Lagi cari lokasi kamu…</string>
     <string name="journey_picker_none_nearby">Nggak ada stasiun dalam 1,5 km dari kamu</string>
     <string name="journey_picker_location_unavailable">Lokasi kamu belum ketemu. Cek izin lokasi atau GPS-nya ya</string>

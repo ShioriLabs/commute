@@ -68,6 +68,7 @@ import dev.chrisbanes.haze.hazeSource
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
+import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ReportIssueLink
 import id.shiorilabs.commute.core.ui.frost.FrostedHeaderPage
@@ -171,8 +172,9 @@ private const val CLOCK_TICK_MILLIS = 30_000L
 /** Between the header and the page, on top of the header's own 16 dp: the page's usual 24 in all. */
 private val BodyTop = 8.dp
 
+/** The trip page itself, for [TripScreen] and the map's route sheet ([MapRouteSheetImpl]). */
 @Composable
-private fun TripContent(
+internal fun TripContent(
     state: TripUiState,
     innerPadding: PaddingValues,
     onClose: () -> Unit,
@@ -188,10 +190,12 @@ private fun TripContent(
     onStartTrip: () -> Unit = {},
     onOpenTrip: () -> Unit = {},
     onPickDeparture: (legIndex: Int, tripId: String) -> Unit = { _, _ -> },
+    /** In the map's sheet: back to the options this was opened from. */
+    onBack: (() -> Unit)? = null,
 ) {
     FrostedHeaderPage(
         surfaceColor = TripBackground,
-        header = { TripHeader(state = state, innerPadding = innerPadding, onClose = onClose) },
+        header = { TripHeader(state = state, innerPadding = innerPadding, onClose = onClose, onBack = onBack) },
     ) { headerHeight, listState, hazeState ->
         LazyColumn(
             state = listState,
@@ -272,7 +276,7 @@ private fun TripContent(
  * under it. Until there is a journey to draw, a plain title stands in.
  */
 @Composable
-private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose: () -> Unit) {
+private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose: () -> Unit, onBack: (() -> Unit)? = null) {
     val journey = (state.trip as? TripPageState.Loaded)?.journey
 
     Column(
@@ -280,13 +284,22 @@ private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose:
             .fillMaxWidth()
             // The status bar's height inside the header, so the frost reaches up behind it.
             .padding(top = innerPadding.calculateTopPadding())
-            .padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 16.dp),
+            .padding(start = if (onBack != null) 24.dp else 32.dp, top = 32.dp, end = 32.dp, bottom = 16.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (onBack != null) {
+                CommuteIconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = CommuteIcons.Back,
+                        contentDescription = stringResource(R.string.journey_back_description),
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
             val segments = journey?.let { routeBarSegments(it.legs) { ride -> legLines(ride, state.lines) } }
             if (!segments.isNullOrEmpty()) {
                 RouteBar(

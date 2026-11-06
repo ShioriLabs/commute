@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -78,6 +81,10 @@ import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.core.ui.components.CommuteButton
+import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
+import id.shiorilabs.commute.core.ui.components.CommuteButtonText
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
@@ -91,6 +98,9 @@ import id.shiorilabs.commute.core.ui.theme.Slate100
 import id.shiorilabs.commute.core.ui.theme.Slate200
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.feature.hub.presentation.HubSheet
+import id.shiorilabs.commute.feature.journey.domain.PairEnd
+import id.shiorilabs.commute.feature.journey.presentation.MapRouteSheet
+import id.shiorilabs.commute.feature.journey.presentation.MapRouteShown
 import id.shiorilabs.commute.feature.line.presentation.LineSheet
 import id.shiorilabs.commute.feature.map.R
 import id.shiorilabs.commute.feature.map.domain.MapData
@@ -116,6 +126,7 @@ fun MapScreen(
     stationSheet: StationSheet,
     hubSheet: HubSheet,
     lineSheet: LineSheet,
+    routeSheet: MapRouteSheet,
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -126,7 +137,7 @@ fun MapScreen(
         // The artwork is drawn on white whatever the theme, as on the web.
         Box(Modifier.fillMaxSize().background(Color.White)) {
             when (val current = state) {
-                is UIState.Success -> MapWithSheet(current.data, route, viewModel, innerPadding, stationSheet, hubSheet, lineSheet)
+                is UIState.Success -> MapWithSheet(current.data, route, viewModel, innerPadding, stationSheet, hubSheet, lineSheet, routeSheet)
                 is UIState.Error -> {
                     ProblemPanel(
                         message = stringResource(R.string.map_load_failed),
@@ -191,6 +202,7 @@ private fun MapWithSheet(
     stationSheet: StationSheet,
     hubSheet: HubSheet,
     lineSheet: LineSheet,
+    routeSheet: MapRouteSheet,
 ) {
     val navigator = LocalNavigator.current
     val density = LocalDensity.current.density
@@ -200,16 +212,33 @@ private fun MapWithSheet(
     val selection by controller.selection.collectAsStateWithLifecycle()
     val lineChoices by controller.lineChoices.collectAsStateWithLifecycle()
 
-    // The pair the map was opened on: its pins at once, its first journey's route once known.
-    LaunchedEffect(controller, route.fromId, route.toId) {
-        val fromId = route.fromId
-        val toId = route.toId
-        if (fromId == null && toId == null) return@LaunchedEffect
-        if (!controller.drawsPair(fromId, toId)) controller.setRoute(emptyList(), fromId, toId)
-        if (fromId != null && toId != null && fromId != toId) {
-            viewModel.routeLegs(fromId, toId).collect { legs -> controller.setRoute(legs, fromId, toId) }
+    val mapRoute by viewModel.route.collectAsStateWithLifecycle()
+    val picking by viewModel.picking.collectAsStateWithLifecycle()
+
+    // The pair a link opened the map on: OTW's sheet opens on it.
+    LaunchedEffect(controller) {
+        if (viewModel.seed(route)) controller.openRouteSheet()
+    }
+    // What the sheet last said to draw for the pair; its pins alone until then.
+    LaunchedEffect(controller, mapRoute) {
+        val current = mapRoute
+        if (!current.isSet) {
+            controller.clearRoute()
+            return@LaunchedEffect
+        }
+        val shown = current.shown?.takeIf { it.fromId == current.fromId && it.toId == current.toId }
+        controller.setRoute(shown?.journey?.routeLegs().orEmpty(), current.fromId, current.toId)
+    }
+    // An end armed: the next station tapped fills it, and the sheet comes back with the pair.
+    SideEffect {
+        controller.pickStation = if (picking != null) {
+            { stationId -> viewModel.pick(stationId).also { taken -> if (taken) controller.openRouteSheet() } }
+        } else {
+            null
         }
     }
+    // Opened from "Cek rute dan tarif": up at full, as the web's, rather than its peek.
+    var routeSheetFull by remember { mutableStateOf(false) }
     // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
     // sheet does rather than once it has gone.
     val sheetState = rememberMapSheetState(
@@ -219,13 +248,28 @@ private fun MapWithSheet(
     // Up at its peek for a selection, away without one, and down to it for a line, which is drawn
     // on the map rather than in the sheet.
     val showsLine = selection is MapSelection.Line
-    LaunchedEffect(selection != null, showsLine) {
-        sheetState.moveTo(if (selection != null) SheetStop.Peek else SheetStop.Hidden)
+    LaunchedEffect(selection != null, showsLine, routeSheetFull) {
+        sheetState.moveTo(
+            when {
+                selection == null -> SheetStop.Hidden
+                routeSheetFull && selection == MapSelection.Route -> SheetStop.Full
+                else -> SheetStop.Peek
+            },
+        )
+    }
+    LaunchedEffect(selection) {
+        if (selection != MapSelection.Route) routeSheetFull = false
     }
     BackHandler(enabled = selection != null) {
-        if (showsLine) controller.backFromLine() else controller.clearSelection()
+        when {
+            showsLine -> controller.backFromLine()
+            // A journey's page goes back to the options first.
+            selection == MapSelection.Route && mapRoute.journey != null -> viewModel.closeJourney()
+            else -> controller.clearSelection()
+        }
     }
-    // Declared after, so it goes first.
+    // Declared after, so they go first.
+    BackHandler(enabled = picking != null) { viewModel.disarm() }
     BackHandler(enabled = lineChoices.isNotEmpty()) { controller.dismissLineChoices() }
 
     val openStation = { stationId: String ->
@@ -262,7 +306,11 @@ private fun MapWithSheet(
                         onClose = controller::clearSelection,
                         onOpenPage = { navigator.goTo(Route.Station(shown.stationId)) },
                         onOpenStation = openStation,
-                        onOtw = { navigator.goTo(Route.Otw(toId = shown.stationId)) },
+                        // The destination set, the origin picked on the map, as the web's map does.
+                        onOtw = {
+                            viewModel.otwTo(shown.stationId)
+                            controller.clearSelection()
+                        },
                         onIsolateLine = { lineKey -> controller.isolateLine(lineKey, fromStationId = shown.stationId) },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -299,7 +347,60 @@ private fun MapWithSheet(
                     )
                 }
 
+                MapSelection.Route -> routeSheet.Content(
+                    fromId = mapRoute.fromId,
+                    toId = mapRoute.toId,
+                    journey = mapRoute.journey,
+                    onPairChange = viewModel::setPair,
+                    onOpenJourney = viewModel::openJourney,
+                    onCloseJourney = viewModel::closeJourney,
+                    onShown = viewModel::onShown,
+                    onPickOnMap = { end ->
+                        viewModel.arm(end)
+                        controller.clearSelection()
+                    },
+                    // The trip runs; its page takes over until the map can draw it.
+                    onTripStarted = {
+                        viewModel.clearRoute()
+                        controller.clearSelection()
+                        navigator.goTo(Route.ActiveTrip)
+                    },
+                    onClose = controller::clearSelection,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
                 null -> Unit
+            }
+        }
+
+        // With no sheet up: the end being picked, the route folded away, or the way into OTW.
+        if (selection == null) {
+            val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+            val chrome = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 16.dp, end = 16.dp, bottom = bottom)
+            val armed = picking
+            when {
+                armed != null -> PickPill(end = armed, onCancel = viewModel::disarm, modifier = chrome)
+
+                mapRoute.isSet -> routeSheet.Chip(
+                    shown = mapRoute.shown?.takeIf { it.fromId == mapRoute.fromId && it.toId == mapRoute.toId }
+                        ?: MapRouteShown(mapRoute.fromId, mapRoute.toId),
+                    onOpen = controller::openRouteSheet,
+                    onClear = viewModel::clearRoute,
+                    modifier = chrome,
+                )
+
+                else -> CommuteButton(
+                    onClick = {
+                        routeSheetFull = true
+                        controller.openRouteSheet()
+                    },
+                    modifier = chrome,
+                ) {
+                    CommuteButtonIcon(CommuteIcons.Search)
+                    CommuteButtonText(stringResource(R.string.map_check_route))
+                }
             }
         }
 
@@ -323,6 +424,30 @@ private fun MapWithSheet(
                 .padding(horizontal = 16.dp),
         ) {
             LineChooser(lines = heldChoices.ifEmpty { lineChoices }, onChoose = controller::chooseLine)
+        }
+    }
+}
+
+/** "Pilih stasiun keberangkatan": an end armed, the next station tapped on the map filling it. */
+@Composable
+private fun PickPill(end: PairEnd, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(percent = 50),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 20.dp, top = 6.dp, end = 8.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(if (end == PairEnd.ORIGIN) R.string.map_pick_origin else R.string.map_pick_destination),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            CommuteCloseButton(onClick = onCancel, contentDescription = stringResource(R.string.map_pick_cancel))
         }
     }
 }
