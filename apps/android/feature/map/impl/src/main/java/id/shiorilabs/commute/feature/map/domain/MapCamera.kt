@@ -77,6 +77,19 @@ data class Viewport(
         return clamp(Transform(px - worldX * scale, py - worldY * scale, scale))
     }
 
+    /**
+     * The camera framing the world box ([minX], [minY]) to ([maxX], [maxY]) in what the sheet leaves
+     * showing, [padding] dp clear all round, as near as the zoom range allows: the web's fit-bounds
+     * flight onto a route.
+     */
+    fun fit(minX: Double, minY: Double, maxX: Double, maxY: Double, padding: Double): Transform {
+        val usableH = height - insetBottom.coerceIn(0.0, height)
+        val availW = max(1.0, width - padding * 2)
+        val availH = max(1.0, usableH - padding * 2)
+        val scale = min(availW / max(1.0, maxX - minX), availH / max(1.0, maxY - minY)).coerceIn(minScale, max(minScale, maxScale))
+        return clamp(Transform(width / 2 - (minX + maxX) / 2 * scale, usableH / 2 - (minY + maxY) / 2 * scale, scale))
+    }
+
     /** [t] moved so world point ([x], [y]) sits at the view's centre, at [t]'s scale. */
     fun centeredOn(t: Transform, x: Double, y: Double): Transform =
         clamp(Transform(width / 2 - x * t.scale, height / 2 - y * t.scale, t.scale))
@@ -186,6 +199,9 @@ data class Flight(val from: Transform, val to: Transform, val durationMs: Double
 
         /** Back into range as a sheet opens or closes under the map. */
         const val SETTLE_MS = 240.0
+
+        /** Onto a route, once per pair. */
+        const val TO_ROUTE_MS = 600.0
     }
 }
 

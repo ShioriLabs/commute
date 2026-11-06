@@ -120,7 +120,7 @@ fun HomeNavRail(
                     opened = RailCard.MAP
                     onMapClick()
                 },
-                modifier = Modifier.navCardMorphSource(Route.Map),
+                modifier = Modifier.navCardMorphSource(Route.Map()),
                 animateFace = !slidesWithPage && opened == RailCard.MAP,
             )
         }

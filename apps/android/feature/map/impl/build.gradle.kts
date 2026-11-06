@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.commute.android.library.compose)
     // MapNavModule (@IntoSet) + @HiltViewModel → Hilt + KSP.
     alias(libs.plugins.commute.android.hilt)
-    // The web's manifest.json, points.json and map-lines.json, read as they are served.
+    // The web's manifest.json, points.json, map-lines.json and map-corridors.json, read as served.
     alias(libs.plugins.commute.kotlin.serialization)
 }
 
@@ -26,6 +26,13 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+
+    testOptions {
+        unitTests.all {
+            // The web's map data, for the tests that check the shipped copies and draw real routes.
+            it.systemProperty("commute.webMapData", rootProject.layout.projectDirectory.dir("../web/app/data").asFile.absolutePath)
         }
     }
 }
@@ -60,6 +67,7 @@ val bundleMapData = tasks.register<BundleMapData>("bundleMapData") {
         webApp.file("app/data/points.json"),
         webApp.file("app/data/label-points.json"),
         webApp.file("app/data/map-lines.json"),
+        webApp.file("app/data/map-corridors.json"),
     )
 }
 
@@ -89,6 +97,8 @@ dependencies {
     implementation(project(":feature:hub:api"))
     // LineSheet: an isolated line's sheet.
     implementation(project(":feature:line:api"))
+    // JourneyRepository and Journey: the journeys of a route drawn over the map.
+    implementation(project(":feature:journey:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)

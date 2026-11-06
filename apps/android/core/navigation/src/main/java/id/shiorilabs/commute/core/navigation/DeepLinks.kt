@@ -36,10 +36,19 @@ fun routeForLink(link: String): Route? {
     return when (path) {
         "/fare" -> fareRoute(queryParams(uri.rawQuery))
 
-        "/map" -> Route.Map
+        "/map" -> mapRoute(queryParams(uri.rawQuery))
 
         else -> null
     }
+}
+
+/**
+ * A `/map` link, with the pair whose route it draws, as the web's map reads it: an id with no
+ * hyphen isn't a station, and is left out.
+ */
+private fun mapRoute(params: Map<String, String>): Route.Map {
+    fun station(name: String) = params[name]?.takeIf { '-' in it }
+    return Route.Map(fromId = station("from"), toId = station("to"))
 }
 
 /**
