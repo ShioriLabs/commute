@@ -3,6 +3,8 @@ package id.shiorilabs.commute.feature.map.presentation
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -10,12 +12,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.AndroidExternalSurface
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -54,7 +58,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -93,9 +101,11 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
 import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
 import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
+import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
 import id.shiorilabs.commute.core.ui.theme.DarkStatusBarIcons
 import id.shiorilabs.commute.core.ui.theme.Slate100
 import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.feature.hub.presentation.HubSheet
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
@@ -157,9 +167,13 @@ fun MapScreen(
     }
 }
 
-/** The status bar's scrim and the way back, over the map. */
+/**
+ * The status bar's scrim and the close at the top right, as home's other rail pages close, over the
+ * map; with [title] the web's "Peta Integrasi" pill at the top left, faded out while [titleVisible]
+ * is false.
+ */
 @Composable
-private fun MapChrome(innerPadding: PaddingValues, onBack: () -> Unit) {
+private fun BoxScope.MapChrome(innerPadding: PaddingValues, onBack: () -> Unit, title: Boolean = false, titleVisible: Boolean = true) {
     // Light icons over a navy scrim that fades out below the status bar, as KitKat's translucent
     // bar did, whatever the theme: the artwork's busy top edge would otherwise run under the
     // clock, and a solid bar would cut it off.
@@ -174,17 +188,130 @@ private fun MapChrome(innerPadding: PaddingValues, onBack: () -> Unit) {
     CommuteIconButton(
         onClick = onBack,
         modifier = Modifier
-            .padding(top = innerPadding.calculateTopPadding() + 8.dp, start = 12.dp)
+            .align(Alignment.TopEnd)
+            .padding(top = innerPadding.calculateTopPadding() + 8.dp, end = 12.dp)
+            .chromeEnter(0)
             .size(40.dp)
             .shadow(2.dp, CircleShape)
             .background(MaterialTheme.colorScheme.surface, CircleShape),
     ) {
         Icon(
-            imageVector = CommuteIcons.Back,
-            contentDescription = stringResource(R.string.map_back),
+            imageVector = CommuteIcons.Close,
+            contentDescription = stringResource(R.string.map_close),
             modifier = Modifier.size(22.dp),
             tint = MaterialTheme.colorScheme.onSurface,
         )
+    }
+    if (title) {
+        val shown by animateFloatAsState(if (titleVisible) 1f else 0f, tween(TITLE_FADE_MILLIS), label = "title")
+        Text(
+            text = stringResource(R.string.map_title),
+            modifier = Modifier
+                .padding(top = innerPadding.calculateTopPadding() + 8.dp, start = 16.dp, end = 64.dp)
+                .chromeEnter(1)
+                .graphicsLayer {
+                    alpha = shown
+                    fadeShadowsWhole()
+                }
+                .shadow(4.dp, CircleShape)
+                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                .padding(horizontal = 16.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * Chrome arriving with the map, the web's `map-chrome-enter`: up 8 dp into place and in, each
+ * [index] a step after the one before. Straight in place with the system's animations off.
+ */
+@Composable
+private fun Modifier.chromeEnter(index: Int): Modifier {
+    val reduced = rememberReducedMotion()
+    val progress = remember { Animatable(if (reduced) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (progress.value < 1f) {
+            delay(index * CHROME_STAGGER_MILLIS)
+            progress.animateTo(1f, tween(CHROME_ENTER_MILLIS, easing = FastOutSlowInEasing))
+        }
+    }
+    return graphicsLayer {
+        alpha = progress.value
+        translationY = (1 - progress.value) * CHROME_ENTER_RISE.toPx()
+        fadeShadowsWhole()
+    }
+}
+
+/**
+ * Fades by each thing drawn rather than through a layer the size of the chrome: a shadow reaches
+ * past its button, and drawn into that layer it was cut off square until the fade was done.
+ */
+private fun GraphicsLayerScope.fadeShadowsWhole() {
+    compositingStrategy = CompositingStrategy.ModulateAlpha
+}
+
+/** A tap's ripple, the web's `map-ripple`: a ring grown out of where it landed, fading. */
+@Composable
+private fun TapRipples(controller: MapController) {
+    val ripples by controller.ripples.collectAsStateWithLifecycle()
+    val reduced = rememberReducedMotion()
+    for (ripple in ripples) {
+        key(ripple.id) {
+            val progress = remember { Animatable(0f) }
+            LaunchedEffect(Unit) {
+                if (!reduced) progress.animateTo(1f, tween(RIPPLE_MILLIS, easing = FastOutSlowInEasing))
+                controller.rippleDone(ripple.id)
+            }
+            if (!reduced) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val p = progress.value
+                    val scale = RIPPLE_SCALE_FROM + (RIPPLE_SCALE_TO - RIPPLE_SCALE_FROM) * p
+                    drawCircle(
+                        color = RippleColor.copy(alpha = RippleColor.alpha * RIPPLE_OPACITY * (1 - p)),
+                        radius = RIPPLE_RADIUS.toPx() * scale,
+                        center = Offset(ripple.xPx, ripple.yPx),
+                        style = Stroke(width = RIPPLE_STROKE.toPx() * scale),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A round white button over the map, as the back button is. */
+@Composable
+private fun MapButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    CommuteIconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(44.dp)
+            .shadow(4.dp, CircleShape)
+            .background(MaterialTheme.colorScheme.surface, CircleShape),
+    ) {
+        Icon(imageVector = icon, contentDescription = description, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** The map's credit, the web's attribution popover: whose map it is, and which edition. */
+@Composable
+private fun Attribution(version: String, modifier: Modifier = Modifier) {
+    val title = stringResource(R.string.map_attribution_title)
+    Surface(
+        modifier = modifier
+            .widthIn(max = 320.dp)
+            .semantics { paneTitle = title },
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, Slate200),
+        shadowElevation = 12.dp,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(text = stringResource(R.string.map_attribution_credit), style = MaterialTheme.typography.bodySmall, color = Slate600)
+            Text(text = stringResource(R.string.map_attribution_version, version), style = MaterialTheme.typography.bodySmall, color = Slate500)
+        }
     }
 }
 
@@ -215,6 +342,13 @@ private fun MapWithSheet(
     val mapRoute by viewModel.route.collectAsStateWithLifecycle()
     val picking by viewModel.picking.collectAsStateWithLifecycle()
     val activeTrip by viewModel.activeTrip.collectAsStateWithLifecycle()
+    val chromeVisible by controller.isChromeVisible.collectAsStateWithLifecycle()
+    val zoomedIn by controller.isZoomedIn.collectAsStateWithLifecycle()
+    val reducedMotion = rememberReducedMotion()
+    SideEffect { controller.reducedMotion = reducedMotion }
+    // The attribution: open until its button, or any tap on the map, closes it.
+    var attributionOpen by remember { mutableStateOf(false) }
+    SideEffect { controller.onTap = { attributionOpen = false } }
 
     // The pair a link opened the map on: OTW's sheet opens on it.
     LaunchedEffect(controller) {
@@ -298,7 +432,10 @@ private fun MapWithSheet(
         val height = maxHeight
         Box(Modifier.fillMaxSize()) {
             MapSurface(controller, viewModel)
-            MapChrome(innerPadding, onBack = { navigator.pop() })
+            TapRipples(controller)
+            val lost by controller.isLost.collectAsStateWithLifecycle()
+            if (lost) MapLost(onRetry = controller::retryRenderer)
+            MapChrome(innerPadding, onBack = { navigator.pop() }, title = true, titleVisible = chromeVisible)
         }
         // Full stops short of the status bar, the clock left clear.
         MapSheet(
@@ -384,34 +521,75 @@ private fun MapWithSheet(
             }
         }
 
-        // With no sheet up: the end being picked, the route folded away, or the way into OTW.
+        // With no sheet up, as the web's phone corners: at the left the end being picked, the route
+        // folded away, or the way into OTW; at the right the way back to the whole map and the credit.
         if (selection == null) {
             val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
-            val chrome = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(start = 16.dp, end = 16.dp, bottom = bottom)
-            val armed = picking
-            when {
-                armed != null -> PickPill(end = armed, onCancel = viewModel::disarm, modifier = chrome)
+            AnimatedVisibility(
+                visible = attributionOpen,
+                enter = fadeIn(tween(CHOOSER_FADE_MILLIS)) + scaleIn(tween(CHOOSER_FADE_MILLIS), initialScale = 0.92f),
+                exit = fadeOut(tween(CHOOSER_FADE_MILLIS)),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(start = 16.dp, end = 16.dp, bottom = bottom + 56.dp),
+            ) {
+                Attribution(version = data.manifest.version)
+            }
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = bottom),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f).chromeEnter(2)) {
+                    val armed = picking
+                    when {
+                        armed != null -> PickPill(end = armed, onCancel = viewModel::disarm)
 
-                mapRoute.isSet -> routeSheet.Chip(
-                    shown = mapRoute.shown?.takeIf { it.fromId == mapRoute.fromId && it.toId == mapRoute.toId }
-                        ?: MapRouteShown(mapRoute.fromId, mapRoute.toId),
-                    onOpen = controller::openRouteSheet,
-                    onClear = viewModel::clearRoute,
-                    modifier = chrome,
-                )
+                        mapRoute.isSet -> routeSheet.Chip(
+                            shown = mapRoute.shown?.takeIf { it.fromId == mapRoute.fromId && it.toId == mapRoute.toId }
+                                ?: MapRouteShown(mapRoute.fromId, mapRoute.toId),
+                            onOpen = controller::openRouteSheet,
+                            onClear = viewModel::clearRoute,
+                            modifier = Modifier,
+                        )
 
-                else -> CommuteButton(
-                    onClick = {
-                        routeSheetFull = true
-                        controller.openRouteSheet()
-                    },
-                    modifier = chrome,
-                ) {
-                    CommuteButtonIcon(CommuteIcons.Search)
-                    CommuteButtonText(stringResource(R.string.map_check_route))
+                        else -> CommuteButton(
+                            onClick = {
+                                viewModel.disarm()
+                                routeSheetFull = true
+                                controller.openRouteSheet()
+                            },
+                        ) {
+                            CommuteButtonIcon(CommuteIcons.Fare)
+                            CommuteButtonText(stringResource(R.string.map_check_route))
+                        }
+                    }
                 }
+                // Faded in place rather than gone, so the credit beside it never jumps.
+                val recenterShown by animateFloatAsState(if (zoomedIn) 1f else 0f, tween(TITLE_FADE_MILLIS), label = "recenter")
+                MapButton(
+                    icon = CommuteIcons.MapRecenter,
+                    description = stringResource(R.string.map_recenter),
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        controller.recenter()
+                    },
+                    modifier = Modifier
+                        .chromeEnter(3)
+                        .graphicsLayer {
+                            alpha = recenterShown
+                            fadeShadowsWhole()
+                        },
+                )
+                MapButton(
+                    icon = CommuteIcons.MapInfo,
+                    description = stringResource(R.string.map_attribution_open),
+                    onClick = { attributionOpen = !attributionOpen },
+                    modifier = Modifier.chromeEnter(4),
+                )
             }
         }
 
@@ -658,6 +836,56 @@ private fun MapSurface(controller: MapController, viewModel: MapViewModel) {
         )
     }
 }
+
+/**
+ * The renderer lost and not made again after every try, the web's "Peta terputus": what the
+ * surface shows is no use, so it is covered, with a way to try again.
+ */
+@Composable
+private fun MapLost(onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(LostBackground)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.map_lost_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF1E293B),
+        )
+        Text(
+            text = stringResource(R.string.map_lost_body),
+            modifier = Modifier.padding(top = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF64748B),
+        )
+        CommuteButton(onClick = onRetry, modifier = Modifier.padding(top = 24.dp)) {
+            CommuteButtonText(stringResource(R.string.map_lost_retry))
+        }
+    }
+}
+
+/** Behind "Peta terputus", the web's. */
+private val LostBackground = Color(0xFFFFF8F8)
+
+/** The web's ripple: slate-400 at 60%, a 40 px ring from 0.3× to 2.2×, fading from 0.7. */
+private val RippleColor = Color(0x9994A3B8)
+private val RIPPLE_RADIUS = 20.dp
+private val RIPPLE_STROKE = 2.dp
+private const val RIPPLE_SCALE_FROM = 0.3f
+private const val RIPPLE_SCALE_TO = 2.2f
+private const val RIPPLE_OPACITY = 0.7f
+private const val RIPPLE_MILLIS = 350
+
+/** The web's chrome entrance, and the pill's fade. */
+private const val CHROME_ENTER_MILLIS = 300
+private const val CHROME_STAGGER_MILLIS = 50L
+private val CHROME_ENTER_RISE = 8.dp
+private const val TITLE_FADE_MILLIS = 200
 
 /** The sheet's top corners. */
 private val SHEET_CORNER = 24.dp

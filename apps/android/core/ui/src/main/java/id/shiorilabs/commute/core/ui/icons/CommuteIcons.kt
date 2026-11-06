@@ -20,7 +20,9 @@ import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.CaretUp
 import com.adamglin.phosphoricons.bold.Check
 import com.adamglin.phosphoricons.bold.Clock
+import com.adamglin.phosphoricons.bold.CornersIn
 import com.adamglin.phosphoricons.bold.CreditCard
+import com.adamglin.phosphoricons.bold.Info
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.adamglin.phosphoricons.bold.NavigationArrow
 import com.adamglin.phosphoricons.bold.PencilSimple
@@ -29,6 +31,7 @@ import com.adamglin.phosphoricons.bold.PersonSimpleWalk
 import com.adamglin.phosphoricons.bold.Prohibit
 import com.adamglin.phosphoricons.bold.PushPin
 import com.adamglin.phosphoricons.bold.PushPinSlash
+import com.adamglin.phosphoricons.bold.Receipt
 import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.SlidersHorizontal
 import com.adamglin.phosphoricons.bold.TrainSimple
@@ -78,6 +81,11 @@ object CommuteIcons {
 
     /** Opens the integration map, as the web's map card does. */
     val Map: ImageVector = PhosphorIcons.Fill.MapTrifold
+
+    /** On the map: back to the whole of it, its attribution, and OTW's way in, as the web's. */
+    val MapRecenter: ImageVector = PhosphorIcons.Bold.CornersIn
+    val MapInfo: ImageVector = PhosphorIcons.Bold.Info
+    val Fare: ImageVector = PhosphorIcons.Bold.Receipt
     val Close: ImageVector = PhosphorIcons.Bold.X
 
     /** Clears a text field. */
