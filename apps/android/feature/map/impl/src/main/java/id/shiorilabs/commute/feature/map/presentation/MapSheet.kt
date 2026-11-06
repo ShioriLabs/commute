@@ -53,7 +53,7 @@ internal enum class SheetStop { Full, Peek, Hidden }
 @Stable
 internal class MapSheetState(
     private val scope: CoroutineScope,
-    /** As the sheet starts away, so what it showed can go with it. */
+    /** As the rider sends the sheet away, so what it showed can go with it. */
     private val onHiding: () -> Unit,
 ) {
     val anchored = AnchoredDraggableState(SheetStop.Hidden)
@@ -79,10 +79,13 @@ internal class MapSheetState(
         )
     }
 
-    /** Moves the sheet to [target], carrying on at [velocity] in pixels a second. */
+    /**
+     * Moves the sheet to [target], carrying on at [velocity] in pixels a second. Only the rider's
+     * own drag or flick away ([settle]) tells [onHiding]: a move asked for here follows a selection
+     * already gone, and one from before a selection came would close it.
+     */
     fun moveTo(target: SheetStop, velocity: Float = 0f) {
         stop = target
-        if (target == SheetStop.Hidden) onHiding()
         settling?.cancel()
         settling = scope.launch {
             anchored.anchoredDrag(target) { anchors, latest ->
@@ -138,6 +141,7 @@ internal class MapSheetState(
                 }
             }
         }
+        if (target == SheetStop.Hidden) onHiding()
         moveTo(target, velocity)
     }
 

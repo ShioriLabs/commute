@@ -23,6 +23,7 @@ import id.shiorilabs.commute.feature.map.domain.ROUTE_DESATURATE_MAX
 import id.shiorilabs.commute.feature.map.domain.ROUTE_FADE_MAX
 import id.shiorilabs.commute.feature.map.domain.Ramp
 import id.shiorilabs.commute.feature.map.domain.Rgb
+import id.shiorilabs.commute.feature.map.domain.RideProgress
 import id.shiorilabs.commute.feature.map.domain.RouteDrawItem
 import id.shiorilabs.commute.feature.map.domain.RouteLeg
 import id.shiorilabs.commute.feature.map.domain.RouteOverlayModel
@@ -35,6 +36,9 @@ import id.shiorilabs.commute.feature.map.domain.TilePlanner
 import id.shiorilabs.commute.feature.map.domain.lineCutShapes
 import id.shiorilabs.commute.feature.map.domain.prepareCorridors
 import id.shiorilabs.commute.feature.map.domain.prepareLinePaths
+import id.shiorilabs.commute.feature.map.domain.riddenSegments
+import id.shiorilabs.commute.feature.map.domain.riderDrawItems
+import id.shiorilabs.commute.feature.map.domain.riderSpot
 import id.shiorilabs.commute.feature.map.domain.routeDrawItems
 import id.shiorilabs.commute.feature.map.domain.lineOf
 import id.shiorilabs.commute.feature.map.domain.linesNear
@@ -153,6 +157,7 @@ class MapController(
     // A drawn route: its geometry, its paint at full strength, and two fades, the route's own and
     // the map's set back behind it, which waits for a line to set back for.
     private var route: RouteOverlayModel? = null
+    private var builtFor: Triple<List<RouteLeg>, String?, String?>? = null
     private var routePills: List<Pill> = emptyList()
     private val routeRamp = Ramp()
     private val dimRamp = Ramp()
@@ -335,12 +340,15 @@ class MapController(
      * drawn; no legs, just the pair's pins, as a link's come before its fare. The camera frames each
      * pair once, when its line first draws. A route stands an isolated line down.
      */
-    fun setRoute(legs: List<RouteLeg>, fromId: String?, toId: String?) {
-        val model = buildRouteOverlayModel(legs, fromId, toId, data.points, ::lineColor, corridors, linePaths, connectors)
+    fun setRoute(legs: List<RouteLeg>, fromId: String?, toId: String?, progress: RideProgress? = null) {
+        // A running trip's every move redraws only the rider, not the route under them.
+        val ask = Triple(legs, fromId, toId)
+        val model = if (ask == builtFor) route else buildRouteOverlayModel(legs, fromId, toId, data.points, ::lineColor, corridors, linePaths, connectors)
+        builtFor = ask
         val now = SystemClock.uptimeMillis()
         route = model
         // Without one, the last paint fades out.
-        if (model != null) routePills = routeDrawItems(model.overlay).map { it.pill() }
+        if (model != null) routePills = routePaint(model, progress)
         val hasLine = model?.overlay?.segments?.isNotEmpty() == true
         routeRamp.set(model != null, now)
         dimRamp.set(hasLine, now)
@@ -361,6 +369,14 @@ class MapController(
     }
 
     fun clearRoute() = setRoute(emptyList(), null, null)
+
+    /** [model]'s paint, with [progress]'s rider on it and the stretch behind them greyed. */
+    private fun routePaint(model: RouteOverlayModel, progress: RideProgress?): List<Pill> {
+        if (progress == null) return routeDrawItems(model.overlay).map { it.pill() }
+        val overlay = model.overlay.copy(segments = model.overlay.segments + riddenSegments(model, progress))
+        val rider = riderSpot(model, progress)?.let(::riderDrawItems).orEmpty()
+        return (routeDrawItems(overlay) + rider).map { it.pill() }
+    }
 
     private fun lineColor(lineKey: String): String? = lineColorOf(lineKey) ?: data.lines.lineOf(lineKey)?.color
 

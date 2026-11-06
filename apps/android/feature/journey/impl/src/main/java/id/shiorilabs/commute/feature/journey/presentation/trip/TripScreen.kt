@@ -135,6 +135,7 @@ fun TripScreen(
         },
         onOpenTrip = { navigator.goTo(Route.ActiveTrip) },
         onPickDeparture = viewModel::onPickDeparture,
+        onOpenMap = { navigator.goTo(Route.Map(route.fromId, route.toId, route.journeyKey, route.boardingClock)) },
         onRetry = viewModel::retry,
         onClose = navigator::pop,
         // Back to the options this was picked from when they sit right behind; otherwise (a saved
@@ -192,6 +193,8 @@ internal fun TripContent(
     onPickDeparture: (legIndex: Int, tripId: String) -> Unit = { _, _ -> },
     /** In the map's sheet: back to the options this was opened from. */
     onBack: (() -> Unit)? = null,
+    /** The journey drawn on the map; none in the map's own sheet. */
+    onOpenMap: (() -> Unit)? = null,
 ) {
     FrostedHeaderPage(
         surfaceColor = TripBackground,
@@ -237,6 +240,7 @@ internal fun TripContent(
                             onOpenTrip = onOpenTrip,
                             onToggleSaveRoute = onToggleSaveRoute,
                             onShare = onShare,
+                            onOpenMap = onOpenMap.takeIf { hasRide },
                             modifier = Modifier.padding(bottom = 24.dp),
                         )
                         cardFare?.let { cardFareCheck.Content(fare = it, modifier = Modifier.padding(bottom = 24.dp)) }
@@ -348,8 +352,9 @@ private fun TripActions(
     onToggleSaveRoute: () -> Unit,
     onShare: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenMap: (() -> Unit)? = null,
 ) {
-    if (tripStart == null && routeSaved == null && shareUrl == null) return
+    if (tripStart == null && routeSaved == null && shareUrl == null && onOpenMap == null) return
     val haptics = LocalHapticFeedback.current
     // As tall as each other: the icons are squares as tall as the OTW button.
     Row(
@@ -370,6 +375,9 @@ private fun TripActions(
                     onToggleSaveRoute()
                 },
             )
+        }
+        onOpenMap?.let { open ->
+            TripIconButton(description = stringResource(R.string.journey_open_map), icon = CommuteIcons.Map, onClick = open)
         }
         shareUrl?.let { url ->
             TripIconButton(
