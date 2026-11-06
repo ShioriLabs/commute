@@ -2,6 +2,8 @@
 <resources>
     <!-- Header -->
     <string name="line_close_description">Tutup halaman lin</string>
+    <string name="line_back_description">Kembali</string>
+    <string name="line_open_page_description">Buka halaman lin</string>
 
     <!-- Strip. %1$s is a branch's last station; a line's name in the badge description. -->
     <string name="line_branch">arah %1$s</string>

@@ -13,6 +13,7 @@ import id.shiorilabs.commute.core.type.toFailure
 import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.data.MapStorage
 import id.shiorilabs.commute.feature.map.domain.MapData
+import id.shiorilabs.commute.feature.map.domain.MapLines
 import id.shiorilabs.commute.feature.map.domain.MapManifest
 import id.shiorilabs.commute.feature.map.domain.MapPoints
 import id.shiorilabs.commute.feature.map.domain.TileRequest
@@ -63,6 +64,7 @@ class MapRepositoryImpl internal constructor(
     // client keeps the copy it held before.
     private val pointsQuery = jsonQuery(POINTS, MapPoints.serializer()) { it.requireUsable() }
     private val labelsQuery = jsonQuery(LABELS, MapPoints.serializer()) { it.requireUsable() }
+    private val linesQuery = jsonQuery(LINES, MapLines.serializer()) { check(it.lines.isNotEmpty()) { "No lines traced" } }
 
     override suspend fun mapData(): Either<Failure, MapData> = Either.catch {
         // The first answer of each is what is held, read from disk, never a network wait; the
@@ -70,6 +72,7 @@ class MapRepositoryImpl internal constructor(
         val manifest = queries.observe(manifestQuery).first().data
         val points = queries.observe(pointsQuery).first().data
         val labels = queries.observe(labelsQuery).first().data
+        val lines = queries.observe(linesQuery).first().data
         val data = withContext(io) {
             resolveMapData(
                 deployedManifest = manifest,
@@ -78,6 +81,8 @@ class MapRepositoryImpl internal constructor(
                 bundledManifest = json.decodeFromString(MapManifest.serializer(), storage.bundled(MANIFEST)),
                 bundledPoints = json.decodeFromString(MapPoints.serializer(), storage.bundled(POINTS)),
                 bundledLabels = json.decodeFromString(MapPoints.serializer(), storage.bundled(LABELS)),
+                deployedLines = lines,
+                bundledLines = json.decodeFromString(MapLines.serializer(), storage.bundled(LINES)),
             )
         }
         withContext(io) { storage.keepOnlyBuild(data.manifest.build) }
@@ -127,6 +132,7 @@ class MapRepositoryImpl internal constructor(
         const val MANIFEST = "manifest.json"
         const val POINTS = "points.json"
         const val LABELS = "label-points.json"
+        const val LINES = "map-lines.json"
         const val PREVIEW = "preview.webp"
 
         /** As long as the web's `_headers` let a browser hold them. */

@@ -10,17 +10,22 @@ import android.view.Surface
 import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.domain.Fling
 import id.shiorilabs.commute.feature.map.domain.Flight
+import id.shiorilabs.commute.feature.map.domain.LineIsolate
 import id.shiorilabs.commute.feature.map.domain.MAX_FRAME_DT_MS
 import id.shiorilabs.commute.feature.map.domain.MAX_RENDER_DPR
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.MapGestures
 import id.shiorilabs.commute.feature.map.domain.MapHit
+import id.shiorilabs.commute.feature.map.domain.MapLine
 import id.shiorilabs.commute.feature.map.domain.MapSelection
 import id.shiorilabs.commute.feature.map.domain.MapPoint
 import id.shiorilabs.commute.feature.map.domain.Rgb
 import id.shiorilabs.commute.feature.map.domain.markerOf
 import id.shiorilabs.commute.feature.map.domain.Spotlight
 import id.shiorilabs.commute.feature.map.domain.TilePlanner
+import id.shiorilabs.commute.feature.map.domain.lineCutShapes
+import id.shiorilabs.commute.feature.map.domain.lineOf
+import id.shiorilabs.commute.feature.map.domain.linesNear
 import id.shiorilabs.commute.feature.map.domain.mapTreatment
 import id.shiorilabs.commute.feature.map.domain.markerLabel
 import id.shiorilabs.commute.feature.map.domain.seedFadeFrom
@@ -79,6 +84,10 @@ class MapController(
     val selection: StateFlow<MapSelection?> get() = selected
     private val selected = MutableStateFlow<MapSelection?>(null)
 
+    /** The lines under a tap on a stroke several of them share, to pick from; empty otherwise. */
+    val lineChoices: StateFlow<List<MapLine>> get() = choices
+    private val choices = MutableStateFlow<List<MapLine>>(emptyList())
+
     /**
      * The map as it last came to rest, at half resolution: what the window shows in its place while
      * the surface can't follow it, as when the screen morphs into home's rail card and back.
@@ -119,6 +128,7 @@ class MapController(
     private var lastFrameNanos = 0L
 
     private var spotlight: Spotlight? = null
+    private var isolate: LineIsolate? = null
 
     /** Debug: every tap target drawn in pink over the map. */
     var showHitboxes: Boolean = false
@@ -169,7 +179,6 @@ class MapController(
         invalidate()
     }
 
-    /** The surface is going: the renderer lets go of it, and of every texture, before this returns. */
     /**
      * The surface is going, as when a station's page covers the map: the renderer lets go of it
      * before this returns, keeping its textures, so the map draws whole the moment it's back.
@@ -233,7 +242,7 @@ class MapController(
         rendered = next
 
         val moving = flight != null || fling != null || target?.let { !settled(next, it) } == true ||
-            spotlight?.isAnimating == true
+            spotlight?.isAnimating == true || isolate?.isAnimating == true
         val readyPixels = if (rendererReady) draw(next, view) else false
         val more = moving || readyPixels
         snapshotGeneration++
@@ -283,31 +292,75 @@ class MapController(
         return true
     }
 
-    /** Closes the sheet: the spotlight fades out and the camera settles back into range. */
+    /** Closes the sheet: the spotlight or the isolate fades out and the camera settles back into range. */
     fun clearSelection() {
+        choices.value = emptyList()
         if (selected.value == null) return
         selected.value = null
-        spotlight?.exit(SystemClock.uptimeMillis())
+        val now = SystemClock.uptimeMillis()
+        spotlight?.exit(now)
+        isolate?.exit(now)
         setSheetInset(0.0)
         invalidate()
     }
 
     /**
+     * Isolates line [key], `OPERATOR:CODE`, its sheet taking the place of what was open: opened from
+     * station [fromStationId]'s sheet, its way back leads there. False when the map has no traced
+     * geometry for it, for the caller to open its page instead.
+     */
+    fun isolateLine(key: String, fromStationId: String? = null): Boolean {
+        val line = data.lines.lineOf(key) ?: return false
+        val current = isolate
+        if (current == null || current.key != key || current.isLeaving) {
+            val shapes = lineCutShapes(line, data.points, data.labels)
+            if (shapes.isEmpty()) return false
+            val now = SystemClock.uptimeMillis()
+            isolate = LineIsolate.after(current, key, shapes, now, alsoDrawn = spotlight?.lastFade)
+            // The line is the answer now: a halo left on one stop would read as a second selection.
+            spotlight?.exit(now)
+        }
+        choices.value = emptyList()
+        selected.value = MapSelection.Line(line, fromStationId)
+        viewport?.let { setSheetInset(it.height * Viewport.PEEK_FRACTION) }
+        invalidate()
+        return true
+    }
+
+    /** One of [lineChoices] picked. */
+    fun chooseLine(key: String) {
+        if (isolateLine(key)) onHit()
+    }
+
+    fun dismissLineChoices() {
+        choices.value = emptyList()
+    }
+
+    /** Back from a line's sheet to the station's it was opened from, else closed. */
+    fun backFromLine() {
+        val from = (selected.value as? MapSelection.Line)?.fromStationId
+        if (from == null || !selectStation(from)) clearSelection()
+    }
+
+    /**
      * Shows [selection]: its point spotlit, the rest of the map faded, its name lit with it and a
      * ring in [color] (neutral until the station's line colour arrives), flown to the middle of
-     * what the sheet leaves showing. Takes over from what's lit already without the map
-     * brightening in between.
+     * what the sheet leaves showing. Takes over from what's lit already, an isolated line
+     * included, without the map brightening in between.
      */
-    private fun select(selection: MapSelection, color: Rgb?) {
+    private fun select(selection: MapSelection.Spotlit, color: Rgb?) {
         val point = selection.point
+        val now = SystemClock.uptimeMillis()
+        choices.value = emptyList()
         selected.value = selection
         spotlight = Spotlight(
             point = point,
             label = markerLabel(point, data.labels),
             color = color ?: Rgb.Neutral,
-            startMs = SystemClock.uptimeMillis(),
-            fadeFrom = seedFadeFrom(spotlight?.lastFade),
+            startMs = now,
+            fadeFrom = seedFadeFrom(spotlight?.lastFade, isolate?.lastFade),
         )
+        isolate?.exit(now)
         if (selection is MapSelection.Station && color == null) {
             scope.launch {
                 val tint = ringColorOf(selection.stationId) ?: return@launch
@@ -349,7 +402,9 @@ class MapController(
     private fun overlay(nowMs: Long): FloatArray {
         val selection = spotlight?.frame(nowMs)
         if (spotlight?.isGone == true) spotlight = null
-        return packOverlay(mapTreatment(selection), if (showHitboxes) hitboxes else emptyList())
+        val line = isolate?.frame(nowMs)
+        if (isolate?.isGone == true) isolate = null
+        return packOverlay(mapTreatment(selection, line), if (showHitboxes) hitboxes else emptyList())
     }
 
     private fun draw(t: Transform, view: Viewport): Boolean {
@@ -498,11 +553,16 @@ class MapController(
     }
 
     /**
-     * A tap: a station's marker or name opens its sheet, a hub's region the hub's, and empty
-     * map closes whatever is open, as on the web.
+     * A tap: a station's marker or name opens its sheet, a hub's region the hub's, a line's stroke
+     * isolates it, and empty map closes whatever is open, as on the web. A stroke several lines
+     * share asks which, as the geometry can't tell.
      */
     private fun tap(t: Transform, x: Double, y: Double) {
-        val opened = when (val hit = hitTest(t.worldX(x), t.worldY(y), data.points, data.labels, TOUCH_HIT_SLOP_DP / t.scale)) {
+        choices.value = emptyList()
+        val worldX = t.worldX(x)
+        val worldY = t.worldY(y)
+        val slop = TOUCH_HIT_SLOP_DP / t.scale
+        val opened = when (val hit = hitTest(worldX, worldY, data.points, data.labels, slop)) {
             is MapHit.Station -> {
                 select(MapSelection.Station(hit.point.stationId, hit.point), null)
                 true
@@ -514,9 +574,21 @@ class MapController(
                 true
             } ?: false
 
+            // The lines run under every point, so a stroke only counts once every point has missed.
             null -> {
-                clearSelection()
-                false
+                val near = linesNear(data.lines, worldX, worldY, slop)
+                when {
+                    near.size == 1 && isolateLine(near.single()) -> true
+                    near.size > 1 -> {
+                        choices.value = near.mapNotNull(data.lines::lineOf)
+                        true
+                    }
+
+                    else -> {
+                        clearSelection()
+                        false
+                    }
+                }
             }
         }
         if (opened) {
