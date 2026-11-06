@@ -17,6 +17,8 @@ import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.Rgb
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
+import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.TripController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,7 +36,11 @@ class MapViewModel @Inject constructor(
     private val hubDirectory: HubDirectory,
     private val stationDirectory: StationDirectory,
     private val lineRepository: LineRepository,
+    tripController: TripController,
 ) : ViewModel() {
+
+    /** The trip being followed, drawn on the map with the rider on it while no route is planned. */
+    val activeTrip: StateFlow<ActiveTrip?> = tripController.active
 
     private val _state = MutableStateFlow<UIState<MapData>>(UIState.Loading)
     val state: StateFlow<UIState<MapData>> = _state.asStateFlow()

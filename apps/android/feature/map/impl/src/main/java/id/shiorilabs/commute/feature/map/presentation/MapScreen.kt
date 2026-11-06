@@ -214,20 +214,32 @@ private fun MapWithSheet(
 
     val mapRoute by viewModel.route.collectAsStateWithLifecycle()
     val picking by viewModel.picking.collectAsStateWithLifecycle()
+    val activeTrip by viewModel.activeTrip.collectAsStateWithLifecycle()
 
     // The pair a link opened the map on: OTW's sheet opens on it.
     LaunchedEffect(controller) {
         if (viewModel.seed(route)) controller.openRouteSheet()
     }
-    // What the sheet last said to draw for the pair; its pins alone until then.
-    LaunchedEffect(controller, mapRoute) {
+    // What the sheet last said to draw for the pair, its pins alone until then; with none being
+    // planned, the running trip with the rider on it.
+    LaunchedEffect(controller, mapRoute, activeTrip) {
         val current = mapRoute
-        if (!current.isSet) {
-            controller.clearRoute()
-            return@LaunchedEffect
+        val trip = activeTrip
+        when {
+            current.isSet -> {
+                val shown = current.shown?.takeIf { it.fromId == current.fromId && it.toId == current.toId }
+                controller.setRoute(shown?.journey?.routeLegs().orEmpty(), current.fromId, current.toId)
+            }
+
+            trip != null -> controller.setRoute(
+                legs = trip.plan.routeLegs(),
+                fromId = trip.plan.ride(trip.plan.rideIndices.first()).stops.first().id,
+                toId = trip.plan.destination.id,
+                progress = trip.rideProgress(),
+            )
+
+            else -> controller.clearRoute()
         }
-        val shown = current.shown?.takeIf { it.fromId == current.fromId && it.toId == current.toId }
-        controller.setRoute(shown?.journey?.routeLegs().orEmpty(), current.fromId, current.toId)
     }
     // An end armed: the next station tapped fills it, and the sheet comes back with the pair.
     SideEffect {
@@ -359,11 +371,10 @@ private fun MapWithSheet(
                         viewModel.arm(end)
                         controller.clearSelection()
                     },
-                    // The trip runs; its page takes over until the map can draw it.
+                    // The trip runs, drawn on the map with the rider on it, its bar over the screen.
                     onTripStarted = {
                         viewModel.clearRoute()
                         controller.clearSelection()
-                        navigator.goTo(Route.ActiveTrip)
                     },
                     onClose = controller::clearSelection,
                     modifier = Modifier.fillMaxSize(),
