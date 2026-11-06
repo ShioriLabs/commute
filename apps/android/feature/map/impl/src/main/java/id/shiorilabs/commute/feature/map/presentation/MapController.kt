@@ -63,6 +63,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.min
@@ -104,6 +105,35 @@ class MapController(
     val isSupported: StateFlow<Boolean> get() = supported
     private val supported = MutableStateFlow(true)
 
+    /** Whether the map is zoomed in past its whole-map fit, for the way back to it. */
+    val isZoomedIn: StateFlow<Boolean> get() = zoomedIn
+    private val zoomedIn = MutableStateFlow(false)
+
+    /**
+     * Whether the title pill shows: it goes while the map is dragged or pinched, and a tap on
+     * nothing, with nothing open to close, brings it back or sends it away.
+     */
+    val isChromeVisible: StateFlow<Boolean> get() = chromeVisible
+    private val chromeVisible = MutableStateFlow(true)
+
+    /** Where taps landed, for their ripples, in surface pixels; four at most at once. */
+    val ripples: StateFlow<List<TapRipple>> get() = tapRipples
+    private val tapRipples = MutableStateFlow<List<TapRipple>>(emptyList())
+    private var rippleIds = 0L
+
+    /** Whether the renderer was lost and couldn't be made again: the map asks to be reloaded. */
+    val isLost: StateFlow<Boolean> get() = lost
+    private val lost = MutableStateFlow(false)
+    private var everReady = false
+    private var recoveryAttempt = 0
+    private var recovery: Job? = null
+
+    /** The system's animations are off: the camera jumps where it would fly or settle. */
+    var reducedMotion: Boolean = false
+
+    /** Any tap on the map, for what floats over it to close. */
+    var onTap: () -> Unit = {}
+
     /** What the sheet shows: null with it closed. */
     val selection: StateFlow<MapSelection?> get() = selected
     private val selected = MutableStateFlow<MapSelection?>(null)
@@ -133,7 +163,10 @@ class MapController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val renderer = MapRenderThread(
         onReady = ::onRendererReady,
-        onComplete = { showing.value = true },
+        onComplete = {
+            showing.value = true
+            recoveryAttempt = 0
+        },
         onTexturesLost = ::onTexturesLost,
         onLost = ::onRendererLost,
     )
@@ -282,6 +315,7 @@ class MapController(
             }
         }
         rendered = next
+        zoomedIn.value = next.scale > view.minScale * ZOOMED_IN_FACTOR
 
         val moving = flight != null || fling != null || target?.let { !settled(next, it) } == true ||
             spotlight?.isAnimating == true || isolate?.isAnimating == true ||
@@ -502,7 +536,38 @@ class MapController(
         if (settle && clamped != current) fly(current, clamped, Flight.SETTLE_MS) else target = target?.let(view::clamp)
     }
 
+    /** Back to the whole map, as the web's "Kembali ke tampilan penuh". */
+    fun recenter() {
+        val view = viewport ?: return
+        val from = rendered ?: return
+        fly(from, view.clamp(Transform(0.0, 0.0, view.minScale)), Flight.TO_POINT_MS)
+    }
+
+    /** A ripple's animation is over. */
+    fun rippleDone(id: Long) {
+        tapRipples.value = tapRipples.value.filterNot { it.id == id }
+    }
+
+    /** "Muat ulang peta": the renderer made again, its tries counted afresh. */
+    fun retryRenderer() {
+        lost.value = false
+        recoveryAttempt = 0
+        recovery?.cancel()
+        surface?.let { target ->
+            onTexturesLost()
+            renderer.attach(target)
+        }
+    }
+
     private fun fly(from: Transform, to: Transform, durationMs: Double) {
+        if (reducedMotion) {
+            fling = null
+            flight = null
+            target = to
+            rendered = to
+            invalidate()
+            return
+        }
         fling = null
         flight = Flight(from, to, durationMs)
         flightStartNanos = System.nanoTime()
@@ -595,6 +660,7 @@ class MapController(
     private fun onRendererReady(rgb565: Boolean) {
         this.rgb565 = rgb565
         rendererReady = true
+        everReady = true
         val held = preview
         if (previewUploaded) {
             // Carried over from the last surface with the tiles.
@@ -617,9 +683,31 @@ class MapController(
         invalidate()
     }
 
+    /**
+     * The renderer couldn't go on. Never having drawn, this device can't draw the map at all; lost
+     * after drawing (the GPU reset, or out of memory), it is made again, waiting longer each time as
+     * the web's map does, until the tries run out and the rider is asked.
+     */
     private fun onRendererLost() {
         rendererReady = false
-        supported.value = false
+        if (!everReady) {
+            supported.value = false
+            return
+        }
+        val wait = RECOVERY_BACKOFF_MS.getOrNull(recoveryAttempt)
+        if (wait == null) {
+            lost.value = true
+            return
+        }
+        recoveryAttempt++
+        recovery?.cancel()
+        recovery = scope.launch {
+            delay(wait)
+            // Without a surface the next one makes the renderer anyway.
+            val target = surface ?: return@launch
+            onTexturesLost()
+            renderer.attach(target)
+        }
     }
 
     /** The renderer was made afresh for a new surface: every texture goes up again. */
@@ -643,25 +731,33 @@ class MapController(
 
                 MapGestures.Event.Released -> grabbed = false
 
-                is MapGestures.Event.Pan -> target = view.clamp(Transform(t.tx + event.dx, t.ty + event.dy, t.scale))
+                is MapGestures.Event.Pan -> {
+                    target = view.clamp(Transform(t.tx + event.dx, t.ty + event.dy, t.scale))
+                    chromeVisible.value = false
+                }
 
                 MapGestures.Event.PinchStarted -> pinchStartScale = t.scale
 
-                is MapGestures.Event.Pinch ->
+                is MapGestures.Event.Pinch -> {
                     target = view.zoomAt(t, event.anchorX, event.anchorY, pinchStartScale * event.factor / t.scale)
+                    chromeVisible.value = false
+                }
 
                 is MapGestures.Event.Fling -> fling = Fling(event.vx, event.vy)
 
-                is MapGestures.Event.Tap -> tap(t, event.x, event.y)
+                is MapGestures.Event.Tap -> {
+                    ripple(event.x, event.y)
+                    tap(t, event.x, event.y)
+                }
 
                 is MapGestures.Event.DoubleTap -> {
+                    ripple(event.x, event.y)
                     val zoomed = if (t.scale >= view.maxScale * MAX_SCALE_TOLERANCE) {
                         view.zoomAt(t, event.x, event.y, view.minScale / t.scale)
                     } else {
                         view.zoomAt(t, event.x, event.y, min(view.maxScale, t.scale * 2) / t.scale)
                     }
-                    flight = Flight(rendered ?: t, zoomed, Flight.ZOOM_STEP_MS)
-                    flightStartNanos = System.nanoTime()
+                    fly(rendered ?: t, zoomed, Flight.ZOOM_STEP_MS)
                 }
             }
             if (grabbed) rendered = target
@@ -674,7 +770,13 @@ class MapController(
      * isolates it, and empty map closes whatever is open, as on the web. A stroke several lines
      * share asks which, as the geometry can't tell.
      */
+    private fun ripple(x: Double, y: Double) {
+        onTap()
+        tapRipples.value = (tapRipples.value + TapRipple(rippleIds++, (x * density).toFloat(), (y * density).toFloat())).takeLast(MAX_RIPPLES)
+    }
+
     private fun tap(t: Transform, x: Double, y: Double) {
+        val choosing = choices.value.isNotEmpty()
         choices.value = emptyList()
         val worldX = t.worldX(x)
         val worldY = t.worldY(y)
@@ -710,6 +812,8 @@ class MapController(
                     }
 
                     else -> {
+                        // Nothing to close: the tap is for the title pill.
+                        if (selected.value == null && !choosing) chromeVisible.value = !chromeVisible.value
                         clearSelection()
                         false
                     }
@@ -740,6 +844,15 @@ class MapController(
         /** A route's capsule, at full strength. */
         fun RouteDrawItem.pill(): Pill = Pill(ax, ay, bx, by, r, r, color.r, color.g, color.b, 1.0)
 
+        /** Past this of the whole-map fit, the map is zoomed in and the way back to it shows. */
+        const val ZOOMED_IN_FACTOR = 1.02
+
+        /** The web's waits before each try at making a lost renderer again. */
+        val RECOVERY_BACKOFF_MS = listOf(250L, 750L, 2_000L, 5_000L, 10_000L)
+
+        /** The web's ripples: four at once at most. */
+        const val MAX_RIPPLES = 4
+
         /** A route's framing keeps this clear of the view's edges, as on the web. */
         const val ROUTE_FIT_PADDING_DP = 48.0
 
@@ -763,3 +876,6 @@ class MapController(
         const val SNAPSHOT_DOWNSCALE = 2.0
     }
 }
+
+/** A tap's ripple, at ([xPx], [yPx]) on the surface. */
+data class TapRipple(val id: Long, val xPx: Float, val yPx: Float)
