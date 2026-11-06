@@ -103,6 +103,12 @@ interface CommuteService {
     suspend fun getHub(slug: String, ifNoneMatch: String? = null): Fetched<Hub>
 
     /**
+     * Every hub, busiest first: what turns the map's `HUB-…` tap targets into the slugs their pages
+     * open by.
+     */
+    suspend fun getHubs(ifNoneMatch: String? = null): Fetched<List<Hub>>
+
+    /**
      * One line's topology: its trunk, then any branches and loops, each with its stations in order.
      * Only lines with topology have one; the rest answer 404.
      */

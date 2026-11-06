@@ -98,6 +98,9 @@ class CommuteServiceImpl @Inject constructor(
     override suspend fun getHub(slug: String, ifNoneMatch: String?): Fetched<Hub> =
         client.get("hubs/${slug.encodeURLPathPart()}") { validator(ifNoneMatch) }.decodeFetched()
 
+    override suspend fun getHubs(ifNoneMatch: String?): Fetched<List<Hub>> =
+        client.get("hubs") { validator(ifNoneMatch) }.decodeFetched()
+
     override suspend fun getLine(operator: String, lineCode: String, ifNoneMatch: String?): Fetched<LineDetail> =
         client.get("lines/${operator.encodeURLPathPart()}/${lineCode.encodeURLPathPart()}") {
             validator(ifNoneMatch)

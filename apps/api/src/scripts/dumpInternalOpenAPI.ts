@@ -127,6 +127,7 @@ const APP_PATHS = [
   '/_internal/searchables',
   '/_internal/track-shapes',
   '/_internal/trips/{from}/{to}',
+  '/hubs',
   '/hubs/{slug}',
   '/lines/{operator}/{lineCode}',
   '/operators',

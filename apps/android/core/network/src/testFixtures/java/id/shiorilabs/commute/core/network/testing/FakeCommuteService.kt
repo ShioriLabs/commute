@@ -182,6 +182,10 @@ class FakeCommuteService : CommuteService {
         return answer(ifNoneMatch) { hub(slug) }
     }
 
+    var hubs: suspend () -> List<Hub> = { error("getHubs was not stubbed") }
+
+    override suspend fun getHubs(ifNoneMatch: String?): Fetched<List<Hub>> = answer(ifNoneMatch) { hubs() }
+
     var line: suspend (operator: String, lineCode: String) -> LineDetail =
         { _, _ -> error("getLine was not stubbed") }
 
