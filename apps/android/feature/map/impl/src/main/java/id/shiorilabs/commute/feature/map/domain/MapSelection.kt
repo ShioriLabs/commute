@@ -19,6 +19,9 @@ sealed interface MapSelection {
      * it was opened from, for its sheet's way back; null when tapped on the artwork.
      */
     data class Line(val line: MapLine, val fromStationId: String? = null) : MapSelection
+
+    /** OTW's planner or a journey's page, the route drawn over the map. */
+    data object Route : MapSelection
 }
 
 /** The drawn marker of station [stationId]: the first, for a halte drawn twice. */

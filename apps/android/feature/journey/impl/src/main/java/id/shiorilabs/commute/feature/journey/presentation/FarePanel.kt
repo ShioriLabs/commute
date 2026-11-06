@@ -58,9 +58,14 @@ internal class FarePanelActions(
     val onPickStation: (PickableStation) -> Unit,
     val onClosePicker: () -> Unit,
     val onUseLocation: () -> Unit = {},
+    /** On the map: an end picked by tapping its station there. */
+    val onPickOnMap: ((PairEnd) -> Unit)? = null,
 )
 
-internal fun JourneyViewModel.panelActions(onSelectJourney: (Journey) -> Unit) = FarePanelActions(
+internal fun JourneyViewModel.panelActions(
+    onSelectJourney: (Journey) -> Unit,
+    onPickOnMap: ((PairEnd) -> Unit)? = null,
+) = FarePanelActions(
     onPick = ::openPicker,
     onSwap = ::onSwap,
     onCriteriaChange = ::onCriteriaChange,
@@ -70,6 +75,7 @@ internal fun JourneyViewModel.panelActions(onSelectJourney: (Journey) -> Unit) =
     onPickStation = ::onPick,
     onClosePicker = ::closePicker,
     onUseLocation = ::onUseLocation,
+    onPickOnMap = onPickOnMap,
 )
 
 /**
@@ -143,6 +149,12 @@ internal fun FarePanel(
             onPick = actions.onPickStation,
             onDismiss = actions.onClosePicker,
             onUseLocation = actions.onUseLocation,
+            onPickOnMap = actions.onPickOnMap?.let { pick ->
+                {
+                    actions.onClosePicker()
+                    pick(end)
+                }
+            },
         )
     }
 }
