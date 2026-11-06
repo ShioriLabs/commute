@@ -271,6 +271,49 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a train read standing while it still brakes in isn't waited on until the standing holds`() {
+        // Manggarai on 2026-11-05, under the roof, fixes 2–3 s apart: 0.62 and 0.58 m/s while the train
+        // still braked, then 1.09. Armed on the first, the motion sensors took the stop for a pull.
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        fun s(seconds: Double) = 4.0 + seconds / 60
+        run.fix(Places.TEBET, s(0.0), speedMps = 4.9f)
+        run.fix(Places.TEBET, s(3.0), speedMps = 0.62f)
+        assertNull(TripEngine.awaitingDeparture(bogorLine, run.state, at(s(3.1))))
+        run.fix(Places.TEBET, s(5.0), speedMps = 0.58f)
+        assertNull(TripEngine.awaitingDeparture(bogorLine, run.state, at(s(5.1))))
+        run.fix(Places.TEBET, s(8.0), speedMps = 1.09f)
+        run.fix(Places.TEBET, s(10.0), speedMps = 0.0f)
+        assertNull(TripEngine.awaitingDeparture(bogorLine, run.state, at(s(10.1))))
+
+        run.fix(Places.TEBET, s(13.0), speedMps = 0.4f)
+
+        assertEquals(StopAt(0, 1), TripEngine.awaitingDeparture(bogorLine, run.state, at(s(13.1))))
+    }
+
+    @Test
+    fun `a train read standing after fixes half a minute apart is waited on at once`() {
+        // Every half minute, a second standing fix comes when a short dwell is nearly over.
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(between(Places.MANGGARAI, Places.TEBET, 0.6), 3.5, speedMps = 12f)
+        run.fix(Places.TEBET, 4.0, speedMps = 0.2f)
+
+        assertEquals(StopAt(0, 1), TripEngine.awaitingDeparture(bogorLine, run.state, at(4.01)))
+    }
+
+    @Test
+    fun `standing that has held is still waited on as a fix reads the train starting to move`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0, speedMps = 0.2f)
+        run.fix(Places.TEBET, 4.0 + 4.0 / 60, speedMps = 0.1f)
+        run.fix(Places.TEBET, 4.0 + 20.0 / 60, speedMps = 1.5f)
+
+        assertEquals(StopAt(0, 1), TripEngine.awaitingDeparture(bogorLine, run.state, at(4.0 + 21.0 / 60)))
+    }
+
+    @Test
     fun `only a train seen standing, at a stop on the way, by a fresh fix, on rails, waits to be felt leaving`() {
         // At Tebet without a speed: it may still be braking in.
         val speedless = Run(bogorLine).apply { tick(0.0); fix(Places.TEBET, 4.0) }

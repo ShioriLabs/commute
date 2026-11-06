@@ -345,6 +345,7 @@ class TripControllerImplTest {
                 position = 1.0,
                 confirmedAt = minutes(23),
                 stoodAt = "0:1",
+                standingHeld = true,
             ),
             origin,
         )
