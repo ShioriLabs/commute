@@ -18,6 +18,15 @@ per stop. `fetchTimetable.ts` writes departures, so Velodrome's 1 min dwell show
 - **No train numbers.** Each trip gets a synthetic KA: 2000 + 2n (+1 for Kelapa
   Gading-bound), n = order in the day. Stable only within one fetch, so
   `tripNumber` changes on every refetch (fine: the SQL deletes all LRTJ rows).
+  Synthetic BY DECISION until a legible photo of the 11 Nov 2026 poster turns up.
+  That poster prints real KAs (1002, 1004, 1006... at 05:30, 05:42, 05:54...
+  southbound; the last southbound row reads like 1164), which fit 1002 + 2n
+  southbound and presumably 1003 + 2n northbound. Verify against the poster's
+  rows, then swap `SYNTHETIC_KA_BASE` in `fetchTimetable.ts` for the real scheme.
+- **Checked against a station board (2026-11-11):** the Pramuka timetable at the
+  station matches our Pramuka rows minute for minute, both directions, including
+  the 15 min evening stretch and the last trains (22:19 to Manggarai, 21:46...
+  22:46 to Kelapa Gading). Intermediate stations are unchecked.
 - **Pramuka calls** (opened 2026-11-11). **Matraman (KYM) and Proklamasi (MAT)
   do not**, though the API lists them: the entrance stairs are unfinished.
   `fetchTimetable.ts` writes `Ls` for them (`NOT_CALLING`); drop them from it,
