@@ -35,6 +35,92 @@ const index = (...patterns: TripPattern[]) => buildTripIndex(patterns)
 
 describe('resolveDepartures', () => {
   /*
+   * LRT Dukuh Atas to Sudirman, then towards Manggarai from platform 2, across
+   * the level crossing (crossing.ts). At AVERAGE pace the 310 m transfer is
+   * 4:19; the crossing shuts 2:00 before a train arrives, which KCI times as
+   * 0:30 before it leaves. So over the crossing a rider must be at the approach
+   * by 2:31 before departure; round by the concourse, 3:29.
+   */
+  describe('across the level crossing at Sudirman', () => {
+    const lrt = (arriveS: number): TripPattern => ({
+      lineCode: 'BK',
+      stationIds: ['LRTJBDB-SET', 'LRTJBDB-DKA'],
+      trips: [{ id: 'lrt', dayMask: ALL_DAYS, departuresS: [arriveS - 180, arriveS] }]
+    })
+    const towardsManggarai: TripPattern = {
+      lineCode: 'C',
+      stationIds: ['KCI-SUD', 'KCI-MRI'],
+      trips: [
+        { id: 'k1000', dayMask: ALL_DAYS, departuresS: [at(10), at(10, 4)] },
+        { id: 'k1010', dayMask: ALL_DAYS, departuresS: [at(10, 10), at(10, 14)] }
+      ]
+    }
+    const legs = [
+      ride('BK', ['LRTJBDB-SET', 'LRTJBDB-DKA']),
+      walk('LRTJBDB-DKA', 'KCI-SUD', 310),
+      ride('C', ['KCI-SUD', 'KCI-MRI'])
+    ]
+    const timeFrom = (arriveS: number, ...more: TripPattern[]) =>
+      resolveDepartures(legs, index(lrt(arriveS), towardsManggarai, ...more), { departureS: at(9), dayMask: ALL_DAYS, upcomingPerLeg: 2 })[2]
+
+    it('crosses when nothing is due', () => {
+      const timing = timeFrom(at(9, 50))
+      expect(timing?.tripId).toBe('k1000')
+      expect(timing?.crossing).toEqual({ via: 'CROSSING' })
+    })
+
+    // At the approach 9:59:19, but the 10:00 shut the crossing at 9:57:30.
+    it('misses a train whose own closure has already shut the crossing', () => {
+      const timing = timeFrom(at(9, 55))
+      expect(timing?.tripId).toBe('k1010')
+    })
+
+    // KA Bandara through Sudirman at about 9:57:36 runs its closure into the 10:00's.
+    it('goes round by the concourse when a passing train shuts it early', () => {
+      const bandara: TripPattern = {
+        lineCode: 'A',
+        stationIds: ['KCI-MRI', 'KCI-SUDB'],
+        trips: [{ id: 'a954', dayMask: ALL_DAYS, departuresS: [at(9, 54), at(9, 58)] }]
+      }
+      expect(timeFrom(at(9, 51), bandara)?.crossing).toEqual({ via: 'CROSSING' })
+      const timing = timeFrom(at(9, 52), bandara)
+      expect(timing?.tripId).toBe('k1000')
+      expect(timing?.crossing).toEqual({ via: 'CONCOURSE' })
+    })
+
+    it('publishes the latest arrival each train still connects from, and holds to it', () => {
+      const connectBy = timeFrom(at(9, 50))?.upcoming?.map(departure => departure.connectByS)
+      expect(connectBy).toEqual([at(9, 53) + 10, at(10, 3) + 10])
+      expect(timeFrom(at(9, 53) + 10)?.tripId).toBe('k1000')
+      expect(timeFrom(at(9, 53) + 11)?.tripId).toBe('k1010')
+    })
+
+    // At the approach 9:59:19, before the 10:00 leaves; the crossing alone stands between.
+    it('still lists the train the crossing shuts out, as an earlier one', () => {
+      const timing = resolveDepartures(legs, index(lrt(at(9, 55)), towardsManggarai), {
+        departureS: at(9), dayMask: ALL_DAYS, earlierWithinS: 5 * 60
+      })[2]
+      expect(timing?.tripId).toBe('k1010')
+      expect(timing?.earlier?.map(departure => [departure.tripId, departure.connectByS])).toEqual([['k1000', at(9, 53) + 10]])
+    })
+
+    it('leaves a train from the near platform alone', () => {
+      const towardsBniCity: TripPattern = {
+        lineCode: 'C',
+        stationIds: ['KCI-SUD', 'KCI-SUDB'],
+        trips: [{ id: 'k1000w', dayMask: ALL_DAYS, departuresS: [at(10), at(10, 1)] }]
+      }
+      const timing = resolveDepartures(
+        [legs[0]!, legs[1]!, ride('C', ['KCI-SUD', 'KCI-SUDB'])],
+        index(lrt(at(9, 55)), towardsBniCity),
+        { departureS: at(9), dayMask: ALL_DAYS }
+      )[2]
+      expect(timing?.tripId).toBe('k1000w')
+      expect(timing?.crossing).toBeUndefined()
+    })
+  })
+
+  /*
    * Measured 2 Nov: 8:18 from a Commuter Line door at Sudirman to the LRT
    * platform at Dukuh Atas, a milk tea left out; the 310 m on the edge says 4:19.
    */
@@ -72,11 +158,12 @@ describe('resolveDepartures', () => {
       expect(allowance('SLOW')).toBe(640)
     })
 
+    // Towards BNI City, from the platform exit C lands on: no level crossing either (see crossing.ts).
     it('leaves the other way as the distance has it, which nobody has measured', () => {
       const back: TripPattern = {
         lineCode: 'C',
-        stationIds: ['KCI-SUD', 'KCI-MRI'],
-        trips: [{ id: 'k1000', dayMask: ALL_DAYS, departuresS: [at(10), at(10, 4)] }]
+        stationIds: ['KCI-SUD', 'KCI-SUDB'],
+        trips: [{ id: 'k1000', dayMask: ALL_DAYS, departuresS: [at(10), at(10, 1)] }]
       }
       const arrive: TripPattern = {
         lineCode: 'BK',
@@ -84,7 +171,7 @@ describe('resolveDepartures', () => {
         trips: [{ id: 'l952', dayMask: ALL_DAYS, departuresS: [at(9, 52), at(9, 55)] }]
       }
       const timings = resolveDepartures(
-        [ride('BK', ['LRTJBDB-SET', 'LRTJBDB-DKA']), walk('LRTJBDB-DKA', 'KCI-SUD', 310), ride('C', ['KCI-SUD', 'KCI-MRI'])],
+        [ride('BK', ['LRTJBDB-SET', 'LRTJBDB-DKA']), walk('LRTJBDB-DKA', 'KCI-SUD', 310), ride('C', ['KCI-SUD', 'KCI-SUDB'])],
         index(arrive, back),
         { departureS: at(9, 50), dayMask: ALL_DAYS }
       )

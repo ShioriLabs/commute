@@ -199,6 +199,24 @@ describe('retimeTrips keeps the doors on a walk', () => {
     const [row] = stripWalkHops(retimeTrips(result, timetabled, context)).journeys
     expect(row!.legs[1]).toMatchObject({ fromExit: { ref: 'Utara' }, toExit: { ref: 'A' } })
   })
+
+  // The engine's level-crossing answer, passed through per request (see tsundere's crossing.ts).
+  it('stamps how the rider crosses and the latest arrival each train connects from', () => {
+    const second = {
+      ...timeLeg(7 * 3600 + 1800, 'T2'),
+      lineCode: 'M',
+      crossing: { via: 'CONCOURSE' as const },
+      upcoming: [{ departureS: 7 * 3600 + 1800, arrivalS: 7 * 3600 + 2400, tripId: 'T2', lineCode: 'M', connectByS: 7 * 3600 + 1500 }]
+    }
+    const crossing = {
+      timeJourney: (_legs: unknown, { departureS }: { departureS: number }) =>
+        departureS <= 7 * 3600 + 600 ? [timeLeg(7 * 3600 + 600, 'T1'), null, second] : [null, null, null],
+      journeyArrival: () => null
+    } as unknown as Tsundere
+    const leg = retimeTrips(result, crossing, context).journeys[0]!.legs[2]!
+    expect(leg).toMatchObject({ crossingVia: 'CONCOURSE' })
+    expect(leg.type === 'RIDE' && leg.upcomingDepartures?.[0]?.connectBy).toBe('2026-10-02T07:25:00+07:00')
+  })
 })
 
 /*

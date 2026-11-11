@@ -458,20 +458,26 @@ export function JourneyTimeline({ legs, timed = [], rideS, onPick = () => {} }: 
          * gap at both ends of every walk.
          */
         const walkGap = changeGapAt(index)
+        // The level crossing on the far side will be shut for a train: say which way round.
+        const next = legs[index + 1]
+        const viaConcourse = next?.type === 'RIDE' && next.crossingVia === 'CONCOURSE'
         return (
           <li key={index} className={`relative grid ${FARE_GUTTER_CLASS}`}>
             <div className="relative">
               <Rail style={{ backgroundColor: 'var(--color-slate-400)' }} dotted />
               <WalkMark color="var(--color-slate-500)" />
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-slate-500 py-5">
-              <span>
-                Transit ke
-                {' '}
-                {leg.to.name}
-                {leg.distanceM > 0 && ` (Jalan kaki ±${leg.distanceM}m)`}
-              </span>
-              {walkGap ? <ConnectionNote gapS={walkGap.gapS} tight={walkGap.tight} /> : null}
+            <div className="flex flex-col gap-0.5 text-sm text-slate-500 py-5">
+              <div className="flex items-center gap-1.5">
+                <span>
+                  Transit ke
+                  {' '}
+                  {leg.to.name}
+                  {leg.distanceM > 0 && ` (Jalan kaki ±${leg.distanceM}m)`}
+                </span>
+                {walkGap ? <ConnectionNote gapS={walkGap.gapS} tight={walkGap.tight} /> : null}
+              </div>
+              {viaConcourse ? <span className="text-amber-700">Perlintasan ditutup, lewat atas</span> : null}
             </div>
           </li>
         )
