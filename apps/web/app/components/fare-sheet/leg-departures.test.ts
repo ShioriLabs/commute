@@ -65,6 +65,37 @@ describe('resolveTimedLegs', () => {
     expect(timed[0]!.chosen.tripId).toBe('a1')
   })
 
+  /*
+   * Behind Sudirman's level crossing the engine says how late the ride before
+   * may land, and that wins over the change allowance: b1 at 07.52 would make
+   * a 07.46 arrival plus a minute, but the crossing shuts for it at 07.49.
+   */
+  describe('behind a level crossing', () => {
+    const gated = [
+      { ...train('b1', '07:52', '08:14'), connectBy: at('07:45') },
+      { ...train('b2', '08:00', '08:22'), connectBy: at('07:53') },
+      { ...train('b3', '08:10', '08:32'), connectBy: at('08:03') }
+    ]
+    const crossingLegs = [ride(first), walk(60), ride(gated)]
+
+    it('misses a train the crossing shuts out, though the walk would make it', () => {
+      expect(resolveTimedLegs(crossingLegs, {}).map(leg => leg.chosen.tripId)).toEqual(['a1', 'b2'])
+    })
+
+    it('connects from an arrival right at the cutoff', () => {
+      // a2 lands 07.54, one minute past b2's cutoff, so b3.
+      expect(resolveTimedLegs(crossingLegs, { 0: 'a2' }).map(leg => leg.chosen.tripId)).toEqual(['a2', 'b3'])
+    })
+
+    it('calls a change tight on the spare time before the cutoff', () => {
+      const timed = resolveTimedLegs(crossingLegs, {})
+      // a1 lands 07.46, b2's cutoff 07.53: seven minutes spare, not tight.
+      expect(changeAt(crossingLegs, timed, 2)).toEqual({ gapS: 14 * 60, tight: false })
+      const late = resolveTimedLegs([ride(first), walk(60), ride([{ ...train('b2', '08:00', '08:22'), connectBy: at('07:47') }])], {})
+      expect(changeAt([ride(first), walk(60), ride(late[1]!.options.map(o => o.departure))], late, 2)?.tight).toBe(true)
+    })
+  })
+
   it('resolves nothing once every listed train has left', () => {
     expect(resolveTimedLegs(legs, {}, Date.parse(at('07:40')))).toEqual([])
   })
@@ -213,6 +244,14 @@ describe('retimeJourney', () => {
   it('returns the same object when nothing changed', () => {
     const base = journeyOf()
     expect(retimeJourney(base, resolveTimedLegs(base.legs, {}))).toBe(base)
+  })
+
+  // b1 stays b1 here, but the rider now reaches the crossing on a later train.
+  it('forgets how to cross once any pick moves the clock', () => {
+    const base = journeyOf()
+    const crossing = { ...base, legs: [base.legs[0]!, { ...(base.legs[1] as FareResultLeg & { type: 'RIDE' }), crossingVia: 'CONCOURSE' as const }] }
+    expect(retimeJourney(crossing, resolveTimedLegs(crossing.legs, { 0: 'a2' })).legs[1]).not.toHaveProperty('crossingVia')
+    expect(retimeJourney(crossing, resolveTimedLegs(crossing.legs, {})).legs[1]).toHaveProperty('crossingVia', 'CONCOURSE')
   })
 
   it('moves every leg and the arrival, and drops what only the caught trip knew', () => {

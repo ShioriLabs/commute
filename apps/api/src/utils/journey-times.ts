@@ -155,7 +155,8 @@ function timeOnce(
       arrivalAt: stamp(departure.arrivalS),
       tripId: departure.tripId,
       line: `${prefix}${departure.lineCode}`,
-      ...(departure.headsign === undefined ? {} : { headsign: departure.headsign })
+      ...(departure.headsign === undefined ? {} : { headsign: departure.headsign }),
+      ...(departure.connectByS === undefined ? {} : { connectBy: stamp(departure.connectByS) })
     })
     const upcoming = timing.upcoming?.map(toWire)
     const earlier = timing.earlier?.map(toWire)
@@ -176,6 +177,8 @@ function timeOnce(
       // Per-request like the stamps: whether this is the last train depends on
       // which train was caught, never on the cached route.
       ...(timing.lastOfDay ? { lastService: true as const } : {}),
+      // Per-request too: whether the crossing is open depends on the clock.
+      ...(timing.crossing ? { crossingVia: timing.crossing.via } : {}),
       ...(upcoming === undefined ? {} : { upcomingDepartures: upcoming }),
       ...(earlier === undefined ? {} : { earlierDepartures: earlier })
     }
