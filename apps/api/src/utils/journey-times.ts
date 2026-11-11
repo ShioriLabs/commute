@@ -220,8 +220,15 @@ function boardingsOf(
    * reach Rasuna Said at 08.56 — so it is never offered. Only judged where both
    * arrivals are known; on a rail-into-TransJakarta route neither is, and every
    * boarding stays a real choice.
+   *
+   * Except the first: it is the train the rider can catch now, and it always
+   * leads the card. Boarding the 08.11 and spending the slack at the change
+   * station (a shop at JPM Dukuh Atas) is a choice riders make on purpose; the
+   * later boarding with the same arrival stays offered beside it as the one
+   * with the least time on board.
    */
-  const offered = boardings.filter((boarding, i) => boarding.arrivalS === null
+  const offered = boardings.filter((boarding, i) => i === 0
+    || boarding.arrivalS === null
     || !boardings.slice(i + 1).some(later => later.arrivalS !== null && later.arrivalS <= boarding.arrivalS!))
 
   const [row, ...more] = offered

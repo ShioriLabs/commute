@@ -346,18 +346,31 @@ describe('retimeTrips grouping boardings', () => {
   })
 
   /*
-   * The 08.11 and the 08.22 that both reach Rasuna Said at 08.56: the earlier
-   * one is only a longer wait, so the later one is the card.
+   * The 08.11 and the 08.22 that both reach Rasuna Said at 08.56: the 08.11 is
+   * the train the rider can catch now, so it leads, and the 08.22 rides along
+   * as the one with less time on board.
    */
-  it('drops a boarding that only means a longer wait', () => {
+  it('leads with the first boarding even when a later one arrives as soon', () => {
     const trains = [
       { departureS: hhmm(8, 11), arrivalS: hhmm(8, 56), tripId: 'slow' },
       { departureS: hhmm(8, 22), arrivalS: hhmm(8, 56), tripId: 'fast' },
       { departureS: hhmm(8, 33), arrivalS: hhmm(9, 10), tripId: 'next' }
     ]
     const [row] = retimeTrips(result, routerOver(trains), context).journeys
-    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.tripId).toBe('fast')
-    expect(row!.moreDepartures?.map(d => d.departureAt)).toEqual([stampAt(8, 33)])
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.tripId).toBe('slow')
+    expect(row!.moreDepartures?.map(d => d.departureAt)).toEqual([stampAt(8, 22), stampAt(8, 33)])
+  })
+
+  it('still drops a later boarding that only means a longer wait', () => {
+    const trains = [
+      { departureS: hhmm(8, 11), arrivalS: hhmm(8, 56), tripId: 'first' },
+      { departureS: hhmm(8, 16), arrivalS: hhmm(8, 56), tripId: 'wait' },
+      { departureS: hhmm(8, 22), arrivalS: hhmm(8, 56), tripId: 'fast' },
+      { departureS: hhmm(8, 33), arrivalS: hhmm(9, 10), tripId: 'next' }
+    ]
+    const [row] = retimeTrips(result, routerOver(trains), context).journeys
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.tripId).toBe('first')
+    expect(row!.moreDepartures?.map(d => d.departureAt)).toEqual([stampAt(8, 22), stampAt(8, 33)])
   })
 
   it('keeps every boarding when no arrival is known', () => {
