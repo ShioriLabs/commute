@@ -16,6 +16,7 @@
     "generate:basoetta-timetable": "tsx ./src/operators/kci/generateBasoettaTimetableSQL.ts",
     "generate:kci-timetable": "tsx ./src/operators/kci/generateTimetableFromDumpSQL.ts",
     "generate:apcgk-timetable": "tsx ./src/operators/apcgk/generateTimetableSQL.ts",
+    "fetch:lrtj-timetable": "tsx ./src/operators/lrtj/fetchTimetable.ts",
     "generate:lrtj-timetable": "tsx ./src/operators/lrtj/generateTimetableSQL.ts",
     "generate:stationcoords": "tsx ./src/db/scripts/generateLatLngSQL.ts",
     "generate:stationcodes": "tsx ./src/db/scripts/generateStationCodesSQL.ts",
