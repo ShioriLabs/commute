@@ -16,6 +16,8 @@ import { expectedHeader, KA_PARITY } from 'operators/lrtj/generateTimetableSQL'
  * (Manggarai-bound, even) / 2001 + 2n (Kelapa Gading-bound, odd), n being the
  * trip's order in the day. It only has to be unique and stable within one
  * fetch; the 1xxx range stays the poster's, so the two never collide.
+ * Synthetic on purpose for now: the 11 Nov 2026 poster prints the real KAs, but
+ * there is no legible photo of it yet. See the README for the swap.
  */
 
 const ENDPOINT = 'https://www.lrtjakarta.co.id/api/schedules/get'
