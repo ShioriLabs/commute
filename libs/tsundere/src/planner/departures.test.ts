@@ -608,6 +608,63 @@ describe('resolveDepartures', () => {
     })
   })
 
+  /*
+   * OTW pressed at 09.32 while the 09.30 was still holding its doors: trains
+   * run late, so the ones due a moment ago are listed beside the caught one.
+   */
+  describe('listing the trains due just before the caught one', () => {
+    const every = (lineCode: string, stationIds: string[], times: number[]): TripPattern => ({
+      lineCode,
+      stationIds,
+      trips: times.map((t, i) => ({ id: `${lineCode}${i}`, dayMask: ALL_DAYS, departuresS: stationIds.map((_, s) => t + s * 600) }))
+    })
+    const line = every('C', ['KCI-A', 'KCI-B'], [at(7), at(7, 10), at(7, 20)])
+    const leg = [ride('C', ['KCI-A', 'KCI-B'])]
+
+    it('lists nothing unless asked', () => {
+      const [timing] = resolveDepartures(leg, index(line), { departureS: at(7, 12), dayMask: ALL_DAYS })
+      expect(timing?.earlier).toBeUndefined()
+    })
+
+    it('lists the trains inside the window, never the caught one', () => {
+      const [timing] = resolveDepartures(leg, index(line), { departureS: at(7, 12), dayMask: ALL_DAYS, earlierWithinS: 300 })
+      expect(timing?.tripId).toBe('C2')
+      expect(timing?.earlier?.map(d => d.tripId)).toEqual(['C1'])
+      expect(timing?.earlier?.[0]).toMatchObject({ departureS: at(7, 10), arrivalS: at(7, 20), lineCode: 'C' })
+    })
+
+    it('leaves the field off when nothing is inside the window', () => {
+      const [timing] = resolveDepartures(leg, index(line), { departureS: at(7, 16), dayMask: ALL_DAYS, earlierWithinS: 300 })
+      expect(timing?.earlier).toBeUndefined()
+    })
+
+    it('never moves the train caught or the clock', () => {
+      const legs = [ride('C', ['KCI-A', 'KCI-B']), walk('KCI-B', 'KCI-C'), ride('C', ['KCI-C', 'KCI-D'])]
+      const onward = every('C', ['KCI-C', 'KCI-D'], [at(7, 30), at(7, 40)])
+      const options = { departureS: at(7, 12), dayMask: ALL_DAYS, upcomingPerLeg: 3 }
+      const plain = resolveDepartures(legs, index(line, onward), options)
+      const withEarlier = resolveDepartures(legs, index(line, onward), { ...options, earlierWithinS: 300 })
+      expect(withEarlier.map(t => t && { ...t, earlier: undefined })).toEqual(plain.map(t => t && { ...t, earlier: undefined }))
+    })
+
+    /*
+     * Boarding the late feeder gets the rider to the change earlier, so the
+     * onward leg reaches back to the train that connection makes.
+     */
+    it('reaches a later leg back to what the earliest earlier train connects to', () => {
+      const feeder = every('M', ['MRTJ-X', 'KCI-A'], [at(6, 45), at(6, 55)])
+      const timings = resolveDepartures(
+        [ride('M', ['MRTJ-X', 'KCI-A']), ride('C', ['KCI-A', 'KCI-B'])],
+        index(feeder, line),
+        // M0 (06.45, lands 06.55) is the earlier one; M1 lands 07.05 and makes the 07.10.
+        { departureS: at(6, 48), dayMask: ALL_DAYS, earlierWithinS: 300 }
+      )
+      expect(timings[0]?.earlier?.map(d => d.tripId)).toEqual(['M0'])
+      expect(timings[1]?.tripId).toBe('C1')
+      expect(timings[1]?.earlier?.map(d => d.tripId)).toEqual(['C0'])
+    })
+  })
+
   it('respects the day mask', () => {
     const weekdayOnly: TripPattern = {
       ...mrt,

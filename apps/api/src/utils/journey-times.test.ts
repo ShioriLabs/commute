@@ -305,11 +305,14 @@ describe('retimeTrips grouping boardings', () => {
 
   type Train = { departureS: number, arrivalS: number | null, tripId: string }
   const routerOver = (trains: Train[]) => ({
-    timeJourney: (_legs: unknown, { departureS }: { departureS: number }) => {
+    timeJourney: (_legs: unknown, { departureS, earlierWithinS = 0 }: { departureS: number, earlierWithinS?: number }) => {
       const train = trains.find(t => t.departureS >= departureS)
       if (!train) return [null]
       const arrivalS = train.arrivalS ?? train.departureS + 600
+      const earlier = trains.filter(t => t.departureS >= departureS - earlierWithinS && t.departureS < departureS)
+        .map(t => ({ departureS: t.departureS, arrivalS: t.arrivalS ?? t.departureS + 600, tripId: t.tripId, lineCode: 'C' }))
       return [{
+        ...(earlier.length === 0 ? {} : { earlier }),
         ...train,
         arrivalS,
         lineCode: 'C',
@@ -392,6 +395,25 @@ describe('retimeTrips grouping boardings', () => {
       tripId: leg.tripId,
       line: 'KCI:C'
     })
+  })
+
+  // OTW at 08.00 with the 07.57 possibly still holding its doors.
+  it('lists the trains due in the five minutes before, stamped like the others', () => {
+    const trains = [
+      { departureS: hhmm(7, 52), arrivalS: hhmm(8, 37), tripId: 'gone' },
+      { departureS: hhmm(7, 57), arrivalS: hhmm(8, 42), tripId: 'late' },
+      { departureS: hhmm(8, 5), arrivalS: hhmm(8, 50), tripId: 'next' }
+    ]
+    const [row] = retimeTrips(result, routerOver(trains), context).journeys
+    const leg = row!.legs[0]!
+    if (leg.type !== 'RIDE') throw new Error('expected a ride')
+    expect(leg.tripId).toBe('next')
+    expect(leg.earlierDepartures).toEqual([{
+      departureAt: stampAt(7, 57),
+      arrivalAt: stampAt(8, 42),
+      tripId: 'late',
+      line: 'KCI:C'
+    }])
   })
 
   it('carries neither list on a route the timetable never covers', () => {

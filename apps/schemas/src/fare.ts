@@ -158,6 +158,17 @@ export const RideLegSchema = v.pipe(
       v.description('Kendaraan yang bisa dinaiki di tahap ini, urut dari yang paling cepat. Yang pertama selalu kendaraan yang dipakai di `departureAt`. Cuma ada di tahap yang jadwalnya kami punya.')
     ),
     /*
+     * Trains due shortly BEFORE the caught one, which may still be at the
+     * platform because trains run late. Kept out of `upcomingDepartures` so
+     * its first entry stays the caught train for every client that reads it.
+     * On a later leg some are only reachable from an earlier train on the leg
+     * before; `minChangeS` tells which.
+     */
+    earlierDepartures: v.pipe(
+      v.optional(v.array(LegDepartureSchema)),
+      v.description('Kendaraan yang jadwalnya sudah lewat sedikit sebelum `departureAt` tapi mungkin masih di peron kalau telat, urut dari yang paling awal. Cuma ada kalau memang ada.')
+    ),
+    /*
      * Optional for the same reason as the two above, but with a sharper edge:
      * platform assignments are reassigned operationally and change with
      * engineering work, so PLATFORM_CODES carries only field-verified entries
