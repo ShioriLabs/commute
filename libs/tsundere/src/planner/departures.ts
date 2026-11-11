@@ -330,13 +330,15 @@ const departureOn = (
  * short-turn of one line can both resolve to the same vehicle, and that is one
  * train on the platform, not two.
  *
- * Past `limit`, the list runs on until it holds a train leaving at or after
- * `untilS`: the moment a rider on the previous leg's LAST listed train reaches
- * this platform. Four trains from the caught one is not enough on a later leg
- * once an earlier one can be picked later. From Cakung the 19.41 C reached
- * Dukuh Atas after the LRT list's own 19.57 ended, and read as having no
- * onward train at all while the line ran until 22.00. UPCOMING_CAP_FACTOR
- * bounds it on a trunk running every few minutes.
+ * Past `limit`, the list runs on until it holds `limit` trains leaving at or
+ * after `untilS`: the moment a rider on the previous leg's LAST listed train
+ * reaches this platform. Four trains from the caught one is not enough on a
+ * later leg once an earlier one can be picked later. From Cakung the 19.41 C
+ * reached Dukuh Atas after the LRT list's own 19.57 ended, and read as having
+ * no onward train at all while the line ran until 22.00. And one train past
+ * `untilS` is not enough either: the web row shows only the trains a pick can
+ * make, so whichever train is picked on the leg before, there must be `limit`
+ * of them. UPCOMING_CAP_FACTOR bounds it on a trunk running every few minutes.
  */
 function upcomingDepartures(
   trips: TripIndex,
@@ -353,10 +355,12 @@ function upcomingDepartures(
     const board = boardingIndexFor(pattern, leg.stationIds)
     if (board < 0) continue
     let taken = 0
+    let pastUntil = 0
     for (const trip of tripsFrom(pattern, board, afterS, dayMask)) {
       const departure = departureOn(trip, pattern.lineCode, board, leg.stationIds.length)
       found.push(departure)
-      if (++taken >= cap || (taken >= limit && departure.departureS >= untilS)) break
+      if (departure.departureS >= untilS) pastUntil++
+      if (++taken >= cap || (taken >= limit && pastUntil >= limit)) break
     }
   }
   /*
@@ -366,18 +370,20 @@ function upcomingDepartures(
   found.sort((a, b) => a.departureS - b.departureS)
   const seen = new Set<string>()
   const listed: LegDeparture[] = []
+  let pastUntil = 0
   for (const departure of found) {
     if (seen.has(departure.tripId)) continue
     seen.add(departure.tripId)
     if (listed.length >= cap) break
-    if (listed.length >= limit && listed.at(-1)!.departureS >= untilS) break
+    if (listed.length >= limit && pastUntil >= limit) break
     listed.push(departure)
+    if (departure.departureS >= untilS) pastUntil++
   }
   return listed
 }
 
 /** How far past `upcomingPerLeg` a later leg's list may run to reach `untilS`, as a multiple of it. */
-const UPCOMING_CAP_FACTOR = 3
+const UPCOMING_CAP_FACTOR = 4
 
 /*
  * The trains that serve the whole leg leaving in `[fromS, beforeS)`, soonest

@@ -81,11 +81,14 @@ describe('unbuilt stops', () => {
     expect(s.path.filter(p => p.unbuilt)).toEqual([])
   })
 
-  it('runs LRT Jakarta through S08-S10 without severing Rawamangun from Manggarai', () => {
-    // The 17 Sep 2026 timetable marks Pramuka, Matraman and Proklamasi "Ls.".
+  it('runs LRT Jakarta through S09-S10 without severing Pramuka from Manggarai', () => {
+    // Pramuka (S08) calls again from 2026-11-11; Matraman and Proklamasi are
+    // still passed through until their entrance stairs are finished.
     const s = TOPOLOGY.find(l => l.operator === 'LRTJ' && l.lineCode === 'S')!
-    expect(s.path.filter(p => p.passThrough).map(p => p.pos)).toEqual(['S08', 'S09', 'S10'])
-    const bridge = chainHops(s.path).find(h => h.from.station === 'RWM')!
+    expect(s.path.filter(p => p.passThrough).map(p => p.pos)).toEqual(['S09', 'S10'])
+    const hops = chainHops(s.path)
+    expect(hops.find(h => h.from.station === 'RWM')!.to.station).toBe('PKA')
+    const bridge = hops.find(h => h.from.station === 'PKA')!
     expect(bridge.to.station).toBe('MGI')
     expect(bridge.bothWays).toBe(true)
   })
