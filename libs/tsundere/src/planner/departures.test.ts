@@ -574,15 +574,16 @@ describe('resolveDepartures', () => {
      */
     it('runs a later leg on until it covers the previous leg\'s last train', () => {
       const feeder = every('M', ['MRTJ-X', 'KCI-A'], [at(6, 40), at(6, 50), at(7), at(7, 10)])
-      const onward = every('C', ['KCI-A', 'KCI-B'], [at(7), at(7, 5), at(7, 10), at(7, 15), at(7, 20), at(7, 25), at(7, 30), at(7, 35)])
+      const onward = every('C', ['KCI-A', 'KCI-B'], [at(7), at(7, 5), at(7, 10), at(7, 15), at(7, 20), at(7, 25), at(7, 30), at(7, 35), at(7, 40), at(7, 45)])
       const timings = resolveDepartures(
         [ride('M', ['MRTJ-X', 'KCI-A']), ride('C', ['KCI-A', 'KCI-B'])],
         index(feeder, onward),
         { departureS: at(6, 30), dayMask: ALL_DAYS, upcomingPerLeg: 4 }
       )
       // M3 lands 07:20, so after the change the 07:25 is the first it makes: four would stop at 07:15.
+      // And it lists four the M3 makes (07:25 to 07:40), so a rider picking it still has a full row.
       expect(timings[0]?.upcoming?.at(-1)?.arrivalS).toBe(at(7, 20))
-      expect(timings[1]?.upcoming?.map(d => d.tripId)).toEqual(['C0', 'C1', 'C2', 'C3', 'C4', 'C5'])
+      expect(timings[1]?.upcoming?.map(d => d.tripId)).toEqual(['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8'])
     })
 
     it('stops extending a later leg at the cap', () => {
@@ -593,7 +594,7 @@ describe('resolveDepartures', () => {
         index(feeder, onward),
         { departureS: at(6, 30), dayMask: ALL_DAYS, upcomingPerLeg: 2 }
       )
-      expect(timings[1]?.upcoming).toHaveLength(6)
+      expect(timings[1]?.upcoming).toHaveLength(8)
     })
 
     it('lists nothing on an untimed leg', () => {

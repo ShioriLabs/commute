@@ -48,9 +48,9 @@ describe('resolveTimedLegs', () => {
     expect(timed.map(leg => leg.chosen.tripId)).toEqual(['a2', 'b2'])
   })
 
-  it('marks trains that can no longer be reached, rather than hiding them', () => {
+  it('starts a later leg at the first train it can make', () => {
     const second = resolveTimedLegs(legs, { 0: 'a2' })[1]!
-    expect(second.options.map(option => [option.departure.tripId, option.blocked])).toEqual([['b1', 'MISSED'], ['b2', null], ['b3', null]])
+    expect(second.options.map(option => [option.departure.tripId, option.blocked])).toEqual([['b2', null], ['b3', null]])
   })
 
   it('drops trains that have left, and boards the next one', () => {
@@ -73,14 +73,14 @@ describe('resolveTimedLegs', () => {
    * The engine lists a later leg long enough to connect from the earlier leg's
    * last train; the row shows the part around where the rider is.
    */
-  it('shows a later leg from the train just missed, at most a chip row', () => {
+  it('shows a later leg from the first train it makes, at most a chip row', () => {
     const many = [
       train('c1', '07:40', '08:00'), train('c2', '07:50', '08:10'), train('c3', '08:00', '08:20'),
       train('c4', '08:05', '08:25'), train('c5', '08:10', '08:30'), train('c6', '08:15', '08:35')
     ]
     const second = resolveTimedLegs([ride(first), ride(many)], { 0: 'a2' })[1]!
     // a2 lands 07.54: c1 and c2 are missed, c3 is the first it makes.
-    expect(second.options.map(option => option.departure.tripId)).toEqual(['c2', 'c3', 'c4', 'c5'])
+    expect(second.options.map(option => option.departure.tripId)).toEqual(['c3', 'c4', 'c5', 'c6'])
   })
 
   it('slides the row so a later pick stays in view', () => {
