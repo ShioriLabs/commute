@@ -948,9 +948,23 @@ export const TRIP_PATTERNS: TripPattern[] = [
   },
   {
     line: 'C',
-    stations: ['KCI-BKS', 'KCI-BKST', 'KCI-TB', 'KCI-CIT', 'KCI-TLM', 'KCI-CKR'],
+    stations: ['KCI-THB', 'KCI-SUDB', 'KCI-SUD', 'KCI-MRI'],
     trips: [
-      { t: '5000', d: 7, f: 'Cikarang', s: [15120, 15300, 15660, 15840, 15960, 16380] }
+      { t: '1676D', d: 7, f: 'Manggarai', s: [37020, 37260, 37290, 37680] }
+    ]
+  },
+  {
+    line: 'C',
+    stations: ['KCI-DU', 'KCI-THB', 'KCI-SUDB', 'KCI-SUD', 'KCI-MRI'],
+    trips: [
+      { t: '2014C', d: 7, f: 'Manggarai', s: [78000, 78420, 78660, 78720, 79140] }
+    ]
+  },
+  {
+    line: 'C',
+    stations: ['KCI-MRI', 'KCI-SUD', 'KCI-SUDB', 'KCI-THB', 'KCI-DU'],
+    trips: [
+      { t: '2023C', d: 7, f: 'Duri', s: [83700, 83970, 84030, 84480, 84900] }
     ]
   },
   {
@@ -962,9 +976,17 @@ export const TRIP_PATTERNS: TripPattern[] = [
       { t: '5719C', d: 7, f: 'Angke', s: [29940, 30210, 30270, 30720, 31080, 31380] },
       { t: '5723C', d: 7, f: 'Angke', s: [33900, 34140, 34200, 34620, 34980, 35160] },
       { t: '5729C', d: 7, f: 'Angke', s: [48060, 48300, 48360, 48840, 49260, 49440] },
+      { t: '1727E', d: 7, f: 'Angke', s: [50640, 50880, 50910, 51360, 51720, 51960] },
       { t: '5731C', d: 7, f: 'Angke', s: [56340, 56610, 56670, 57060, 57420, 57600] },
       { t: '5733C', d: 7, f: 'Angke', s: [57240, 57510, 57570, 57960, 58440, 58620] },
       { t: '5735C', d: 7, f: 'Angke', s: [59100, 59370, 59430, 59820, 60240, 60420] }
+    ]
+  },
+  {
+    line: 'C',
+    stations: ['KCI-BKS', 'KCI-BKST', 'KCI-TB', 'KCI-CIT', 'KCI-TLM', 'KCI-CKR'],
+    trips: [
+      { t: '5000', d: 7, f: 'Cikarang', s: [15120, 15300, 15660, 15840, 15960, 16380] }
     ]
   },
   {

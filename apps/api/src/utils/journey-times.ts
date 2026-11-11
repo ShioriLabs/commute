@@ -18,7 +18,7 @@
  * on the request's clock, so they too stay out of the cached body.
  */
 
-import type { LegTiming, RouteLeg, Tsundere, WalkingPreference } from '@commute/tsundere'
+import type { LegDeparture, LegTiming, RouteLeg, Tsundere, WalkingPreference } from '@commute/tsundere'
 import type { FareJourney, FareJourneyDeparture, FareResultLeg, TripResult } from '@commute/schemas'
 import { atSecondsOfDay, serviceDay, secondsSinceLocalMidnight, wibIsoString } from 'utils/fare'
 import { DAY_MASK } from 'db/schemas/schedules'
@@ -97,6 +97,15 @@ const MAX_MORE_DEPARTURES = 8
  */
 const DEPARTURES_PER_LEG = 4
 
+/*
+ * How far back from the moment the rider reaches the platform to list trains
+ * already due, as `earlierDepartures`. Trains run late: OTW pressed at 09.32
+ * offered the 09.36 while the 09.30 was still holding its doors, and the rider
+ * boarded that. Five minutes covers a late train or one dwelling long without
+ * listing ones that are surely gone.
+ */
+const EARLIER_WITHIN_S = 5 * 60
+
 /** One journey, timed for a specific boarding. Null when nothing runs. */
 function timeOnce(
   journey: FareJourney,
@@ -111,6 +120,7 @@ function timeOnce(
     dayMask: dayMaskFor(context.departureAt),
     gatedLines: GATED_LINE_CODES,
     upcomingPerLeg: DEPARTURES_PER_LEG,
+    earlierWithinS: EARLIER_WITHIN_S,
     ...(walking === undefined ? {} : { walking })
   })
   const stamp = (seconds: number) => wibIsoString(atSecondsOfDay(context.departureAt, seconds))
@@ -140,13 +150,15 @@ function timeOnce(
      */
     const prefix = leg.line.slice(0, leg.line.indexOf(':') + 1)
     const boardedLine = timing.lineCode === undefined ? leg.line : `${prefix}${timing.lineCode}`
-    const upcoming = timing.upcoming?.map(departure => ({
+    const toWire = (departure: LegDeparture) => ({
       departureAt: stamp(departure.departureS),
       arrivalAt: stamp(departure.arrivalS),
       tripId: departure.tripId,
       line: `${prefix}${departure.lineCode}`,
       ...(departure.headsign === undefined ? {} : { headsign: departure.headsign })
-    }))
+    })
+    const upcoming = timing.upcoming?.map(toWire)
+    const earlier = timing.earlier?.map(toWire)
     return {
       ...leg,
       ...(boardedLine === leg.line ? {} : { line: boardedLine }),
@@ -164,7 +176,8 @@ function timeOnce(
       // Per-request like the stamps: whether this is the last train depends on
       // which train was caught, never on the cached route.
       ...(timing.lastOfDay ? { lastService: true as const } : {}),
-      ...(upcoming === undefined ? {} : { upcomingDepartures: upcoming })
+      ...(upcoming === undefined ? {} : { upcomingDepartures: upcoming }),
+      ...(earlier === undefined ? {} : { earlierDepartures: earlier })
     }
   })
 
@@ -220,8 +233,15 @@ function boardingsOf(
    * reach Rasuna Said at 08.56 — so it is never offered. Only judged where both
    * arrivals are known; on a rail-into-TransJakarta route neither is, and every
    * boarding stays a real choice.
+   *
+   * Except the first: it is the train the rider can catch now, and it always
+   * leads the card. Boarding the 08.11 and spending the slack at the change
+   * station (a shop at JPM Dukuh Atas) is a choice riders make on purpose; the
+   * later boarding with the same arrival stays offered beside it as the one
+   * with the least time on board.
    */
-  const offered = boardings.filter((boarding, i) => boarding.arrivalS === null
+  const offered = boardings.filter((boarding, i) => i === 0
+    || boarding.arrivalS === null
     || !boardings.slice(i + 1).some(later => later.arrivalS !== null && later.arrivalS <= boarding.arrivalS!))
 
   const [row, ...more] = offered

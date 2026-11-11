@@ -1,7 +1,10 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { OPERATORS } from '@commute/constants'
+import { TOPOLOGY } from 'db/data/topology'
 import { DAY_MASK_ALL, type NewSchedule } from 'db/schemas/schedules'
 import { chunkArray } from 'utils/chunk'
+import { collectStationIds } from 'utils/topology'
 import { fromFeedStationCode } from './formatters'
 import { toTimetableRows } from './sync'
 
@@ -76,6 +79,50 @@ export interface DumpConversion {
   empty: string[]
   /** Feed codes outside Jabodetabek, skipped on purpose. */
   outsideRegion: string[]
+  /** Trips moved off the feed's line onto the one their stops actually run, see relabelOffLineTrips. */
+  relabelled: { tripNumber: string, from: string, to: string }[]
+}
+
+/*
+ * The feed names a trip's line after its trainset, not after the track it runs.
+ * A Rangkasbitung set working Manggarai → Sudirman → Tanah Abang → Angke comes
+ * through as COMMUTER LINE RANGKASBITUNG, though that corridor is the Cikarang
+ * loop's (the feed's own colour for it is Cikarang blue). Stored as R, it shows
+ * up as an R departure to Angke on Tanah Abang's board.
+ *
+ * So the whole dump is checked trip by trip: a trip whose stops do not all lie
+ * on its labelled line, but do all lie on exactly one other line, moves to that
+ * line. Anything less clear-cut keeps the feed's label.
+ */
+function relabelOffLineTrips(boards: DumpBoard[]): DumpConversion['relabelled'] {
+  const stationsOf = new Map(TOPOLOGY
+    .filter(topology => topology.operator === OPERATORS.KCI.code)
+    .map(topology => [topology.lineCode, new Set(collectStationIds(topology))]))
+
+  const rowsByTrip = new Map<string, NewSchedule[]>()
+  for (const row of boards.flatMap(board => board.rows)) {
+    if (!row.tripNumber) continue
+    const rows = rowsByTrip.get(row.tripNumber) ?? []
+    rows.push(row)
+    rowsByTrip.set(row.tripNumber, rows)
+  }
+
+  const relabelled: DumpConversion['relabelled'] = []
+  for (const [tripNumber, rows] of rowsByTrip) {
+    const lineCode = rows[0]!.lineCode
+    const labelled = lineCode ? stationsOf.get(lineCode) : undefined
+    // NUL and mixed-label trips are not ours to guess at.
+    if (!labelled || rows.some(row => row.lineCode !== lineCode)) continue
+    if (rows.every(row => labelled.has(row.stationId))) continue
+
+    const fits = [...stationsOf].filter(([, stations]) => rows.every(row => stations.has(row.stationId)))
+    if (fits.length !== 1) continue
+
+    const to = fits[0]![0]
+    for (const row of rows) row.lineCode = to
+    relabelled.push({ tripNumber, from: lineCode!, to })
+  }
+  return relabelled
 }
 
 /*
@@ -86,7 +133,7 @@ export interface DumpConversion {
  * fetch never reaches it at all, so neither may wipe a board here either.
  */
 export function convertDump(dump: KCIDump): DumpConversion {
-  const result: DumpConversion = { boards: [], failed: [], empty: [], outsideRegion: [] }
+  const result: DumpConversion = { boards: [], failed: [], empty: [], outsideRegion: [], relabelled: [] }
 
   /*
    * Region by station, from the list in the same dump. Checked under our code as
@@ -113,6 +160,7 @@ export function convertDump(dump: KCIDump): DumpConversion {
     }
   }
 
+  result.relabelled = relabelOffLineTrips(result.boards)
   return result
 }
 
@@ -171,7 +219,7 @@ function main(): void {
   }
 
   const dump = JSON.parse(fs.readFileSync(dumpPath, 'utf-8')) as KCIDump
-  const { boards, failed, empty, outsideRegion } = convertDump(dump)
+  const { boards, failed, empty, outsideRegion, relabelled } = convertDump(dump)
 
   // A dump where nothing converted is a broken dump, not an empty network.
   if (boards.length === 0) {
@@ -186,6 +234,7 @@ function main(): void {
   if (failed.length > 0) console.warn(`Failed, boards left as they are: ${failed.join(', ')}`)
   if (outsideRegion.length > 0) console.log(`Outside Jabodetabek, skipped: ${outsideRegion.join(', ')}`)
   if (empty.length > 0) console.warn(`Empty, boards left as they are: ${empty.join(', ')}`)
+  for (const { tripNumber, from, to } of relabelled) console.log(`Relabelled ${tripNumber} ${from} -> ${to}: its stops are all on ${to}, not ${from}`)
   const unknownLines = boards.flatMap(board => board.rows).filter(row => row.lineCode === 'NUL').length
   if (unknownLines > 0) console.warn(`${unknownLines} departures on an unrecognised line name (stored as NUL)`)
 }

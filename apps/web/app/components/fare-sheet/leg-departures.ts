@@ -63,8 +63,8 @@ export interface TimedLeg {
   index: number
   chosen: FareLegDeparture
   /**
-   * The trains to show, at most CHIP_ROW_MAX: the one just missed, if any, then
-   * the ones the rider can make, always including `chosen`. The engine lists a
+   * The trains to show, at most CHIP_ROW_MAX: only ones the rider can make,
+   * always including `chosen`. The engine lists a
    * later leg long enough to connect from every train on the leg before it, so
    * showing all of it would turn every row into a ladder.
    */
@@ -77,13 +77,19 @@ const upcomingOf = (leg: FareResultLeg | undefined): readonly FareLegDeparture[]
   leg?.type === 'RIDE' ? (leg.upcomingDepartures ?? []) : []
 
 /*
- * The part of options worth showing: from the train just before the first one
- * the rider can make, slid on where needed so the chosen one stays in view.
+ * The part of options worth showing: from the first train the rider can make,
+ * slid on where needed so the chosen one stays in view.
+ *
+ * Never the one just missed. It used to lead the row as a struck-through
+ * "tak terkejar" chip, which spent a slot on a train nobody can take; like
+ * Citymapper, the row is the trains you can ride, and it moves with the pick
+ * on the leg before. The engine lists enough past every earlier train for the
+ * row to stay full.
  */
 function windowOf(options: readonly LegOption[]): LegOption[] {
   const reachable = options.findIndex(option => option.blocked !== 'MISSED')
   const selected = options.findIndex(option => option.selected)
-  const start = Math.max(0, reachable - 1, selected - CHIP_ROW_MAX + 1)
+  const start = Math.max(0, reachable, selected - CHIP_ROW_MAX + 1)
   return options.slice(start, start + CHIP_ROW_MAX)
 }
 

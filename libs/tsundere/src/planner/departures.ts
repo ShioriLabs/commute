@@ -168,6 +168,18 @@ export interface LegTiming {
    */
   upcoming?: LegDeparture[]
   /**
+   * Trains that serve this leg but were due shortly BEFORE the one caught,
+   * soonest first. Present only when `earlierWithinS` asks and one exists.
+   *
+   * Timetable facts about trains already due, offered because trains run
+   * late: a rider who presses OTW at 09.32 can still be on the 09.30 that is
+   * holding its doors. They never move the clock or the caught train. On a
+   * later leg they reach back to what the previous leg's earliest listed
+   * train connects to, so some are trains the caught connection cannot make;
+   * a client tells them apart with `changeBeforeS`, as it does for `upcoming`.
+   */
+  earlier?: LegDeparture[]
+  /**
    * Not from a timetable: an estimate `estimateUntimed` supplied for a leg no
    * trip covers (see estimateJourney). Only `departureS` and `arrivalS` mean
    * anything then; `stopsS` is empty and `tripId` is ''. `timeJourney` never
@@ -216,6 +228,11 @@ export interface ResolveDeparturesOptions {
    * for a caller that asked.
    */
   upcomingPerLeg?: number
+  /**
+   * How far before the rider's clock at the first boarding to list trains in
+   * `LegTiming.earlier`, in seconds. Absent or 0 lists nothing.
+   */
+  earlierWithinS?: number
   /**
    * For a ride leg no trip covers, an estimate of the wait at its boarding stop
    * and the ride, given the moment the rider is standing there. Absent, or
@@ -313,13 +330,15 @@ const departureOn = (
  * short-turn of one line can both resolve to the same vehicle, and that is one
  * train on the platform, not two.
  *
- * Past `limit`, the list runs on until it holds a train leaving at or after
- * `untilS`: the moment a rider on the previous leg's LAST listed train reaches
- * this platform. Four trains from the caught one is not enough on a later leg
- * once an earlier one can be picked later. From Cakung the 19.41 C reached
- * Dukuh Atas after the LRT list's own 19.57 ended, and read as having no
- * onward train at all while the line ran until 22.00. UPCOMING_CAP_FACTOR
- * bounds it on a trunk running every few minutes.
+ * Past `limit`, the list runs on until it holds `limit` trains leaving at or
+ * after `untilS`: the moment a rider on the previous leg's LAST listed train
+ * reaches this platform. Four trains from the caught one is not enough on a
+ * later leg once an earlier one can be picked later. From Cakung the 19.41 C
+ * reached Dukuh Atas after the LRT list's own 19.57 ended, and read as having
+ * no onward train at all while the line ran until 22.00. And one train past
+ * `untilS` is not enough either: the web row shows only the trains a pick can
+ * make, so whichever train is picked on the leg before, there must be `limit`
+ * of them. UPCOMING_CAP_FACTOR bounds it on a trunk running every few minutes.
  */
 function upcomingDepartures(
   trips: TripIndex,
@@ -336,10 +355,12 @@ function upcomingDepartures(
     const board = boardingIndexFor(pattern, leg.stationIds)
     if (board < 0) continue
     let taken = 0
+    let pastUntil = 0
     for (const trip of tripsFrom(pattern, board, afterS, dayMask)) {
       const departure = departureOn(trip, pattern.lineCode, board, leg.stationIds.length)
       found.push(departure)
-      if (++taken >= cap || (taken >= limit && departure.departureS >= untilS)) break
+      if (departure.departureS >= untilS) pastUntil++
+      if (++taken >= cap || (taken >= limit && pastUntil >= limit)) break
     }
   }
   /*
@@ -349,18 +370,53 @@ function upcomingDepartures(
   found.sort((a, b) => a.departureS - b.departureS)
   const seen = new Set<string>()
   const listed: LegDeparture[] = []
+  let pastUntil = 0
   for (const departure of found) {
     if (seen.has(departure.tripId)) continue
     seen.add(departure.tripId)
     if (listed.length >= cap) break
-    if (listed.length >= limit && listed.at(-1)!.departureS >= untilS) break
+    if (listed.length >= limit && pastUntil >= limit) break
     listed.push(departure)
+    if (departure.departureS >= untilS) pastUntil++
   }
   return listed
 }
 
 /** How far past `upcomingPerLeg` a later leg's list may run to reach `untilS`, as a multiple of it. */
-const UPCOMING_CAP_FACTOR = 3
+const UPCOMING_CAP_FACTOR = 4
+
+/*
+ * The trains that serve the whole leg leaving in `[fromS, beforeS)`, soonest
+ * first, across every pattern a rider on it could board. Deduplicated by trip
+ * for the same reason upcomingDepartures is.
+ */
+function earlierDepartures(
+  trips: TripIndex,
+  leg: Extract<RouteLeg, { type: 'RIDE' }>,
+  fromS: number,
+  beforeS: number,
+  dayMask: number,
+  gatedLines: ReadonlySet<string> | undefined
+): LegDeparture[] {
+  if (fromS >= beforeS) return []
+  const found: LegDeparture[] = []
+  for (const pattern of candidatePatterns(trips, leg, gatedLines)) {
+    const board = boardingIndexFor(pattern, leg.stationIds)
+    if (board < 0) continue
+    for (const trip of tripsFrom(pattern, board, fromS, dayMask)) {
+      const departure = departureOn(trip, pattern.lineCode, board, leg.stationIds.length)
+      if (departure.departureS >= beforeS) break
+      found.push(departure)
+    }
+  }
+  found.sort((a, b) => a.departureS - b.departureS)
+  const seen = new Set<string>()
+  return found.filter((departure) => {
+    if (seen.has(departure.tripId)) return false
+    seen.add(departure.tripId)
+    return true
+  })
+}
 
 /**
  * Put clock times on a journey's legs, as far as the timetable honestly reaches.
@@ -377,7 +433,7 @@ const UPCOMING_CAP_FACTOR = 3
 export function resolveDepartures(
   legs: readonly RouteLeg[],
   trips: TripIndex,
-  { departureS, dayMask, walking = 'AVERAGE', gatedLines, upcomingPerLeg = 1, estimateUntimed }: ResolveDeparturesOptions
+  { departureS, dayMask, walking = 'AVERAGE', gatedLines, upcomingPerLeg = 1, earlierWithinS = 0, estimateUntimed }: ResolveDeparturesOptions
 ): (LegTiming | null)[] {
   const timings: (LegTiming | null)[] = []
   let clockS: number | null = departureS
@@ -393,6 +449,9 @@ export function resolveDepartures(
   let lastArrivalS: number | null = null
   // When the last train listed on that ride arrives, so this leg lists far enough.
   let lastListedArrivalS: number | null = null
+  // When the earliest train listed on that ride arrives, earlier ones included,
+  // so this leg's `earlier` reaches back far enough to connect from it.
+  let earliestListedArrivalS: number | null = null
 
   for (const leg of legs) {
     if (leg.type === 'TRANSFER') {
@@ -455,6 +514,7 @@ export function resolveDepartures(
         timings.push(null)
         clockS = null
         rodePrevious = false
+        earliestListedArrivalS = null
         continue
       }
       const boardS: number = clockS + estimate.waitS
@@ -471,6 +531,8 @@ export function resolveDepartures(
       clockS = alightS
       lastArrivalS = alightS
       lastListedArrivalS = alightS
+      // An estimate has no earlier trains to connect from.
+      earliestListedArrivalS = alightS
       rodePrevious = true
       continue
     }
@@ -486,17 +548,32 @@ export function resolveDepartures(
     const upcoming: LegDeparture[] | undefined = upcomingPerLeg > 1
       ? upcomingDepartures(trips, leg, clockS, dayMask, gatedLines, upcomingPerLeg, untilS)
       : undefined
+    /*
+     * From the rider's clock less the window on the first ride; on a later one,
+     * from the previous leg's earliest listed train plus the same change this
+     * leg was boarded after, mirroring how `untilS` extends the end. Everything
+     * before the clock is earlier than the caught train, which is the first at
+     * or after it.
+     */
+    const earlierFromS: number = lastArrivalS === null || earliestListedArrivalS === null
+      ? clockS - earlierWithinS
+      : Math.min(clockS, earliestListedArrivalS + (clockS - lastArrivalS))
+    const earlier = earlierWithinS > 0
+      ? earlierDepartures(trips, leg, earlierFromS, clockS, dayMask, gatedLines)
+      : []
     timings.push({
       ...departure,
       ...(lastArrivalS === null ? {} : { changeBeforeS: clockS - lastArrivalS }),
       stopsS: leg.stationIds.map((_, i) => (i === 0 ? departure.departureS : alightTimeOf(trip, boardIndex + i))),
       ...(hasLaterTrip(trips, leg, departure.departureS, dayMask, gatedLines) ? {} : { lastOfDay: true as const }),
-      ...(upcoming === undefined ? {} : { upcoming })
+      ...(upcoming === undefined ? {} : { upcoming }),
+      ...(earlier.length === 0 ? {} : { earlier })
     })
     previousLine = departure.lineCode
     clockS = departure.arrivalS
     lastArrivalS = departure.arrivalS
     lastListedArrivalS = upcoming?.at(-1)?.arrivalS ?? departure.arrivalS
+    earliestListedArrivalS = earlier[0]?.arrivalS ?? departure.arrivalS
     rodePrevious = true
   }
 
