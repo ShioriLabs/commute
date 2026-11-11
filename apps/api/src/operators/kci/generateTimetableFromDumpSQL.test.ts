@@ -81,6 +81,40 @@ describe('convertDump', () => {
     expect(boards.map(b => b.stationCode)).toEqual(['GGL'])
   })
 
+  describe('trips labelled with a line they do not run', () => {
+    const rangkas = (trainId: string, dest: string) => ({ ...departure(trainId, dest), ka_name: 'COMMUTER LINE RANGKASBITUNG' })
+    const lineOf = (boards: ReturnType<typeof convertDump>['boards'], trainId: string) =>
+      boards.flatMap(board => board.rows).filter(row => row.tripNumber === trainId).map(row => row.lineCode)
+
+    // 1727E on the 2026-10-06 dump: an R set running the Sudirman corridor.
+    it('moves a trip onto the one line all its stops lie on', () => {
+      const { boards, relabelled } = convertDump(dump({
+        MRI: ok(rangkas('1727E', 'ANGKE')),
+        THB: ok(rangkas('1727E', 'ANGKE')),
+        DU: ok(rangkas('1727E', 'ANGKE'))
+      }))
+      expect(lineOf(boards, '1727E')).toEqual(['C', 'C', 'C'])
+      expect(relabelled).toEqual([{ tripNumber: '1727E', from: 'R', to: 'C' }])
+    })
+
+    it('leaves a trip that runs its own line alone', () => {
+      const { boards, relabelled } = convertDump(dump({
+        THB: ok(rangkas('1614D', 'RANGKASBITUNG')),
+        SRP: ok(rangkas('1614D', 'RANGKASBITUNG'))
+      }))
+      expect(lineOf(boards, '1614D')).toEqual(['R', 'R'])
+      expect(relabelled).toEqual([])
+    })
+
+    // MRI and SUDB are on both C and the airport line, so there is nothing to choose between.
+    it('keeps the feed\'s label when no single other line fits', () => {
+      const tangerang = { ...departure('9001', 'DURI'), ka_name: 'COMMUTER LINE TANGERANG' }
+      const { boards, relabelled } = convertDump(dump({ MRI: ok(tangerang), SUDB: ok(tangerang) }))
+      expect(lineOf(boards, '9001')).toEqual(['T', 'T'])
+      expect(relabelled).toEqual([])
+    })
+  })
+
   it('dedupes on row id, last wins, as insertTimetable does', () => {
     const { boards } = convertDump(dump({ CUK: ok(departure('1001', 'CIKARANG', '05:00:00'), departure('1001', 'CIKARANG', '05:05:00')) }))
     expect(boards[0]!.rows).toHaveLength(1)
