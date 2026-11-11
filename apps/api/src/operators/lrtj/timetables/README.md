@@ -1,10 +1,38 @@
-# LRT Jakarta Lin Selatan timetable transcription
+# LRT Jakarta Lin Selatan timetable
+
+## Source (since 2026-11-11): the website API
+
+`pnpm --filter @commute/api fetch:lrtj-timetable` queries the lrtjakarta.co.id
+schedule API and rewrites `S_MGI.csv` / `S_PGD.csv`;
+`pnpm --filter @commute/api generate:lrtj-timetable` turns them into
+`src/db/scripts/lrtj_S_timetable.sql`, which replaces every LRTJ schedule row.
+Review the CSV and SQL diffs, then apply with `wrangler d1 execute`.
+
+The query is `POST https://www.lrtjakarta.co.id/api/schedules/get` with
+`{"src_station_id", "dst_station_id"}` (no cookies; the old
+`staging2...:8004` host is gone; a default Python user agent gets a 403, curl
+and Node fetch do not). Kelapa Gading -> Manggarai (and back) returns every
+train's full run as `stop_detail`, with `start_at` (departure) and `arrival_at`
+per stop. `fetchTimetable.ts` writes departures, so Velodrome's 1 min dwell shows.
+
+- **No train numbers.** Each trip gets a synthetic KA: 2000 + 2n (+1 for Kelapa
+  Gading-bound), n = order in the day. Stable only within one fetch, so
+  `tripNumber` changes on every refetch (fine: the SQL deletes all LRTJ rows).
+- **Pramuka calls** (opened 2026-11-11). **Matraman (KYM) and Proklamasi (MAT)
+  do not**, though the API lists them: the entrance stairs are unfinished.
+  `fetchTimetable.ts` writes `Ls` for them (`NOT_CALLING`); drop them from it,
+  and `passThrough` in `db/data/topology.ts`, when each opens.
+- Snapshot 2026-11-11: every train is a full 27 min run, 05:30-22:00 from Kelapa
+  Gading (arrives Manggarai 22:27) and 05:32-22:38 from Manggarai (arrives 23:05),
+  every 12 min until about 20:30, then every 15. No evening shuttle.
+- Applying Pramuka's opening: `edges.sql` (regenerated), `lrtj_pramuka_open.sql`,
+  `lrtj_S_timetable.sql`, then deploy with an API_VERSION bump.
+
+# The 17 Sep 2026 poster (superseded, kept for history)
 
 Transcribed from the printed poster "Jadwal Perjalanan LRT Jakarta, Lin Selatan
-(Southern Line), Berlaku Mulai 17 September 2026", photographed at a station.
-`pnpm --filter @commute/api generate:lrtj-timetable` turns it into
-`src/db/scripts/lrtj_S_timetable.sql`, which replaces every LRTJ schedule row
-(the scraped per-station board from `../sync.ts` included).
+(Southern Line), Berlaku Mulai 17 September 2026". The CSVs in git history
+before 2026-11-11 are that transcription.
 
 ## File format
 
@@ -51,32 +79,13 @@ The rest (BVU, BVS, PUM, EQS, RWM, MGI) match.
    `Ls` outside the pass-through stations, or a gap inside a working.
 3. Review the SQL diff, then apply it with `wrangler d1 execute`.
 
-## The website API (not used, on purpose)
+## Station ids (for the API)
 
-The lrtjakarta.co.id `/schedule` page queries
-`POST https://staging2.lrtjakarta.co.id:8004/api/schedules/get` with
-`{"src_station_id": "<id>", "dst_station_id": "<id>"}`. No cookies needed. It
-returns departure times from src towards dst, plus `price` and `stop_station`
-(the number of stations between them, NOT stops made). The page's `__NEXT_DATA__`
-maps the opaque ids:
-
-| id | Station | Ours |
-| --- | --- | --- |
-| `O6PpoaxXR8` | Kelapa Gading | PGD |
-| `63zpjAqWLe` | Boulevard Utara Summarecon Mall | BVU |
-| `Kre96Z9B5D` | Boulevard Selatan | BVS |
-| `oJQxvy93rY` | Pulomas | PUM |
-| `KAVp3P97ry` | Equestrian | EQS |
-| `RnAx41q5G1` | Velodrome | VEL |
-| `LPDxKkxBor` | Rawamangun | RWM |
-| `lZQpDA9kyK` | Pramuka | PKA |
-| `zXl98Mx2Mk` | Matraman | KYM |
-| `Jj59kaqwnO` | Proklamasi | MAT |
-| `DBN9nAp5nJ` | Manggarai | MGI |
-
-Checked 2026-09-30, it does NOT match this poster. The daytime 15-min core is
-identical, but the API serves S08-S10 (Pramuka +3 min after Rawamangun), runs
-Manggarai later (05:40-20:10 vs 06:10-19:40), and its evening shuttle has
-near-duplicate departures (20:05 and 20:09). Word on the street is trains still
-skip S08-S10, so the API is presumably a future timetable or test data.
-Revisit it as the source once those stations open.
+| id | Ours | id | Ours |
+| --- | --- | --- | --- |
+| `O6PpoaxXR8` | PGD | `lZQpDA9kyK` | PKA |
+| `63zpjAqWLe` | BVU | `zXl98Mx2Mk` | KYM |
+| `Kre96Z9B5D` | BVS | `Jj59kaqwnO` | MAT |
+| `oJQxvy93rY` | PUM | `DBN9nAp5nJ` | MGI |
+| `KAVp3P97ry` | EQS | `LPDxKkxBor` | RWM |
+| `RnAx41q5G1` | VEL | | |

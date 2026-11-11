@@ -389,11 +389,12 @@ export const TOPOLOGY: LineTopology[] = [
       // not on the line). The codes stay because they key stations.id, edges,
       // stationLines and the map points, and the stops themselves did not move.
       // Read the name from the DB, never from the code here.
-      // S08-S10 are passed through without calling as of the 17 Sep 2026
-      // timetable (operators/lrtj/timetables), which uses its own initials:
-      // PRM = PKA, MAT = KYM, PKM = MAT.
+      // S09 and S10 are passed through without calling: the stations are not
+      // open (entrance stairs unfinished). Pramuka (S08) opened 2026-11-11.
+      // The 17 Sep 2026 poster uses its own initials: PRM = PKA, MAT = KYM,
+      // PKM = MAT.
       { station: 'RWM', pos: 'S07' },
-      { station: 'PKA', pos: 'S08', passThrough: true },
+      { station: 'PKA', pos: 'S08' },
       { station: 'KYM', pos: 'S09', passThrough: true }, // Matraman
       { station: 'MAT', pos: 'S10', passThrough: true }, // Proklamasi
       { station: 'MGI', pos: 'S11' }
