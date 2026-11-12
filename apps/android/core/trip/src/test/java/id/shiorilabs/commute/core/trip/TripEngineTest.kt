@@ -335,6 +335,83 @@ class TripEngineTest {
         assertNull(TripEngine.awaitingDeparture(busway, bus.state, at(3.2)))
     }
 
+    /** Dukuh Atas to Bundaran HI, both underground: 08.00 to 08.03. */
+    private val underground = TripPlan(listOf(ride(Places.DUKUH_ATAS, Places.BUNDARAN_HI, line = "MRTJ:M", departs = 0, arrives = 3)))
+
+    private fun s(minutes: Double, seconds: Double) = minutes + seconds / 60
+
+    @Test
+    fun `a rider standing on an underground platform waits for their train to be felt leaving`() {
+        val run = Run(underground)
+        run.fix(Places.DUKUH_ATAS, -1.0, accuracyM = 5f, speedMps = 0.05f)
+        run.fix(Places.DUKUH_ATAS, s(-1.0, 4.0), accuracyM = 5f, speedMps = 0.06f)
+
+        assertEquals(StopAt(0, 0), TripEngine.awaitingDeparture(underground, run.state, at(s(-1.0, 5.0))))
+
+        run.send(TripEvent.Departed(0, 0, at(s(0.0, 8.0))))
+        assertEquals(TripPhase.RIDING, run.state.phase)
+        assertTrue(run.state.confirmedPosition > 0.0)
+        assertEquals(8, run.state.clockOffsetS)
+    }
+
+    @Test
+    fun `a rider aboard by a tap at an underground platform waits for the train to be felt leaving`() {
+        // Dukuh Atas on 12 Nov: "Naik" at 19.16.32, the train off at 19.16.58, the board at Dukuh Atas
+        // until Bundaran HI.
+        val run = Run(underground)
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(Places.DUKUH_ATAS, 0.1, accuracyM = 7f, speedMps = 0.05f)
+        run.fix(Places.DUKUH_ATAS, s(0.1, 4.0), accuracyM = 7f, speedMps = 0.07f)
+
+        assertEquals(StopAt(0, 0), TripEngine.awaitingDeparture(underground, run.state, at(s(0.1, 5.0))))
+    }
+
+    @Test
+    fun `only an underground platform, stood on, waits for a train to be felt leaving it`() {
+        val surface = TripPlan(listOf(ride(Places.LRT_DUKUH_ATAS, Places.LRT_SETIABUDI, line = "LRTJBDB:CB", departs = 0, arrives = 3)))
+        val lrt = Run(surface).apply {
+            fix(Places.LRT_DUKUH_ATAS, -1.0, accuracyM = 5f, speedMps = 0.05f)
+            fix(Places.LRT_DUKUH_ATAS, s(-1.0, 4.0), accuracyM = 5f, speedMps = 0.06f)
+        }
+        assertNull(TripEngine.awaitingDeparture(surface, lrt.state, at(s(-1.0, 5.0))))
+
+        val walking = Run(underground).apply {
+            fix(Places.DUKUH_ATAS, -1.0, accuracyM = 5f, speedMps = 1.2f)
+            fix(Places.DUKUH_ATAS, s(-1.0, 4.0), accuracyM = 5f, speedMps = 1.3f)
+        }
+        assertNull(TripEngine.awaitingDeparture(underground, walking.state, at(s(-1.0, 5.0))))
+
+        // Standing there three minutes before the train is due: walking about, as far as a pull says.
+        val early = Run(underground, startAt = at(-5)).apply {
+            fix(Places.DUKUH_ATAS, -3.0, accuracyM = 5f, speedMps = 0.05f)
+            fix(Places.DUKUH_ATAS, s(-3.0, 4.0), accuracyM = 5f, speedMps = 0.06f)
+        }
+        assertNull(TripEngine.awaitingDeparture(underground, early.state, at(s(-3.0, 5.0))))
+        assertEquals(StopAt(0, 0), TripEngine.awaitingDeparture(underground, early.state, at(-0.9)))
+    }
+
+    @Test
+    fun `out of an underground station the clock carries the train on past the platform's repeated fixes`() {
+        // Out of Dukuh Atas on 12 Nov the location provider read the platform, 0.07 m/s at ±7 m, for
+        // 25 s after the train left, then ±100 m on one spot 60 m off it until Bundaran HI.
+        val run = Run(underground)
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(Places.DUKUH_ATAS, 0.1, accuracyM = 7f, speedMps = 0.05f)
+        run.fix(Places.DUKUH_ATAS, s(0.1, 4.0), accuracyM = 7f, speedMps = 0.07f)
+        run.send(TripEvent.Departed(0, 0, at(s(0.1, 10.0))))
+        val left = run.state.confirmedPosition
+
+        run.fix(Places.DUKUH_ATAS, s(0.1, 20.0), accuracyM = 7f, speedMps = 0.07f)
+        run.fix(GeoPoint(-6.200584, 106.8224468), 1.5, accuracyM = 100f)
+
+        assertEquals(left, run.state.confirmedPosition, 0.0)
+        assertTrue(run.state.position > 0.35)
+
+        run.fix(Places.BUNDARAN_HI, 2.6, accuracyM = 98f)
+        assertEquals(TripPhase.ARRIVED, run.state.phase)
+        assertTrue(run.alerts().any { it.kind == AlertKind.ALIGHT })
+    }
+
     @Test
     fun `a train felt leaving a station on the way has left it, as late as it was then`() {
         val run = Run(bogorLine)

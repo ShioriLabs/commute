@@ -167,6 +167,16 @@ object TripEngine {
      */
     private val FIRST_FIX_WAIT: Duration = Duration.ofSeconds(30)
 
+    /**
+     * How far from an underground station's point a rider standing still counts as on its platform,
+     * for the train they step into to be felt leaving. Dukuh Atas BNI's 6-car platform runs past its
+     * point's stop radius: on 12 Nov the rider waited 93–97 m from it.
+     */
+    private const val UNDERGROUND_PLATFORM_M = 150.0
+
+    /** How long before its train is due a rider on an underground platform starts to be watched for it leaving. */
+    private val BOARDING_ARMS: Duration = Duration.ofMinutes(1)
+
     /** After a ride got in by the clock, how long a restore still sends its alerts. */
     private val OVERDUE_ALERT: Duration = Duration.ofMinutes(5)
 
@@ -261,6 +271,14 @@ object TripEngine {
                 .filter { fix.at.toEpochMilli() - it.atMs <= BUS_SPEED_HELD.toMillis() },
         )
         val candidate = pullOut.leftTo ?: located
+        // Out of an underground station: a fix that has the train no further on is the location
+        // provider repeating the platform it last saw, not the train held there. The clock carries
+        // it on ([settle]) until a fix finds it further.
+        if (state.phase == TripPhase.RIDING && ride.inUndergroundHop(state.confirmedPosition) &&
+            (candidate == null || candidate <= state.confirmedPosition)
+        ) {
+            return tracked.copy(hasLocation = true)
+        }
         if (candidate != null && candidate >= state.confirmedPosition - JITTER) {
             // Seen near the line but not aboard: the fix says where they are, not how far they've
             // come. A walk ends only at the station it goes to, as a change can run beside the
@@ -350,17 +368,33 @@ object TripEngine {
      * ([TripEvent.Departed]): fresh fixes there read it standing, and held ([standing]), on rails.
      * Not while it may still be braking in, whose braking read against the standing after it is a
      * pull; not a bus, which stops and starts at every light; not the stop the ride starts from,
-     * which is boarding's.
+     * which is boarding's, unless it's [underground][isUnderground]: there no fix sees the train
+     * out, so the rider standing on its platform, or aboard by a tap, waits for it to be felt
+     * leaving. A rider still on the platform feels no train go, only the one they're on.
      */
     fun awaitingDeparture(plan: TripPlan, state: TripState, now: Instant): StopAt? {
-        if (state.phase != TripPhase.RIDING) return null
         val ride = plan.ride(state.legIndex)
         if (ride.isBus) return null
         val at = state.confirmedPosition
         if (at != floor(at)) return null
         val stop = at.toInt()
-        if (stop <= 0 || stop >= ride.lastIndex) return null
-        if (state.confirmedAt?.let { Duration.between(it, now) < STALE } != true) return null
+        if (stop >= ride.lastIndex) return null
+        when (state.phase) {
+            TripPhase.RIDING -> if (stop == 0 && !ride.isUnderground(0)) return null
+            TripPhase.WAITING_TO_BOARD -> if (stop != 0 || !ride.isUnderground(0)) return null
+            else -> return null
+        }
+        // A train doesn't leave early. Before then, a pull on the platform is the rider walking about:
+        // on 12 Nov one coming into Bundaran HI read 0.67 then 0.13 m/s, and walked a pull three and a
+        // half minutes before the 19.33.
+        if (stop == 0) {
+            val departs = ride.departureAt?.plusSeconds(state.lateS) ?: return null
+            if (now.isBefore(departs.minus(BOARDING_ARMS))) return null
+        }
+        // Waiting, the fix that saw them standing needn't have placed them: a platform can run
+        // further from its station's point than a stop's radius.
+        val seen = if (state.phase == TripPhase.WAITING_TO_BOARD) state.recentSpeeds.lastOrNull()?.let { Instant.ofEpochMilli(it.atMs) } else state.confirmedAt
+        if (seen?.let { Duration.between(it, now) < STALE } != true) return null
         if (state.stoodAt != stopKey(state.legIndex, stop) || !state.standingHeld) return null
         return StopAt(state.legIndex, stop)
     }
@@ -401,6 +435,11 @@ object TripEngine {
             ?.let { Duration.between(it, event.at).seconds.coerceIn(MAX_EARLY_S, MAX_LATE_S) }
             ?: state.clockOffsetS
         return state.copy(
+            // Felt leaving an underground platform: aboard, as a fix past its end would have them.
+            phase = TripPhase.RIDING,
+            walkingSince = null,
+            sightedPosition = null,
+            boardingFixes = 0,
             confirmedPosition = stop + out,
             // A fix reading it standing can land a moment after the pull began.
             confirmedAt = state.confirmedAt?.let { maxOf(it, event.at) } ?: event.at,
@@ -425,6 +464,7 @@ object TripEngine {
      * The stop is the one the train was at, or, for the fix that brings it in, the one [located] there.
      */
     private fun pullOut(ride: TripLeg.Ride, state: TripState, fix: TripEvent.Fix, located: Double?, tuning: Tuning): PullOut {
+        if (state.phase == TripPhase.WAITING_TO_BOARD) return onUndergroundPlatform(ride, state, fix)
         if (state.phase != TripPhase.RIDING) return PullOut(null, 0, null)
         val here = located?.takeIf { it == floor(it) && it > state.confirmedPosition }
             ?: state.confirmedPosition.takeIf { it == floor(it) }
@@ -442,6 +482,21 @@ object TripEngine {
         if (fixes < PULLING_OUT_FIXES) return PullOut(key, fixes, null, speed)
         val along = alongHops(ride, stop, min(ride.lastIndex, stop + LOOKAHEAD_STOPS), fix.point, tuning)
         return PullOut(key, fixes, along?.takeIf { it > stop }, speed)
+    }
+
+    /**
+     * A rider waiting at an [underground][isUnderground] platform, standing there as a train at a stop
+     * on the way would: for the motion sensors to feel the one they step into leave
+     * ([awaitingDeparture]). Walking about the platform isn't standing.
+     */
+    private fun onUndergroundPlatform(ride: TripLeg.Ride, state: TripState, fix: TripEvent.Fix): PullOut {
+        val platform = ride.stops.first().point
+        if (!ride.isUnderground(0) || platform == null || distanceM(fix.point, platform) > UNDERGROUND_PLATFORM_M) {
+            return PullOut(null, 0, null)
+        }
+        val key = stopKey(state.legIndex, 0)
+        val speed = fix.speedMps ?: return PullOut(state.stoodAt.takeIf { it == key }, 0, null)
+        return PullOut(key.takeIf { speed < STANDING_M_PER_S }, 0, null)
     }
 
     /**
@@ -652,11 +707,13 @@ object TripEngine {
             }
 
             val estimate = clock.positionAt(now.minus(offset))
-            val position = if (fresh || estimate == null) state.confirmedPosition else max(state.confirmedPosition, estimate)
+            // Underground between stations nothing sees the train: the clock does, from when it left.
+            val trusted = fresh && !ride.inUndergroundHop(state.confirmedPosition)
+            val position = if (trusted || estimate == null) state.confirmedPosition else max(state.confirmedPosition, estimate)
             state = state.copy(position = position, source = sourceOf(ride, fresh))
             // Where a train running early would be if it kept its lead: "siap-siap" goes by that,
             // better a minute early than after the doors have shut.
-            val ahead = if (fresh) position else clock.positionAt(now.minusSeconds(state.clockOffsetS))?.let { max(position, it) } ?: position
+            val ahead = if (trusted) position else clock.positionAt(now.minusSeconds(state.clockOffsetS))?.let { max(position, it) } ?: position
 
             // The clock has the rider aboard and on their way, but a first fix about to come may
             // find the train still in: nothing to tell them until it does.
