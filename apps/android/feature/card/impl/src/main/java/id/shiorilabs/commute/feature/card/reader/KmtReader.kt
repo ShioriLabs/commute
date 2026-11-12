@@ -74,17 +74,18 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
     private fun entry(block: ByteArray): CardEntry {
         val amount = block.u32be(4)
         val modeAndPlace = block.copyOfRange(8, 14)
-        val (operator, place) = classify(modeAndPlace)
+        val (operator, stationId) = classify(modeAndPlace)
         return CardEntry(
             at = EPOCH_2000.plusSeconds(block.u32be(0)),
             operator = operator,
-            place = place,
+            place = null,
+            stationId = stationId,
             // D12 is 1 for money out, 0 for money in (KMT.md, "likely").
             amount = if (modeAndPlace[4].toInt() == 1) -amount else amount,
         )
     }
 
-    /** The API's operator code and the station the entry names, either of which may be unknown. */
+    /** The API's operator code and the API's id for the station the entry names, either of which may be unknown. */
     private fun classify(d: ByteArray): Pair<String?, String?> {
         val b = IntArray(6) { d[it].toInt() and 0xFF }
         return when {
@@ -101,12 +102,13 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
 
     private fun ByteArray.u32le(at: Int) = (3 downTo 0).fold(0L) { acc, i -> (acc shl 8) or (this[at + i].toLong() and 0xFF) }
 
-    private companion object {
-        // Tap-out stations seen so far (KMT.md); any other code leaves the place unnamed.
-        val KRL_STATIONS = mapOf(0x24 to "Jakarta Kota", 0x26 to "Kranji", 0x48 to "Sudirman")
-        val LRT_STATIONS = mapOf(0x01 to "Dukuh Atas", 0x02 to "Setiabudi", 0x03 to "Rasuna Said")
+    internal companion object {
+        // Tap-out stations seen so far (KMT.md), as the API's station ids: CardStationNames names
+        // them, so a rename needs no change here. Any other code leaves the station unknown.
+        val KRL_STATIONS = mapOf(0x24 to "KCI-JAKK", 0x26 to "KCI-KRI", 0x48 to "KCI-SUD")
+        val LRT_STATIONS = mapOf(0x01 to "LRTJBDB-DKA", 0x02 to "LRTJBDB-SET", 0x03 to "LRTJBDB-RAS")
 
         // An MRT entry is told from TransJakarta's only by its station, so an unknown one stays unread.
-        val MRT_STATIONS = mapOf(0x0F to "Dukuh Atas BNI", 0x10 to "Bundaran HI Bank DKI")
+        val MRT_STATIONS = mapOf(0x0F to "MRTJ-DKA", 0x10 to "MRTJ-BHI")
     }
 }

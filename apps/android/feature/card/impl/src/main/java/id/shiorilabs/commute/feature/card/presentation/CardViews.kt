@@ -116,6 +116,8 @@ internal fun CardPage(
     message: String,
     onBack: () -> Unit,
     readsIso: Boolean = false,
+    /** What the stations the entries point at are called, by the API's id. */
+    stationNames: Map<String, String> = emptyMap(),
 ) {
     Column(
         modifier = Modifier
@@ -185,13 +187,13 @@ internal fun CardPage(
                         )
                     }
                 }
-                historyItems(snapshot)
+                historyItems(snapshot, stationNames)
             }
         }
     }
 }
 
-private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
+private fun LazyListScope.historyItems(snapshot: CardSnapshot, stationNames: Map<String, String>) {
     if (snapshot.entries.isEmpty()) {
         item {
             Text(
@@ -205,7 +207,7 @@ private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
     }
     for (day in historyDays(snapshot)) {
         item { DayHeader(formatDay(day.date, snapshot.readAt), formatAmount(day.total, snapshot.kind)) }
-        items(day.entries) { EntryRow(it, snapshot.kind) }
+        items(day.entries) { EntryRow(it, snapshot.kind, stationNames) }
     }
 }
 
@@ -309,24 +311,27 @@ private fun DayHeader(day: String, total: String) {
 }
 
 /**
- * An entry. A Japanese card's ride is named by its line, or else who ran it, in Japanese as the
- * table has them; anything else on it is only money in or money out, as everything is on e-money.
+ * An entry. A station the API knows goes by its name in [stationNames], as it's called now; a
+ * Japanese card's ride is named by its line, or else who ran it, in Japanese as the table has them;
+ * anything else on it is only money in or money out, as everything is on e-money.
  */
 @Composable
-private fun EntryRow(row: HistoryEntry, kind: CardKind) {
+private fun EntryRow(row: HistoryEntry, kind: CardKind, stationNames: Map<String, String>) {
     val entry = row.entry
+    // An id the names don't have yet reads as an entry with no station: its operator's name.
+    val place = entry.place ?: entry.stationId?.let(stationNames::get)
     val topUp = entry.operator == null && entry.amount > 0
-    val unnamed = kind != CardKind.KMT && entry.place == null && entry.operator == null
+    val unnamed = kind != CardKind.KMT && place == null && entry.operator == null
     val title = when {
         entry.issue -> stringResource(R.string.card_entry_issue)
         unnamed -> stringResource(if (topUp) R.string.card_entry_topup_generic else R.string.card_entry_payment)
         topUp -> stringResource(R.string.card_entry_topup)
-        entry.place != null -> entry.place!!
+        place != null -> place
         else -> entry.operator?.let { OPERATOR_NAMES[it] ?: it } ?: stringResource(R.string.card_entry_ride)
     }
     val balanceAfter = formatBalance(row.balanceAfter, kind)
     // A card that keeps no time says who ran the ride there instead, when the line took the title.
-    val lead = if (entry.timeKnown) formatTime(entry.at) else entry.operator.takeIf { kind == CardKind.JAPAN_IC && entry.place != null }
+    val lead = if (entry.timeKnown) formatTime(entry.at) else entry.operator.takeIf { kind == CardKind.JAPAN_IC && place != null }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -382,14 +387,16 @@ private val PreviewCard = CardSnapshot(
     lastDigits = "4821",
     balance = 47_500,
     entries = listOf(
-        CardEntry(Instant.parse("2026-10-23T11:42:00Z"), "KCI", "Sudirman", -3_000),
+        CardEntry(Instant.parse("2026-10-23T11:42:00Z"), "KCI", null, -3_000, stationId = "KCI-SUD"),
         CardEntry(Instant.parse("2026-10-23T01:05:00Z"), "TJ", null, -3_500),
-        CardEntry(Instant.parse("2026-10-22T10:20:00Z"), "LRTJBDB", "Rasuna Said", -5_000),
+        CardEntry(Instant.parse("2026-10-22T10:20:00Z"), "LRTJBDB", null, -5_000, stationId = "LRTJBDB-RAS"),
         CardEntry(Instant.parse("2026-10-22T00:50:00Z"), null, null, 50_000),
         CardEntry(Instant.parse("2026-10-21T11:10:00Z"), null, null, -1_000),
     ),
     readAt = PreviewNow,
 )
+
+private val PreviewStationNames = mapOf("KCI-SUD" to "Sudirman", "LRTJBDB-RAS" to "Rasuna Said")
 
 @Preview(heightDp = 760)
 @Composable
@@ -403,7 +410,7 @@ private fun CardPageHoldPreview() {
 @Composable
 private fun CardPageReadPreview() {
     CommutePreviewScaffold {
-        CardPage(PaddingValues(), snapshot = PreviewCard, message = "", onBack = {})
+        CardPage(PaddingValues(), snapshot = PreviewCard, message = "", onBack = {}, stationNames = PreviewStationNames)
     }
 }
 
