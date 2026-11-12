@@ -167,6 +167,9 @@ object TripEngine {
      */
     private val FIRST_FIX_WAIT: Duration = Duration.ofSeconds(30)
 
+    /** After a ride got in by the clock, how long a restore still sends its alerts. */
+    private val OVERDUE_ALERT: Duration = Duration.ofMinutes(5)
+
     /** The trip ends itself this long after arriving. */
     val ARRIVED_LINGER: Duration = Duration.ofMinutes(5)
 
@@ -201,7 +204,10 @@ object TripEngine {
             // A fix from just before the restart still places the rider; an old one goes stale on
             // its own. Dropping it would let the clock run them ahead, and alert, the moment the
             // process came back.
-            is TripEvent.Resumed -> state.copy(resumed = true)
+            is TripEvent.Resumed -> {
+                val step = settle(plan, state.copy(resumed = true), now, effects)
+                return step.copy(effects = step.effects.filterNot { overdue(plan, state, it, now) })
+            }
             is TripEvent.Departed -> departed(plan, state, event)
             is TripEvent.RiderSaid -> when (event.action) {
                 // Done with a trip that already got there is arriving, not giving up on it.
@@ -829,6 +835,19 @@ object TripEngine {
     }
 
     private fun prepareKey(legIndex: Int) = "${AlertKind.PREPARE.name}:$legIndex"
+
+    /**
+     * A "siap-siap" or "turun" the clock only reaches as a stored trip comes back, more than
+     * [OVERDUE_ALERT] after its ride got in: kept as fired, but not sent. On 12 Nov the phone died at
+     * Cakung at 20.24 and the restore at 21.17 buzzed the watch to get off at Kranji.
+     */
+    private fun overdue(plan: TripPlan, stored: TripState, effect: TripEffect, now: Instant): Boolean {
+        if (effect !is TripEffect.Alert || (effect.kind != AlertKind.PREPARE && effect.kind != AlertKind.ALIGHT)) return false
+        // A ride the restore moved on to started on time, as far as the clock knows.
+        val late = if (effect.legIndex == stored.legIndex) stored.lateS else 0L
+        val arrives = plan.ride(effect.legIndex).arrivalAt?.plusSeconds(late) ?: return false
+        return Duration.between(arrives, now) > OVERDUE_ALERT
+    }
 
     /**
      * Fixes every few seconds where a half-minute gap costs most: getting on, and getting off. Getting
