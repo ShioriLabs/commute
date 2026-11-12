@@ -1238,6 +1238,10 @@
           "headsign": {
             "type": "string",
             "description": "Stasiun akhir yang dituju kendaraan ini, kalau jadwalnya mencantumkan."
+          },
+          "connectBy": {
+            "type": "string",
+            "description": "Paling telat jam berapa kendaraan di tahap naik sebelumnya harus sampai supaya kendaraan ini masih kekejar. Cuma ada di perpindahan yang lewat perlintasan rel di dalam stasiun, yang buka tutupnya tergantung kereta yang lewat. Kalau ada, pakai ini, bukan `minChangeS`."
           }
         },
         "required": [
@@ -1365,12 +1369,23 @@
             "description": "Waktu pindah paling singkat dalam detik, dari turun di tahap naik sebelumnya sampai bisa naik di tahap ini, termasuk jalan kaki, sesuai kecepatan jalan penumpang. Tidak ada di tahap naik pertama atau tahap yang tidak punya jadwal.",
             "format": "double"
           },
+          "crossingVia": {
+            "type": "string",
+            "description": "Cara pindah ke peron tahap ini kalau harus menyeberang rel di dalam stasiun. `CROSSING` lewat perlintasan, `CONCOURSE` naik ke concourse lalu turun lagi karena perlintasannya bakal ditutup buat kereta yang lewat. Nilai yang dikenal saat ini: `CROSSING`, `CONCOURSE`. Bisa bertambah."
+          },
           "upcomingDepartures": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FareLegDeparture"
             },
             "description": "Kendaraan yang bisa dinaiki di tahap ini, urut dari yang paling cepat. Yang pertama selalu kendaraan yang dipakai di `departureAt`. Cuma ada di tahap yang jadwalnya kami punya."
+          },
+          "earlierDepartures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareLegDeparture"
+            },
+            "description": "Kendaraan yang jadwalnya sudah lewat sedikit sebelum `departureAt` tapi mungkin masih di peron kalau telat, urut dari yang paling awal. Cuma ada kalau memang ada."
           },
           "platformCode": {
             "type": "string",

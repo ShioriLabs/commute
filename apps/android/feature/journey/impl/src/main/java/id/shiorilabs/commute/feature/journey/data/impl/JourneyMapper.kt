@@ -1,9 +1,11 @@
 package id.shiorilabs.commute.feature.journey.data.impl
 
 import id.shiorilabs.commute.core.model.models.FareJourney
+import id.shiorilabs.commute.core.model.models.FareLegDeparture
 import id.shiorilabs.commute.core.model.models.FareRideLeg
 import id.shiorilabs.commute.core.model.models.FareTransferLeg
 import id.shiorilabs.commute.core.model.models.TripResult
+import id.shiorilabs.commute.feature.journey.domain.CrossingVia
 import id.shiorilabs.commute.feature.journey.domain.ExitSignLine
 import id.shiorilabs.commute.feature.journey.domain.FareSegment
 import id.shiorilabs.commute.feature.journey.domain.Journey
@@ -74,13 +76,18 @@ private fun FareRideLeg.toRide(): JourneyLeg.Ride = JourneyLeg.Ride(
     // Index-aligned with the stops or no use at all: a list that doesn't line up is dropped.
     stopTimes = stopTimes?.takeIf { it.size == stops.size }?.map { it?.toInstantOrNull() }.orEmpty(),
     tripId = tripId,
-    upcomingDepartures = upcomingDepartures.orEmpty().mapNotNull { d ->
-        val departure = d.departureAt.toInstantOrNull() ?: return@mapNotNull null
-        val arrival = d.arrivalAt.toInstantOrNull() ?: return@mapNotNull null
-        LegDeparture(departure, arrival, d.tripId, d.line, d.headsign)
-    },
+    upcomingDepartures = upcomingDepartures.orEmpty().mapNotNull { it.toDeparture() },
+    earlierDepartures = earlierDepartures.orEmpty().mapNotNull { it.toDeparture() },
     minChangeS = minChangeS?.roundToInt(),
+    // The API may add ways round; one this version does not know is said nothing about.
+    crossingVia = CrossingVia.entries.firstOrNull { it.name == crossingVia },
 )
+
+private fun FareLegDeparture.toDeparture(): LegDeparture? {
+    val departure = departureAt.toInstantOrNull() ?: return null
+    val arrival = arrivalAt.toInstantOrNull() ?: return null
+    return LegDeparture(departure, arrival, tripId, line, headsign, connectBy = connectBy?.toInstantOrNull())
+}
 
 private fun FareTransferLeg.toTransfer(): JourneyLeg.Transfer = JourneyLeg.Transfer(
     from = from.toStop(),
