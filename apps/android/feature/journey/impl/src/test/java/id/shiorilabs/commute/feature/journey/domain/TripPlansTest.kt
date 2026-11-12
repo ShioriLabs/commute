@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.journey.domain
 
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.trip.TripDeparture
 import id.shiorilabs.commute.core.trip.TripExitSign
 import id.shiorilabs.commute.core.trip.TripLeg
 import org.junit.Assert.assertEquals
@@ -108,6 +109,44 @@ class TripPlansTest {
     @Test
     fun `an untimed ride keeps no later trains`() {
         assertEquals(emptyList<Instant>(), timed.toTripPlan().ride(2).nextDepartures)
+        assertEquals(emptyList<TripDeparture>(), timed.toTripPlan().ride(2).earlierDepartures)
+    }
+
+    private fun train(id: String, minutes: Long) =
+        LegDeparture(departs.plusSeconds(minutes * 60), departs.plusSeconds(minutes * 60 + 180), id, "KCI:B", headsign = "Angke")
+
+    @Test
+    fun `the plan keeps the trains due just before the followed one, and its change allowance`() {
+        val leg = ride("KCI:B", "KCI-MRI", "KCI-TEB", departureAt = departs, arrivalAt = departs.plusSeconds(180)).copy(
+            tripId = "a1",
+            upcomingDepartures = listOf(train("a1", 0), train("a2", 8)),
+            earlierDepartures = listOf(train("z2", -8), train("z1", -3).copy(connectBy = departs.minusSeconds(600))),
+            minChangeS = 240,
+        )
+        val ride = journey(leg).toTripPlan().ride(0)
+
+        assertEquals(
+            listOf(
+                TripDeparture(departs.minusSeconds(480), departs.minusSeconds(300), "z2", "Angke"),
+                TripDeparture(departs.minusSeconds(180), departs, "z1", "Angke", connectBy = departs.minusSeconds(600)),
+            ),
+            ride.earlierDepartures,
+        )
+        assertEquals(240, ride.minChangeS)
+    }
+
+    @Test
+    fun `with a later train picked, the one the API caught and those between are earlier ones too`() {
+        // The planner's pick moved the leg onto a3; a1 was the API's, z1 due before it.
+        val leg = ride("KCI:B", "KCI-MRI", "KCI-TEB", departureAt = departs.plusSeconds(16 * 60), arrivalAt = departs.plusSeconds(19 * 60)).copy(
+            tripId = "a3",
+            upcomingDepartures = listOf(train("a1", 0), train("a2", 8), train("a3", 16), train("a4", 24)),
+            earlierDepartures = listOf(train("z1", -3)),
+        )
+        val ride = journey(leg).toTripPlan().ride(0)
+
+        assertEquals(listOf("z1", "a1", "a2"), ride.earlierDepartures.map { it.tripId })
+        assertEquals(listOf(departs.plusSeconds(24 * 60)), ride.nextDepartures)
     }
     @Test
     fun `a leg without stop times leaves its stops untimed`() {

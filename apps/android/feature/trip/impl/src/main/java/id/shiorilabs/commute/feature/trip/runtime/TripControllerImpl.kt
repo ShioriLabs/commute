@@ -11,13 +11,16 @@ import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.InstantSerializer
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
+import id.shiorilabs.commute.core.trip.TRAIN_LEFT_EARLY
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripEngine
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
 import id.shiorilabs.commute.core.trip.expectedAlightingAt
+import id.shiorilabs.commute.core.trip.leftAt
 import id.shiorilabs.commute.core.trip.missedFrom
+import id.shiorilabs.commute.core.trip.ontoEarlierTrain
 import id.shiorilabs.commute.core.trip.nextRideReadyAt
 import id.shiorilabs.commute.core.trip.plannedReadyAt
 import id.shiorilabs.commute.core.trip.scheduledAtStop
@@ -244,7 +247,8 @@ class TripControllerImpl @Inject constructor(
             val before = _active.value ?: return
             val (boarded, stepped) = boardedEarlier(before, event, TripEngine.step(before.plan, before.state, event))
             val (left, leftStep) = leftTooEarly(boarded, event, stepped)
-            val (trip, step) = boardedLater(before, left, event, leftStep)
+            val (later, laterStep) = boardedLater(before, left, event, leftStep)
+            val (trip, step) = boardedEarlierTrain(before, later, event, laterStep)
             logStep(event, before.state, step.state)
             apply(trip, step)
         }
@@ -357,6 +361,38 @@ class TripControllerImpl @Inject constructor(
         )
         val plan = TripPlan(trip.plan.legs.toMutableList().also { it[leg] = shifted })
         log.event("later", mapOf("leg" to leg, "planned" to planned, "took" to took, "boarded" to boardedAt))
+        // The boarding again, from before it, on the new plan: lateness, alerts and wake all read against it.
+        return trip.copy(plan = plan) to TripEngine.step(plan, before.state, event)
+    }
+
+    /**
+     * Out of the platform [LEFT_EARLY] or more before the planned train was due: a train doesn't
+     * leave early, so the rider is on one due before it that ran late, still at the platform when
+     * they got there (the ride's `earlierDepartures`). The leg moves onto it, and the rides after it
+     * onto the first of their trains the earlier arrival makes ([ontoEarlierTrain]); the lateness is
+     * measured against it. On 5 Nov the 09.35 left Cakung at 09.39.50 and was followed as the 09.45
+     * five minutes early all the way to Manggarai.
+     *
+     * The first fix along the ride only, as for [boardedLater], and read past the engine's five-minute
+     * floor ([leftAt]), which made that ride a tie. Never a tap alone: "Udah naik" while sitting in the
+     * planned train before it's off says nothing about which train it is. A swap already made is
+     * [boardedEarlier]'s.
+     */
+    private fun boardedEarlierTrain(before: ActiveTrip, trip: ActiveTrip, event: TripEvent, step: TripStep): Pair<ActiveTrip, TripStep> {
+        if (event !is TripEvent.Fix) return trip to step
+        val leg = before.state.legIndex
+        val state = step.state
+        // A tap or the clock may have put them aboard already; the fix out still says which train.
+        if (before.state.phase == TripPhase.ARRIVED || state.phase != TripPhase.RIDING || state.legIndex != leg) return trip to step
+        if (trip.plan != before.plan || before.replaced != null || trip.mightBeOn != null) return trip to step
+        if (before.state.confirmedPosition != 0.0 || state.confirmedPosition <= 0.0 || state.confirmedPosition > 1.0) return trip to step
+        val ride = trip.plan.ride(leg)
+        val leftAt = ride.leftAt(state.confirmedPosition, event.at) ?: return trip to step
+        val plan = trip.plan.ontoEarlierTrain(leg, leftAt) ?: return trip to step
+        log.event(
+            "earlier-train",
+            mapOf("leg" to leg, "planned" to ride.departureAt, "took" to plan.ride(leg).departureAt, "left" to leftAt),
+        )
         // The boarding again, from before it, on the new plan: lateness, alerts and wake all read against it.
         return trip.copy(plan = plan) to TripEngine.step(plan, before.state, event)
     }
@@ -711,7 +747,7 @@ class TripControllerImpl @Inject constructor(
          * Out of a station this far ahead of a train's time there, it's not that train: 16 Oct's left
          * Manggarai four minutes before the 19.02 was due, and five and a half after the 18.57.
          */
-        val LEFT_EARLY: Duration = Duration.ofMinutes(2)
+        val LEFT_EARLY: Duration = TRAIN_LEFT_EARLY
     }
 }
 
