@@ -1052,6 +1052,33 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a trip coming back long after its stop arrives without telling the rider to get off`() {
+        // 12 Nov: the phone died at Cakung at 20.24 and came back at 21.17; the restore sent "turun"
+        // to the watch for Kranji, nearly an hour after.
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0)
+
+        val resumed = run.send(TripEvent.Resumed(at(16 + 54)))
+
+        assertEquals(TripPhase.ARRIVED, resumed.state.phase)
+        assertTrue("${AlertKind.ALIGHT.name}:0" in resumed.state.firedAlerts)
+        assertTrue("${AlertKind.PREPARE.name}:0" in resumed.state.firedAlerts)
+        assertTrue(resumed.effects.none { it is TripEffect.Alert })
+    }
+
+    @Test
+    fun `a quick restart just past the stop still tells the rider to get off`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0)
+
+        val resumed = run.send(TripEvent.Resumed(at(17)))
+
+        assertTrue(resumed.effects.any { it is TripEffect.Alert && it.kind == AlertKind.ALIGHT })
+    }
+
+    @Test
     fun `a forgotten trip ends itself`() {
         val run = Run(busway, startAt = at(0), hasLocation = false)
         assertEquals(at(180), run.step.nextWakeAt)
