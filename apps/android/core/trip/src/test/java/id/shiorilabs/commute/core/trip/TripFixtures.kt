@@ -16,7 +16,7 @@ internal object Places {
     // MRT, underground stretch southbound.
     val BUNDARAN_HI = stop("MRTJ-BHI", "Bundaran HI", -6.1913, 106.8230)
     val DUKUH_ATAS = stop("MRTJ-DKA", "Dukuh Atas BNI", -6.2007, 106.8227)
-    val SETIABUDI = stop("MRTJ-SET", "Setiabudi Astra", -6.2090, 106.8217)
+    val SETIABUDI = stop("MRTJ-STB", "Setiabudi Astra", -6.2090, 106.8217)
     val BENHIL = stop("MRTJ-BNH", "Bendungan Hilir", -6.2149, 106.8180)
     val ISTORA = stop("MRTJ-IST", "Istora Mandiri", -6.2224, 106.8087)
 
