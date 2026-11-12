@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.query.testing.testQueryClient
 import id.shiorilabs.commute.core.type.ApiException
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.impl.JourneyRepositoryImpl
+import id.shiorilabs.commute.feature.journey.domain.CrossingVia
 import id.shiorilabs.commute.feature.journey.domain.Departure
 import id.shiorilabs.commute.feature.journey.domain.ExitSignLine
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
@@ -163,6 +164,47 @@ class JourneyRepositoryImplTest {
         // The recap sums the walk legs the API rounded up, not the raw total it keeps for comparing routes.
         assertEquals(journey.legs.filterIsInstance<JourneyLeg.Transfer>().sumOf { it.distanceM }, journey.walkDistanceM)
         assertEquals(90, journey.walkDistanceM)
+    }
+
+    @Test
+    fun `a leg carries the trains due just before its own, a crossing's cutoff and the way round`() = runTest {
+        // The 2026-11-11 fields, spliced into the captured body after the second ride's allowance.
+        val body = checkNotNull(javaClass.getResource("/trips_multi.json")).readText().replaceFirst(
+            Regex("\"minChangeS\"\\s*:\\s*84"),
+            """"minChangeS":84,"crossingVia":"CONCOURSE","earlierDepartures":[""" +
+                """{"departureAt":"2026-10-05T08:51:00+07:00","arrivalAt":"2026-10-05T09:20:00+07:00","tripId":"e1","line":"KCI:B","headsign":"Angke","connectBy":"2026-10-05T08:44:30+07:00"},""" +
+                """{"departureAt":"not a time","arrivalAt":"2026-10-05T09:25:00+07:00","tripId":"e2","line":"KCI:B"}]""",
+        )
+        val result: TripResult = json.decodeFromJsonElement(json.parseToJsonElement(body).jsonObject.getValue("data"))
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
+
+        val legs = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys[0].legs
+        val second = legs[1] as JourneyLeg.Ride
+
+        assertEquals(CrossingVia.CONCOURSE, second.crossingVia)
+        // A malformed time is dropped, as an untimed train would be.
+        assertEquals(listOf("e1"), second.earlierDepartures.map { it.tripId })
+        assertEquals(Instant.parse("2026-10-05T01:44:30Z"), second.earlierDepartures[0].connectBy)
+        assertEquals("Angke", second.earlierDepartures[0].headsign)
+        // Absent on the leg without them.
+        val first = legs[0] as JourneyLeg.Ride
+        assertTrue(first.earlierDepartures.isEmpty())
+        assertNull(first.crossingVia)
+        assertTrue(first.upcomingDepartures.all { it.connectBy == null })
+    }
+
+    @Test
+    fun `a way round this version doesn't know is said nothing about`() = runTest {
+        val body = checkNotNull(javaClass.getResource("/trips_multi.json")).readText()
+            .replaceFirst(Regex("\"minChangeS\"\\s*:\\s*84"), """"minChangeS":84,"crossingVia":"TUNNEL"""")
+        val result: TripResult = json.decodeFromJsonElement(json.parseToJsonElement(body).jsonObject.getValue("data"))
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
+
+        val second = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys[0].legs[1] as JourneyLeg.Ride
+
+        assertNull(second.crossingVia)
     }
 
     @Test
