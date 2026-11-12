@@ -45,6 +45,24 @@ data class TripServiceLine(
     val headsign: String? = null,
 )
 
+/** A train of a ride other than the planned one, as the API named it when the trip started. */
+@Serializable
+data class TripDeparture(
+    @Serializable(with = InstantSerializer::class)
+    val departureAt: Instant,
+    @Serializable(with = InstantSerializer::class)
+    val arrivalAt: Instant? = null,
+    /** Compared, never parsed. */
+    val tripId: String? = null,
+    val headsign: String? = null,
+    /**
+     * The latest the ride before may arrive and still make this train: only behind a level crossing
+     * (Sudirman's), where it wins over [TripLeg.Ride.minChangeS].
+     */
+    @Serializable(with = InstantSerializer::class)
+    val connectBy: Instant? = null,
+)
+
 @Serializable
 sealed interface TripLeg {
 
@@ -78,6 +96,15 @@ sealed interface TripLeg {
          * for an untimed ride or a trip stored before this was kept.
          */
         val nextDepartures: List<@Serializable(with = InstantSerializer::class) Instant> = emptyList(),
+        /**
+         * The trains of this ride due shortly before [departureAt], soonest first, which may still
+         * be at the platform because trains run late: the one the rider is on when it pulls out
+         * well ahead of the planned one ([TripPlan.ontoEarlierTrain]). Empty for an untimed ride or a trip
+         * stored before this was kept.
+         */
+        val earlierDepartures: List<TripDeparture> = emptyList(),
+        /** The shortest change into this ride from the one before, in seconds, as the API allowed it; `null` on the first. */
+        val minChangeS: Int? = null,
         /**
          * Every line the rider can take for this ride, [line] first: haltes several TransJakarta
          * routes serve in turn, or an interlined stretch of track. Empty when it's [line] alone, as

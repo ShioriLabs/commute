@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.journey.domain
 
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.trip.TripDeparture
 import id.shiorilabs.commute.core.trip.TripExitSign
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPlan
@@ -31,6 +32,8 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
                     .filter { it.tripId != leg.tripId && (leg.departureAt == null || it.departureAt.isAfter(leg.departureAt)) }
                     .map { it.departureAt }
                     .take(NEXT_DEPARTURES_KEPT),
+                earlierDepartures = earlierOf(leg),
+                minChangeS = leg.minChangeS,
                 serviceLines = leg.serviceLines
                     .takeIf { services -> services.any { it.line != leg.line } }
                     ?.map { TripServiceLine(it.line, it.headsign) }
@@ -47,6 +50,21 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
         }
     },
 )
+
+/**
+ * The trains due before the followed one, soonest first, the nearest [EARLIER_DEPARTURES_KEPT]: the
+ * API's own earlier ones, and with a later train picked in the planner, the one it caught and those
+ * between too, for the rider may yet board any of them running late.
+ */
+private fun earlierOf(leg: JourneyLeg.Ride): List<TripDeparture> {
+    val departs = leg.departureAt ?: return emptyList()
+    return (leg.earlierDepartures + leg.upcomingDepartures)
+        .filter { it.tripId != leg.tripId && it.departureAt.isBefore(departs) }
+        .distinctBy { it.tripId }
+        .sortedBy { it.departureAt }
+        .takeLast(EARLIER_DEPARTURES_KEPT)
+        .map { TripDeparture(it.departureAt, it.arrivalAt, it.tripId, it.headsign, it.connectBy) }
+}
 
 private fun JourneyStop.toTripStop(scheduledAt: Instant? = null) =
     TripStop(id = id, name = name, latitude = latitude, longitude = longitude, scheduledAt = scheduledAt)
@@ -94,3 +112,6 @@ fun cardFareFor(journey: Journey, start: TripStart?, payment: PaymentMethod?): I
 
 /** How many later trains a trip keeps: the live screen lists four, the compact surfaces name two. */
 private const val NEXT_DEPARTURES_KEPT = 4
+
+/** How many earlier trains a ride keeps: the API lists a few minutes' worth, a planner pick a few more. */
+private const val EARLIER_DEPARTURES_KEPT = 6

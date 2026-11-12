@@ -9,6 +9,7 @@ import id.shiorilabs.commute.core.trip.AlertKind
 import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
+import id.shiorilabs.commute.core.trip.TripDeparture
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripEngine
 import id.shiorilabs.commute.core.trip.TripLeg
@@ -1138,6 +1139,117 @@ class TripControllerImplTest {
         val trip = controller.active.value!!
         assertEquals(TripPhase.RIDING, trip.state.phase)
         assertEquals(minutes(10), trip.plan.ride(2).departureAt)
+    }
+
+    /**
+     * On Sudirman's platform at 08.04 for the 08.10, with the 08.05 (to Bogor) listed before it: due
+     * then, and running late enough to be there still.
+     */
+    private fun beforeTheEightFive(earlier: List<TripDeparture> = listOf(TripDeparture(minutes(5), minutes(15), "e1", "Bogor"))): ActiveTrip {
+        val ride = (plan.legs[2] as TripLeg.Ride).copy(earlierDepartures = earlier)
+        val withEarlier = TripPlan(plan.legs.take(2) + ride)
+        return ActiveTrip(
+            withEarlier,
+            TripEngine.start(withEarlier, NOW, hasLocation = true).state.copy(
+                legIndex = 2,
+                phase = TripPhase.WAITING_TO_BOARD,
+                source = PositionSource.CONFIRMED,
+                confirmedAt = minutes(4),
+                sightedPosition = 0.0,
+            ),
+            origin,
+        )
+    }
+
+    /** Two fixes 600 m out of Sudirman, the second at [at]: the boarding. */
+    private suspend fun TripControllerImpl.pullsOutAt(clock: MutableClock, at: Instant) {
+        clock.now = at.minusSeconds(5)
+        onFix(Fix(sudirmanToManggarai(0.2), 10f, clock.now, speedMps = 12f))
+        clock.now = at
+        onFix(Fix(sudirmanToManggarai(0.22), 10f, clock.now, speedMps = 12f))
+    }
+
+    @Test
+    fun `out of the platform well before the planned train is due is the earlier train running late`() = runTest {
+        store.trip = beforeTheEightFive()
+        val clock = MutableClock(minutes(4).plusSeconds(30))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        // Out at about 08.06, four minutes before the 08.10 could leave.
+        controller.pullsOutAt(clock, minutes(7).plusSeconds(5))
+
+        val trip = controller.active.value!!
+        val ride = trip.plan.ride(2)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(minutes(5), ride.departureAt)
+        assertEquals(minutes(15), ride.arrivalAt)
+        assertEquals("e1", ride.tripId)
+        assertEquals("Bogor", ride.headsign)
+        assertEquals(listOf(minutes(10)), ride.nextDepartures)
+        // Late against the 08.05, not pinned early against the 08.10.
+        assertTrue(trip.state.clockOffsetS.toString(), trip.state.clockOffsetS in 60L..180L)
+        assertTrue("earlier-train" in logged)
+    }
+
+    @Test
+    fun `out a little before the planned train is due is that train`() = runTest {
+        // Still seen on the platform at 08.09.
+        val waiting = beforeTheEightFive()
+        store.trip = waiting.copy(state = waiting.state.copy(confirmedAt = minutes(9)))
+        val clock = MutableClock(minutes(9).plusSeconds(10))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.pullsOutAt(clock, minutes(9).plusSeconds(30))
+
+        val trip = controller.active.value!!
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(minutes(10), trip.plan.ride(2).departureAt)
+        assertFalse("earlier-train" in logged)
+    }
+
+    @Test
+    fun `out well before the planned train with no earlier one listed stays on the plan`() = runTest {
+        store.trip = beforeTheEightFive(earlier = emptyList())
+        val clock = MutableClock(minutes(4).plusSeconds(30))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.pullsOutAt(clock, minutes(7).plusSeconds(5))
+
+        val trip = controller.active.value!!
+        assertEquals(minutes(10), trip.plan.ride(2).departureAt)
+        assertTrue(trip.state.clockOffsetS < 0)
+        assertFalse("earlier-train" in logged)
+    }
+
+    @Test
+    fun `a tap alone before the planned train is due doesn't say it's the earlier one`() = runTest {
+        // Sat in the 08.10 at the platform, "Udah naik" at 08.07: no fix to say which train left.
+        location.granted = false
+        val waiting = beforeTheEightFive()
+        store.trip = waiting.copy(state = waiting.state.copy(hasLocation = false))
+        val controller = controller(clock = MutableClock(minutes(7)))
+        runCurrent()
+
+        controller.say(RiderAction.BOARDED)
+
+        assertEquals(minutes(10), controller.active.value!!.plan.ride(2).departureAt)
+        assertFalse("earlier-train" in logged)
+    }
+
+    @Test
+    fun `a swap already made is boardedEarlier's, not moved onto the earlier train`() = runTest {
+        val waiting = beforeTheEightFive()
+        store.trip = waiting.copy(replaced = ReplacedPlan(waiting.plan, 2, null))
+        val clock = MutableClock(minutes(4).plusSeconds(30))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.pullsOutAt(clock, minutes(7).plusSeconds(5))
+
+        assertFalse("earlier-train" in logged)
     }
 
     /** The MRT in at 08.05 for the 08.10 from Sudirman across 300 m: five minutes to change, planned. */
