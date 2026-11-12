@@ -15,7 +15,8 @@ import kotlin.math.max
  * Nothing here asks the server again.
  *
  * Whether a change can be made is the engine's call: each later ride carries `minChangeS`, the
- * allowance charged into it at the rider's own pace.
+ * allowance charged into it at the rider's own pace, and behind a level crossing each train its own
+ * `connectBy`, the latest the ride before may land.
  */
 
 /** A body from before `minChangeS` existed still has to resolve: a minute plus the walk at average pace. */
@@ -52,14 +53,18 @@ data class TimedLeg(
 private fun upcomingOf(leg: JourneyLeg?): List<LegDeparture> = (leg as? JourneyLeg.Ride)?.upcomingDepartures.orEmpty()
 
 /*
- * The part of the options worth showing: from the train just before the first one the rider can
- * make, slid on where needed so the chosen one stays in view. The engine lists a later leg long
- * enough to connect from every train before it, so showing all of it would make every row a ladder.
+ * The part of the options worth showing: from the first train the rider can make, slid on where
+ * needed so the chosen one stays in view. The engine lists a later leg long enough to connect from
+ * every train before it, so showing all of it would make every row a ladder.
+ *
+ * Never the one just missed. It used to lead the row as a "tak terkejar" chip, a slot spent on a
+ * train nobody can take; like Citymapper, the row is the trains you can ride, and it moves with the
+ * pick on the leg before. The engine lists enough past every earlier train for the row to stay full.
  */
 private fun windowOf(options: List<LegOption>): List<LegOption> {
     val reachable = options.indexOfFirst { it.blocked != Blocked.MISSED }
     val selected = options.indexOfFirst { it.selected }
-    val start = maxOf(0, reachable - 1, selected - CHIP_ROW_MAX + 1)
+    val start = maxOf(0, reachable, selected - CHIP_ROW_MAX + 1)
     return options.drop(start).take(CHIP_ROW_MAX)
 }
 
@@ -75,7 +80,18 @@ private fun minChangeS(legs: List<JourneyLeg>, from: Int, to: Int): Int {
     return max(FALLBACK_MIN_CHANGE_S, ceil(walkM / FALLBACK_WALK_M_PER_S).toInt())
 }
 
-private fun isTight(gapS: Long, minS: Int) = gapS - minS < TIGHT_SLACK_S
+/*
+ * Spare seconds when the ride before lands at [arrival] and the rider goes for [next]: negative
+ * means it cannot be made. Behind a level crossing the engine says outright how late that ride may
+ * land ([LegDeparture.connectBy]), because whether the crossing is open depends on the clock and no
+ * fixed change can tell. Everywhere else the change allowance does.
+ */
+private fun slackS(arrival: Instant, next: LegDeparture, changeS: Int): Long =
+    next.connectBy?.let { secondsBetween(arrival, it) } ?: (secondsBetween(arrival, next.departureAt) - changeS)
+
+private fun connects(arrival: Instant, next: LegDeparture, changeS: Int) = slackS(arrival, next, changeS) >= 0
+
+private fun isTight(slackS: Long) = slackS < TIGHT_SLACK_S
 
 /**
  * Every timed ride leg with its options, resolved against the rider's [picks] (leg index to
@@ -110,7 +126,7 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
         val change = minChangeS(legs, index, nextIndex)
         val nextFinishing = upcomingAt(nextIndex).filter { it.tripId in finishing.getValue(nextIndex) }
         finishing[index] = upcoming
-            .filter { d -> nextFinishing.any { secondsBetween(d.arrivalAt, it.departureAt) >= change } }
+            .filter { d -> nextFinishing.any { connects(d.arrivalAt, it, change) } }
             .map { it.tripId }
             .toSet()
     }
@@ -121,9 +137,10 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
 
     for ((position, index) in timedIndexes.withIndex()) {
         val upcoming = upcomingAt(index)
-        val earliest = previousArrival?.plusSeconds(minChangeS(legs, previousIndex, index).toLong())
+        val arrivedAt = previousArrival
+        val changeIn = if (arrivedAt == null) 0 else minChangeS(legs, previousIndex, index)
         fun blockedOf(d: LegDeparture): Blocked? = when {
-            earliest != null && d.departureAt.isBefore(earliest) -> Blocked.MISSED
+            arrivedAt != null && !connects(arrivedAt, d, changeIn) -> Blocked.MISSED
             d.tripId in finishing.getValue(index) -> null
             else -> Blocked.NO_ONWARD
         }
@@ -142,14 +159,13 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
             upcomingAt(nextIndex).filter { it.tripId in finishing.getValue(nextIndex) }
         }
         val options = upcoming.map { d ->
-            val nextTrain = nextUpcoming.firstOrNull { secondsBetween(d.arrivalAt, it.departureAt) >= change }
-            val gap = nextTrain?.let { secondsBetween(d.arrivalAt, it.departureAt) }
+            val nextTrain = nextUpcoming.firstOrNull { connects(d.arrivalAt, it, change) }
             LegOption(
                 departure = d,
                 blocked = blockedOf(d),
                 selected = d.tripId == chosen.tripId,
-                gapToNextS = gap,
-                tight = gap != null && isTight(gap, change),
+                gapToNextS = nextTrain?.let { secondsBetween(d.arrivalAt, it.departureAt) },
+                tight = nextTrain != null && isTight(slackS(d.arrivalAt, nextTrain, change)),
             )
         }
 
@@ -171,8 +187,9 @@ fun changeAt(legs: List<JourneyLeg>, timed: List<TimedLeg>, index: Int): Change?
     val before = timed.lastOrNull { it.index < index }
     val after = timed.firstOrNull { it.index >= index }
     if (before == null || after == null) return null
-    val gap = secondsBetween(before.chosen.arrivalAt, after.chosen.departureAt)
-    return Change(gap, isTight(gap, minChangeS(legs, before.index, after.index)))
+    val arrival = before.chosen.arrivalAt
+    val gap = secondsBetween(arrival, after.chosen.departureAt)
+    return Change(gap, isTight(slackS(arrival, after.chosen, minChangeS(legs, before.index, after.index))))
 }
 
 /**
@@ -191,10 +208,14 @@ fun retimeJourney(journey: Journey, timed: List<TimedLeg>): Journey {
     val byIndex = timed.associate { it.index to it.chosen }
     val legs = journey.legs.mapIndexed { index, leg ->
         val chosen = byIndex[index]
-        if (leg !is JourneyLeg.Ride || chosen == null || chosen.tripId == leg.tripId) {
-            leg
+        // `crossingVia` answers for the trains the API caught on every leg before it too: a pick
+        // earlier on lands the rider at the crossing at another time. Any change makes it unknown,
+        // and absent the timeline says nothing.
+        val ride = (leg as? JourneyLeg.Ride)?.copy(crossingVia = null)
+        if (ride == null || chosen == null || chosen.tripId == ride.tripId) {
+            ride ?: leg
         } else {
-            leg.copy(
+            ride.copy(
                 line = chosen.line,
                 headsign = chosen.headsign ?: leg.headsign,
                 departureAt = chosen.departureAt,

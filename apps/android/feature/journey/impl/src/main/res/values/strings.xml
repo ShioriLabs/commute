@@ -112,6 +112,8 @@
     <string name="journey_ride_summary_estimate_halte">%1$d halte • %2$s • %3$s</string>
     <!-- %1$s is the station walked to -->
     <string name="journey_transfer_to">Transit ke %1$s</string>
+    <!-- Under a walk whose far side is a level crossing that will be shut for a train: go round by the concourse -->
+    <string name="journey_transfer_via_concourse">Perlintasan ditutup, lewat atas</string>
     <!-- %1$d is metres walked -->
     <string name="journey_walk">Jalan kaki ±%1$dm</string>
     <!-- %1$s is a paid corridor's name, %2$s its fare -->
