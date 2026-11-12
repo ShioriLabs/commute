@@ -18,11 +18,15 @@ import id.shiorilabs.commute.feature.card.iso.IsoProbe
 import id.shiorilabs.commute.feature.card.navigation.CardNavContribution
 import id.shiorilabs.commute.feature.card.presentation.CardFareCheckImpl
 import id.shiorilabs.commute.feature.card.presentation.CardTapImpl
+import id.shiorilabs.commute.feature.card.reader.CARD_STATION_NAMES_ASSET
 import id.shiorilabs.commute.feature.card.reader.CardReader
+import id.shiorilabs.commute.feature.card.reader.CardStationNames
 import id.shiorilabs.commute.feature.card.reader.JAPAN_IC_LINES_ASSET
 import id.shiorilabs.commute.feature.card.reader.JapanIcLines
 import id.shiorilabs.commute.feature.card.reader.JapanIcReader
 import id.shiorilabs.commute.feature.card.reader.KmtReader
+import id.shiorilabs.commute.feature.station.data.StationDirectory
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -59,5 +63,11 @@ abstract class CardModule {
             val lines = JapanIcLines { context.assets.open(JAPAN_IC_LINES_ASSET) }
             return JapanIcReader(lines = lines::get)
         }
+
+        /** One for the app, so the snapshot is read once. */
+        @Provides
+        @Singleton
+        internal fun provideCardStationNames(directory: StationDirectory, @ApplicationContext context: Context): CardStationNames =
+            CardStationNames(directory) { context.assets.open(CARD_STATION_NAMES_ASSET) }
     }
 }

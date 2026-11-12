@@ -28,6 +28,7 @@ internal fun CardScreen(
     val adapter = remember(context) { NfcAdapter.getDefaultAdapter(context) }
     val navigator = LocalNavigator.current
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
+    val stationNames by viewModel.stationNames.collectAsStateWithLifecycle()
 
     val missed = adapter != null && rememberMissedCard(adapter, viewModel.readsIso, viewModel::read)
     DisposableEffect(Unit) {
@@ -40,6 +41,7 @@ internal fun CardScreen(
         CardPage(
             innerPadding = innerPadding,
             snapshot = snapshot,
+            stationNames = stationNames,
             message = stringResource(
                 when {
                     adapter?.isEnabled != true -> R.string.card_hold_nfc_off

@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     alias(libs.plugins.commute.android.library.compose)
     // The dumper's nav contribution (@IntoSet) + @HiltViewModel → Hilt + KSP.
@@ -30,6 +32,30 @@ tasks.named("preBuild") {
     doLast { logger.lifecycle(message) }
 }
 
+// The snapshot CardStationNames falls back on when the phone has never fetched the station list:
+// every station's id and name from the production API. Run by hand when stations are renamed; the
+// build never fetches it.
+tasks.register("updateCardStationNames") {
+    group = "commute"
+    description = "Rewrites assets/card/station_names.json from the production API's /stations."
+    val output = file("src/main/assets/card/station_names.json")
+    outputs.file(output)
+    outputs.upToDateWhen { false }
+    doLast {
+        val connection = URI("https://api.commute.shiorilabs.id/stations").toURL().openConnection()
+        connection.setRequestProperty("User-Agent", "commute-android-build")
+        val body = connection.getInputStream().use { it.readBytes().decodeToString() }
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = (groovy.json.JsonSlurper().parseText(body) as Map<String, Any?>)["data"] as List<Map<String, Any?>>
+        val names = rows.associate { it["id"] as String to it["name"] as String }.toSortedMap()
+        check(names.isNotEmpty()) { "The API sent no stations" }
+        output.parentFile.mkdirs()
+        output.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(names)) + "\n")
+        logger.lifecycle("Wrote ${names.size} station names to $output")
+    }
+}
+
 dependencies {
     implementation(project(":feature:card:api"))
     implementation(project(":core:common"))
@@ -38,6 +64,8 @@ dependencies {
     // Route.CardDumper + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
     implementation(project(":core:ui"))
+    // StationDirectory: the names of the stations a card's entries point at.
+    implementation(project(":feature:station:api"))
 
     implementation(libs.kotlinx.serialization.json)
 
