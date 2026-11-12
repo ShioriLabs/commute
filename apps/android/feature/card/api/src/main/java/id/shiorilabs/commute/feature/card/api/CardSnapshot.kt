@@ -19,9 +19,17 @@ data class CardEntry(
      * ride, in Japanese; null when the entry names none.
      */
     val operator: String?,
-    /** The station the card names (on a Japanese card, the line it rode), or null when we can't say which. */
+    /**
+     * A name the card's own data gives, not one of ours: on a Japanese card, the line it rode. Null
+     * when there is none; a station we know goes in [stationId] instead.
+     */
     val place: String?,
     val amount: Long,
+    /**
+     * The API's id for the station the entry names (`KCI-SUD`), or null when we can't say which. Its
+     * name is looked up when shown, so a renamed station reads as it's called now.
+     */
+    val stationId: String? = null,
     /** False when the card keeps only the day: [at] is then that day's start in Jakarta. */
     val timeKnown: Boolean = true,
     /** The card being sold, with [amount] what was loaded on it. */

@@ -9,6 +9,7 @@ import id.shiorilabs.commute.feature.card.felica.hex
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KmtReaderTest {
@@ -86,7 +87,9 @@ class KmtReaderTest {
         )!!.entries
 
         assertEquals("KCI", entries[0].operator)
-        assertEquals(listOf("Sudirman", "Kranji", "Jakarta Kota"), entries.map { it.place })
+        assertEquals(listOf("KCI-SUD", "KCI-KRI", "KCI-JAKK"), entries.map { it.stationId })
+        // The name is CardStationNames' to give, as the API has it now.
+        assertTrue(entries.all { it.place == null })
     }
 
     @Test
@@ -94,15 +97,15 @@ class KmtReaderTest {
         val entry = reader.read(tag(history = listOf(entry("2026-10-23T14:33:43Z", 3_000, "01 26 01 64 01 00"))))!!.entries.single()
 
         assertEquals("KCI", entry.operator)
-        assertEquals("Kranji", entry.place)
+        assertEquals("KCI-KRI", entry.stationId)
     }
 
     @Test
-    fun `a KRL station we haven't seen has no name`() {
+    fun `a KRL station we haven't seen is unknown`() {
         val entry = reader.read(tag(history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "7F"))))!!.entries.single()
 
         assertEquals("KCI", entry.operator)
-        assertNull(entry.place)
+        assertNull(entry.stationId)
     }
 
     @Test
@@ -110,15 +113,15 @@ class KmtReaderTest {
         val entry = reader.read(tag(history = listOf(entry("2026-10-23T10:20:00Z", 5_000, "00 05 00 03 01 01"))))!!.entries.single()
 
         assertEquals("LRTJBDB", entry.operator)
-        assertEquals("Rasuna Said", entry.place)
+        assertEquals("LRTJBDB-RAS", entry.stationId)
     }
 
     @Test
-    fun `a TransJakarta entry names no place`() {
+    fun `a TransJakarta entry names no station`() {
         val entry = reader.read(tag(history = listOf(entry("2026-10-23T01:05:00Z", 3_500, "01 16 00 1C 01 01"))))!!.entries.single()
 
         assertEquals("TJ", entry.operator)
-        assertNull(entry.place)
+        assertNull(entry.stationId)
     }
 
     @Test
@@ -128,7 +131,7 @@ class KmtReaderTest {
         )!!.entries
 
         assertEquals(listOf("MRTJ", "MRTJ"), entries.map { it.operator })
-        assertEquals(listOf("Bundaran HI Bank DKI", "Dukuh Atas BNI"), entries.map { it.place })
+        assertEquals(listOf("MRTJ-BHI", "MRTJ-DKA"), entries.map { it.stationId })
     }
 
     @Test
@@ -136,7 +139,7 @@ class KmtReaderTest {
         val entry = reader.read(tag(history = listOf(entry("2026-10-23T01:05:00Z", 3_000, "01 16 00 0E 01 01"))))!!.entries.single()
 
         assertNull(entry.operator)
-        assertNull(entry.place)
+        assertNull(entry.stationId)
     }
 
     @Test
