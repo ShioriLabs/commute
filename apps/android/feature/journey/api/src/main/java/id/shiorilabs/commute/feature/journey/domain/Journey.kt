@@ -78,7 +78,16 @@ data class LegDeparture(
     /** `OPERATOR:CODE`; may differ from the leg's own line on a shared trunk. */
     val line: String,
     val headsign: String? = null,
+    /**
+     * The latest the ride before may arrive and still make this train. Only behind a level crossing
+     * inside a station (Sudirman's), where whether it is open depends on the clock and the change
+     * allowance can't say; when present it wins over [JourneyLeg.Ride.minChangeS].
+     */
+    val connectBy: Instant? = null,
 )
+
+/** How the rider reaches a ride's platform across a station's tracks: over the level crossing, or round by the concourse while it is shut. */
+enum class CrossingVia { CROSSING, CONCOURSE }
 
 sealed interface JourneyLeg {
 
@@ -118,8 +127,15 @@ sealed interface JourneyLeg {
         val tripId: String? = null,
         /** Trains that can be boarded for this leg, soonest first; the first is [tripId]'s. Empty when untimed. */
         val upcomingDepartures: List<LegDeparture> = emptyList(),
+        /**
+         * Trains due shortly before [tripId]'s, soonest first, that may still be at the platform
+         * because trains run late. Kept apart so [upcomingDepartures] still leads with the caught one.
+         */
+        val earlierDepartures: List<LegDeparture> = emptyList(),
         /** The engine's shortest change into this leg in seconds, at the rider's pace; `null` on the first ride. */
         val minChangeS: Int? = null,
+        /** Boarded across a level crossing: which way round, for the trains as timed. `null` everywhere else. */
+        val crossingVia: CrossingVia? = null,
     ) : JourneyLeg
 
     data class Transfer(
