@@ -45,6 +45,7 @@ import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Amber100
+import id.shiorilabs.commute.core.ui.theme.Amber700
 import id.shiorilabs.commute.core.ui.theme.Amber800
 import id.shiorilabs.commute.core.ui.theme.Rose300
 import id.shiorilabs.commute.core.ui.theme.Rose500
@@ -75,6 +76,7 @@ import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.Change
+import id.shiorilabs.commute.feature.journey.domain.CrossingVia
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
 import id.shiorilabs.commute.feature.journey.domain.LINE_COLOR_FALLBACK
 import id.shiorilabs.commute.feature.journey.domain.LegLine
@@ -148,7 +150,12 @@ internal fun JourneyTimeline(
                     )
                 }
 
-                is JourneyLeg.Transfer -> TransferLeg(leg, gap = changeAt(legs, timed, index))
+                is JourneyLeg.Transfer -> TransferLeg(
+                    leg,
+                    gap = changeAt(legs, timed, index),
+                    // The level crossing on the far side will be shut for a train: say which way round.
+                    viaConcourse = (legs.getOrNull(index + 1) as? JourneyLeg.Ride)?.crossingVia == CrossingVia.CONCOURSE,
+                )
             }
         }
         (legs.lastOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.to.name, start = false) }
@@ -376,7 +383,7 @@ private fun RideNote(text: String) {
 }
 
 @Composable
-private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
+private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null, viaConcourse: Boolean = false) {
     val fare = leg.fare
     val corridor = leg.corridorLabel
     // The breathing room is padding on the content, not on the row: outside the row, its rail can't
@@ -426,6 +433,13 @@ private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
                 color = Slate500,
             )
             WalkDetail(exit = leg.fromExit, distanceM = leg.distanceM, color = Slate500)
+            if (viaConcourse) {
+                Text(
+                    text = stringResource(R.string.journey_transfer_via_concourse),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Amber700,
+                )
+            }
         }
     }
 }

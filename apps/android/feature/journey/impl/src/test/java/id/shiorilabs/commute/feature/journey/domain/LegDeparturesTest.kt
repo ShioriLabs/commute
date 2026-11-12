@@ -53,7 +53,7 @@ class LegDeparturesTest {
     }
 
     @Test
-    fun `a row shows a later leg from the train just missed, at most a chip row`() {
+    fun `a row shows a later leg from the first train it makes, at most a chip row`() {
         val many = listOf(
             train("c1", "07:40", "08:00"), train("c2", "07:50", "08:10"), train("c3", "08:00", "08:20"),
             train("c4", "08:05", "08:25"), train("c5", "08:10", "08:30"), train("c6", "08:15", "08:35"),
@@ -61,7 +61,7 @@ class LegDeparturesTest {
         // a2 lands 07.54: c1 and c2 are missed, c3 is the first it makes.
         val second = resolveTimedLegs(listOf(timedRide(first), timedRide(many)), mapOf(0 to "a2"))[1]
 
-        assertEquals(listOf("c2", "c3", "c4", "c5"), second.options.map { it.departure.tripId })
+        assertEquals(listOf("c3", "c4", "c5", "c6"), second.options.map { it.departure.tripId })
     }
 
     @Test
@@ -102,10 +102,43 @@ class LegDeparturesTest {
     }
 
     @Test
-    fun `trains that can no longer be reached are marked, not hidden`() {
+    fun `a later leg starts at the first train it can make`() {
         val options = resolveTimedLegs(legs, mapOf(0 to "a2"))[1].options
 
-        assertEquals(listOf("b1" to Blocked.MISSED, "b2" to null, "b3" to null), options.map { it.departure.tripId to it.blocked })
+        assertEquals(listOf("b2" to null, "b3" to null), options.map { it.departure.tripId to it.blocked })
+    }
+
+    /*
+     * Behind Sudirman's level crossing the engine says how late the ride before may land, and that
+     * wins over the change allowance: b1 at 07.52 would make a 07.46 arrival plus a minute, but the
+     * crossing shuts for it at 07.49.
+     */
+    private fun gated(tripId: String, dep: String, arr: String, connectBy: String) = train(tripId, dep, arr).copy(connectBy = at(connectBy))
+
+    private val crossingLegs: List<JourneyLeg> = listOf(
+        timedRide(first),
+        walkLeg(60),
+        timedRide(listOf(gated("b1", "07:52", "08:14", "07:45"), gated("b2", "08:00", "08:22", "07:53"), gated("b3", "08:10", "08:32", "08:03"))),
+    )
+
+    @Test
+    fun `behind a level crossing a train it shuts out is missed, though the walk would make it`() {
+        assertEquals(listOf("a1", "b2"), resolveTimedLegs(crossingLegs, emptyMap()).map { it.chosen.tripId })
+    }
+
+    @Test
+    fun `behind a level crossing an arrival past the cutoff takes the next train`() {
+        // a2 lands 07.54, one minute past b2's cutoff, so b3.
+        assertEquals(listOf("a2", "b3"), resolveTimedLegs(crossingLegs, mapOf(0 to "a2")).map { it.chosen.tripId })
+    }
+
+    @Test
+    fun `behind a level crossing a change is tight on the spare time before the cutoff`() {
+        // a1 lands 07.46, b2's cutoff 07.53: seven minutes spare, not tight.
+        assertEquals(Change(14L * 60, false), changeAt(crossingLegs, resolveTimedLegs(crossingLegs, emptyMap()), 2))
+
+        val late = listOf(timedRide(first), walkLeg(60), timedRide(listOf(gated("b2", "08:00", "08:22", "07:47"))))
+        assertEquals(true, changeAt(late, resolveTimedLegs(late, emptyMap()), 2)?.tight)
     }
 
     @Test
@@ -164,6 +197,17 @@ class LegDeparturesTest {
         assertEquals(listOf("a2", "b2"), rides.map { it.tripId })
         assertEquals(at("08:22"), retimed.arrivalAt)
         assertTrue(retimed.moreDepartures.isEmpty())
+    }
+
+    @Test
+    fun `retimeJourney forgets how to cross once any pick moves the clock`() {
+        // b1 stays b1 here, but the rider now reaches the crossing on a later train.
+        val crossing = journey(legs[0], (legs[1] as JourneyLeg.Ride).copy(crossingVia = CrossingVia.CONCOURSE))
+
+        val moved = retimeJourney(crossing, resolveTimedLegs(crossing.legs, mapOf(0 to "a2")))
+        assertNull((moved.legs[1] as JourneyLeg.Ride).crossingVia)
+        val kept = retimeJourney(crossing, resolveTimedLegs(crossing.legs, emptyMap()))
+        assertEquals(CrossingVia.CONCOURSE, (kept.legs[1] as JourneyLeg.Ride).crossingVia)
     }
 
     @Test
