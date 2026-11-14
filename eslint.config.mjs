@@ -21,6 +21,11 @@ export default defineConfig([
     files: ['apps/ward/**/*.ts'],
     languageOptions: { globals: globals.node }
   },
+  {
+    // shirase's local data scripts (seeding local R2) run under Node.
+    files: ['apps/shirase/scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node }
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   stylistic.configs.customize({

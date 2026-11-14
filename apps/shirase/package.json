@@ -15,7 +15,7 @@
     "extract": "bash scripts/extract.sh",
     "build:glyphs": "bash scripts/build-glyphs.sh",
     "fetch:sprites": "bash scripts/fetch-sprites.sh",
-    "seed:local": "bash scripts/seed-local.sh"
+    "seed:local": "node scripts/seed-local.mjs"
   },
   "license": "MIT",
   "dependencies": {
