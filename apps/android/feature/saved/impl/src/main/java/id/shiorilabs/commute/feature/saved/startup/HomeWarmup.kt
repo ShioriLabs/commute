@@ -33,8 +33,8 @@ class HomeWarmup @Inject constructor(
             when (entry) {
                 is SavedEntry.Station -> launch { stationRepository.board(entry.stationId, now).first() }
                 is SavedEntry.Route -> {
-                    launch { stationRepository.observeStation(entry.fromId).first() }
-                    launch { stationRepository.observeStation(entry.toId).first() }
+                    launch { stationRepository.station(entry.fromId).observe().first() }
+                    launch { stationRepository.station(entry.toId).observe().first() }
                 }
             }
         }

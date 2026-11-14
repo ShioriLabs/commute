@@ -7,6 +7,8 @@ import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.Refetched
+import id.shiorilabs.commute.core.query.Resource
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -50,37 +52,34 @@ class SavedStationsViewModelTest {
         var station: (String) -> Either<Failure, Station> = { id -> Station(id, id, "KCI", id, emptyList()).right() }
         val asked = mutableListOf<Pair<String, ServiceDayName>>()
 
-        override suspend fun station(stationId: String) = station.invoke(stationId)
-
-        override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
-            asked += stationId to day
-            return listOf(LineTimetable("KCI:B", emptyList())).right()
-        }
-
-        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
-
-        val askedHours = mutableListOf<Pair<String, Int>>()
-
-        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> {
-            askedHours += stationId to hour
-            return emptyList<Frequency>().right()
-        }
-
         /** What this session already holds, offered without asking. */
         var held: Pair<Station, List<LineTimetable>>? = null
 
         /** A live board that never lands, as on the frames before the cache answers. */
         var boardNeverLands = false
 
-        override fun cachedStation(stationId: String) = held?.first
+        /** [once], unless the board never lands: then observed, it says nothing. */
+        private fun <T> landing(once: Resource<T>): Resource<T> = object : Resource<T> by once {
+            override fun observe(): Flow<Query<T>> = if (boardNeverLands) flow { awaitCancellation() } else once.observe()
+        }
 
-        override fun cachedTimetable(stationId: String, day: ServiceDayName) = held?.second
+        override fun station(stationId: String) = landing(resourceOnce(cached = { held?.first }) { station.invoke(stationId) })
 
-        override fun observeStation(stationId: String): Flow<Query<Station>> =
-            if (boardNeverLands) flow { awaitCancellation() } else super.observeStation(stationId)
+        override fun timetable(stationId: String, day: ServiceDayName) = landing(
+            resourceOnce(cached = { held?.second }) {
+                asked += stationId to day
+                listOf(LineTimetable("KCI:B", emptyList())).right()
+            },
+        )
 
-        override fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
-            if (boardNeverLands) flow { awaitCancellation() } else super.observeTimetable(stationId, day)
+        override fun transfers(stationId: String) = resourceOnce { emptyList<Transfer>().right() }
+
+        val askedHours = mutableListOf<Pair<String, Int>>()
+
+        override fun frequencies(stationId: String, day: ServiceDayName, hour: Int) = resourceOnce {
+            askedHours += stationId to hour
+            emptyList<Frequency>().right()
+        }
 
         val refreshed = mutableListOf<String>()
 
@@ -100,7 +99,7 @@ class SavedStationsViewModelTest {
     private class FakeJourneyRepository : JourneyRepository {
         val refreshed = mutableListOf<Pair<String, String>>()
 
-        override suspend fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Either<Failure, TripAnswer> =
+        override fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Resource<TripAnswer> =
             error("Home asks for no trips itself: a pair's card does")
 
         /** What each pair's refresh finds. */

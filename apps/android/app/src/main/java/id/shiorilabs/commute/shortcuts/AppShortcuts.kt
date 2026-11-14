@@ -78,8 +78,8 @@ class AppShortcuts @Inject constructor(
             }
         }.distinct().map { id ->
             async {
-                val name = stationRepository.cachedStation(id)?.name
-                    ?: stationRepository.station(id).getOrNull()?.name
+                val name = stationRepository.station(id).cached()?.name
+                    ?: stationRepository.station(id).fetch().getOrNull()?.name
                 name?.let { id to it }
             }
         }.awaitAll().filterNotNull().toMap()

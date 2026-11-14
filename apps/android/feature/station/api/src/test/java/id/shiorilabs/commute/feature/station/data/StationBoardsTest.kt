@@ -3,6 +3,8 @@ package id.shiorilabs.commute.feature.station.data
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import id.shiorilabs.commute.core.query.Resource
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
@@ -31,31 +33,25 @@ class StationBoardsTest {
         val asked = mutableListOf<ServiceDayName>()
         var cache: Pair<Station, Map<ServiceDayName, List<LineTimetable>>>? = null
 
-        override suspend fun station(stationId: String) = station
+        override fun station(stationId: String) = resourceOnce(cached = { cache?.first }) { station }
 
-        override fun cachedStation(stationId: String) = cache?.first
-
-        override fun cachedTimetable(stationId: String, day: ServiceDayName) = cache?.second?.get(day)
-
-        override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
+        override fun timetable(stationId: String, day: ServiceDayName) = resourceOnce(cached = { cache?.second?.get(day) }) {
             asked += day
-            return timetable(day)
+            timetable(day)
         }
 
-        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
+        override fun transfers(stationId: String) = resourceOnce { emptyList<Transfer>().right() }
 
         var frequencies: Either<Failure, List<Frequency>> = listOf(Frequency("TJ:13", 186.0)).right()
         val askedFrequencies = mutableListOf<Pair<String, ServiceDayName>>()
         val askedHours = mutableListOf<Int>()
         var cachedFrequencies: List<Frequency>? = null
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> {
+        override fun frequencies(stationId: String, day: ServiceDayName, hour: Int) = resourceOnce(cached = { cachedFrequencies }) {
             askedFrequencies += stationId to day
             askedHours += hour
-            return frequencies
+            frequencies
         }
-
-        override fun cachedFrequencies(stationId: String, day: ServiceDayName, hour: Int) = cachedFrequencies
     }
 
     private val halte = Station("TJ-H00001P", "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13"))
@@ -79,14 +75,17 @@ class StationBoardsTest {
     @Test
     fun `an old part that couldn't be refreshed marks the board outdated, as of its age`() = runTest {
         val confirmed = Instant.parse("2026-09-30T00:00:00Z")
-        val repository = object : StationRepository by FakeStationRepository() {
-            override fun observeStation(stationId: String) = flowOf(
-                Query(
-                    data = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B")),
-                    updatedAt = confirmed,
-                    failure = Failure.Network.NoConnection(),
-                ),
-            )
+        val fake = FakeStationRepository()
+        val repository = object : StationRepository by fake {
+            override fun station(stationId: String) = object : Resource<Station> by fake.station(stationId) {
+                override fun observe() = flowOf(
+                    Query(
+                        data = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B")),
+                        updatedAt = confirmed,
+                        failure = Failure.Network.NoConnection(),
+                    ),
+                )
+            }
         }
 
         val board = repository.board("KCI-MRI", LocalDateTime.parse("2026-09-30T08:00:00")).toList().last()
@@ -223,8 +222,10 @@ class StationBoardsTest {
     fun `a halte's timetable still being asked for doesn't hold its board`() = runTest {
         val fake = FakeStationRepository().apply { station = halte.right() }
         val repository = object : StationRepository by fake {
-            override fun observeTimetable(stationId: String, day: ServiceDayName) =
-                flowOf(Query<List<LineTimetable>>(isFetching = true))
+            override fun timetable(stationId: String, day: ServiceDayName) =
+                object : Resource<List<LineTimetable>> by fake.timetable(stationId, day) {
+                    override fun observe() = flowOf(Query<List<LineTimetable>>(isFetching = true))
+                }
         }
 
         val board = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList().last()

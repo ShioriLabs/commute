@@ -79,10 +79,10 @@ class StationRepositoryImplTest {
         val online = StationRepositoryImpl(service, queries())
         val onlineLines = LineRepositoryImpl(service, queries(), backgroundScope)
         val fetched = listOf(
-            online.station("KCI-MRI"),
-            online.timetable("KCI-MRI", ServiceDayName.WD),
-            online.transfers("KCI-MRI"),
-            online.frequencies("KCI-MRI", ServiceDayName.WD, 8),
+            online.station("KCI-MRI").fetch(),
+            online.timetable("KCI-MRI", ServiceDayName.WD).fetch(),
+            online.transfers("KCI-MRI").fetch(),
+            online.frequencies("KCI-MRI", ServiceDayName.WD, 8).fetch(),
             onlineLines.lines(),
         ).map { it.getOrNull() }
 
@@ -91,10 +91,10 @@ class StationRepositoryImplTest {
         val later = StationRepositoryImpl(offline, queries())
         val laterLines = LineRepositoryImpl(offline, queries(), backgroundScope)
         val stored = listOf(
-            later.station("KCI-MRI"),
-            later.timetable("KCI-MRI", ServiceDayName.WD),
-            later.transfers("KCI-MRI"),
-            later.frequencies("KCI-MRI", ServiceDayName.WD, 8),
+            later.station("KCI-MRI").fetch(),
+            later.timetable("KCI-MRI", ServiceDayName.WD).fetch(),
+            later.transfers("KCI-MRI").fetch(),
+            later.frequencies("KCI-MRI", ServiceDayName.WD, 8).fetch(),
             laterLines.lines(),
         ).map { it.getOrNull() }
 
@@ -108,11 +108,11 @@ class StationRepositoryImplTest {
             etag = "W/\"1\""
             station = { _, _ -> fixture<Station>("station.json") }
         }
-        StationRepositoryImpl(service, queries()).station("KCI-MRI")
+        StationRepositoryImpl(service, queries()).station("KCI-MRI").fetch()
 
         // An hour and more later, the deploy hasn't changed it: a 304.
         val later = QueryClient(store, FakeNetworkMonitor(), Clock.fixed(Instant.parse("2026-10-03T12:00:00Z"), ZoneOffset.UTC), backgroundScope)
-        val revalidated = StationRepositoryImpl(service, later).observeStation("KCI-MRI")
+        val revalidated = StationRepositoryImpl(service, later).station("KCI-MRI").observe()
             .first { it.updatedAt == Instant.parse("2026-10-03T12:00:00Z") }
 
         assertEquals("Manggarai", revalidated.data?.name)
@@ -144,7 +144,7 @@ class StationRepositoryImplTest {
         // The fixture carries an amenity type and a region code the API has not shipped (yet).
         val service = FakeCommuteService().apply { station = { _, _ -> fixture<Station>("station.json") } }
 
-        val station = StationRepositoryImpl(service, queries()).station("KCI-MRI").getOrNull()!!
+        val station = StationRepositoryImpl(service, queries()).station("KCI-MRI").fetch().getOrNull()!!
 
         assertEquals("KCI-MRI", station.id)
         assertEquals("Manggarai", station.name)
@@ -155,7 +155,7 @@ class StationRepositoryImplTest {
     fun `a station carries its amenities and coordinates for the station page`() = runTest {
         val service = FakeCommuteService().apply { station = { _, _ -> fixture<Station>("station.json") } }
 
-        val station = StationRepositoryImpl(service, queries()).station("KCI-MRI").getOrNull()!!
+        val station = StationRepositoryImpl(service, queries()).station("KCI-MRI").fetch().getOrNull()!!
 
         assertEquals(Amenity("ESCALATOR_UNPAID", "Kedua sisi pintu masuk"), station.amenities[4])
         assertEquals(Amenity("TOILET", null), station.amenities.first())
@@ -175,7 +175,7 @@ class StationRepositoryImplTest {
             }
         }
 
-        StationRepositoryImpl(service, queries()).timetable("KCI-MRI", ServiceDayName.SAT)
+        StationRepositoryImpl(service, queries()).timetable("KCI-MRI", ServiceDayName.SAT).fetch()
 
         assertEquals(Triple("KCI", "MRI", "SAT"), asked)
     }
@@ -186,7 +186,7 @@ class StationRepositoryImplTest {
             groupedTimetable = { _, _, _ -> fixture<List<GroupedTimetable>>("timetable.json") }
         }
 
-        val line = StationRepositoryImpl(service, queries()).timetable("KCI-MRI", ServiceDayName.WD).getOrNull()!!.single()
+        val line = StationRepositoryImpl(service, queries()).timetable("KCI-MRI", ServiceDayName.WD).fetch().getOrNull()!!.single()
 
         assertEquals("KCI:B", line.lineKey)
         val group = line.groups.single()
@@ -246,19 +246,19 @@ class StationRepositoryImplTest {
             groupedTimetable = { _, _, _ -> timetableCalls++; fixture<List<GroupedTimetable>>("timetable.json") }
         }
         val repository = StationRepositoryImpl(service, queries())
-        assertEquals(null, repository.cachedStation("KCI-MRI"))
+        assertEquals(null, repository.station("KCI-MRI").cached())
 
-        repository.station("KCI-MRI")
-        repository.timetable("KCI-MRI", ServiceDayName.WD)
-        repository.station("KCI-MRI")
-        repository.timetable("KCI-MRI", ServiceDayName.WD)
+        repository.station("KCI-MRI").fetch()
+        repository.timetable("KCI-MRI", ServiceDayName.WD).fetch()
+        repository.station("KCI-MRI").fetch()
+        repository.timetable("KCI-MRI", ServiceDayName.WD).fetch()
 
         assertEquals(1, stationCalls)
         assertEquals(1, timetableCalls)
-        assertEquals("Manggarai", repository.cachedStation("KCI-MRI")?.name)
-        assertEquals("KCI:B", repository.cachedTimetable("KCI-MRI", ServiceDayName.WD)?.single()?.lineKey)
+        assertEquals("Manggarai", repository.station("KCI-MRI").cached()?.name)
+        assertEquals("KCI:B", repository.timetable("KCI-MRI", ServiceDayName.WD).cached()?.single()?.lineKey)
         // Another day type is another board.
-        assertEquals(null, repository.cachedTimetable("KCI-MRI", ServiceDayName.SAT))
+        assertEquals(null, repository.timetable("KCI-MRI", ServiceDayName.SAT).cached())
     }
 
     @Test
@@ -271,13 +271,13 @@ class StationRepositoryImplTest {
         }
         val repository = StationRepositoryImpl(service, queries())
 
-        assertTrue(repository.station("KCI-MRI").isLeft())
-        assertEquals(null, repository.cachedStation("KCI-MRI"))
+        assertTrue(repository.station("KCI-MRI").fetch().isLeft())
+        assertEquals(null, repository.station("KCI-MRI").cached())
         fail = false
-        assertTrue(repository.station("KCI-MRI").isRight())
+        assertTrue(repository.station("KCI-MRI").fetch().isRight())
 
-        repository.timetable("KCI-TJ", ServiceDayName.WD)
-        repository.timetable("KCI-TJ", ServiceDayName.WD)
+        repository.timetable("KCI-TJ", ServiceDayName.WD).fetch()
+        repository.timetable("KCI-TJ", ServiceDayName.WD).fetch()
         assertEquals(2, timetableCalls)
     }
 
@@ -286,7 +286,7 @@ class StationRepositoryImplTest {
     fun `transfers decode both kinds`() = runTest {
         val service = FakeCommuteService().apply { transfers = { _, _ -> fixture<List<TransferDto>>("transfers.json") } }
 
-        val transfers = StationRepositoryImpl(service, queries()).transfers("KCI-SUD").getOrNull()!!
+        val transfers = StationRepositoryImpl(service, queries()).transfers("KCI-SUD").fetch().getOrNull()!!
 
         assertEquals(
             Transfer.Internal(
@@ -317,7 +317,7 @@ class StationRepositoryImplTest {
     fun `a transfer carries the exits it leaves by and enters through`() = runTest {
         val service = FakeCommuteService().apply { transfers = { _, _ -> fixture<List<TransferDto>>("transfers-exits.json") } }
 
-        val transfers = StationRepositoryImpl(service, queries()).transfers("KCI-SUD").getOrNull()!!
+        val transfers = StationRepositoryImpl(service, queries()).transfers("KCI-SUD").fetch().getOrNull()!!
 
         assertEquals("B", transfers[0].fromExit)
         assertEquals("D", (transfers[0] as Transfer.Internal).toExit)
@@ -334,7 +334,7 @@ class StationRepositoryImplTest {
             }
         }
 
-        val exits = StationRepositoryImpl(service, queries()).exits("MRTJ-IST").getOrNull()!!
+        val exits = StationRepositoryImpl(service, queries()).exits("MRTJ-IST").fetch().getOrNull()!!
 
         assertEquals("MRTJ" to "IST", asked)
         assertEquals(
@@ -360,8 +360,8 @@ class StationRepositoryImplTest {
         val service = FakeCommuteService().apply { exits = { _, _ -> fixture<List<StationExitDto>>("exits.json") } }
         val repository = StationRepositoryImpl(service, queries())
 
-        repository.exits("MRTJ-IST")
-        repository.exits("MRTJ-IST")
+        repository.exits("MRTJ-IST").fetch()
+        repository.exits("MRTJ-IST").fetch()
 
         assertEquals(1, service.exitsCalls)
     }
@@ -371,11 +371,11 @@ class StationRepositoryImplTest {
         val service = FakeCommuteService().apply { transfers = { _, _ -> emptyList() } }
         val repository = StationRepositoryImpl(service, queries())
 
-        repository.transfers("KCI-THB")
-        repository.transfers("KCI-THB")
+        repository.transfers("KCI-THB").fetch()
+        repository.transfers("KCI-THB").fetch()
 
         assertEquals(1, service.transfersCalls)
-        assertEquals(emptyList<Transfer>(), repository.cachedTransfers("KCI-THB"))
+        assertEquals(emptyList<Transfer>(), repository.transfers("KCI-THB").cached())
     }
 
     @Test
@@ -388,7 +388,7 @@ class StationRepositoryImplTest {
             }
         }
 
-        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.WD, 8).getOrNull()!!
+        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.WD, 8).fetch().getOrNull()!!
 
         assertEquals(Triple("TJ", "H00001P", "WD"), asked)
         assertEquals(
@@ -417,7 +417,7 @@ class StationRepositoryImplTest {
             }
         }
 
-        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.SAT, 8).getOrNull()!!
+        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.SAT, 8).fetch().getOrNull()!!
 
         assertEquals(setOf(ServiceDayName.SAT), rows[0].days)
         assertEquals(null, rows[0].serviceHours)
@@ -429,13 +429,13 @@ class StationRepositoryImplTest {
         val service = FakeCommuteService().apply { headway = { _, _, _ -> emptyList() } }
         val repository = StationRepositoryImpl(service, queries())
 
-        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8)
-        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8)
-        repository.frequencies("TJ-H00001P", ServiceDayName.SAT, 8)
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8).fetch()
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8).fetch()
+        repository.frequencies("TJ-H00001P", ServiceDayName.SAT, 8).fetch()
 
         assertEquals(2, service.headwayCalls)
-        assertEquals(emptyList<Frequency>(), repository.cachedFrequencies("TJ-H00001P", ServiceDayName.WD, 8))
-        assertEquals(null, repository.cachedFrequencies("TJ-H00001P", ServiceDayName.SUN, 8))
+        assertEquals(emptyList<Frequency>(), repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8).cached())
+        assertEquals(null, repository.frequencies("TJ-H00001P", ServiceDayName.SUN, 8).cached())
     }
 
     @Test
@@ -443,16 +443,16 @@ class StationRepositoryImplTest {
         val service = FakeCommuteService().apply { headway = { _, _, _ -> fixture<List<HeadwayRow>>("headway-hourly.json") } }
         val repository = StationRepositoryImpl(service, queries())
 
-        val rows = repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8).getOrNull()!!
+        val rows = repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8).fetch().getOrNull()!!
         assertEquals(8, service.lastHeadwayHour)
-        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8)
-        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 9)
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8).fetch()
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 9).fetch()
 
         // The hour's measured figure, not the schedule's (186 s).
         assertEquals(332.0, rows[0].headwaySeconds)
         assertEquals(9, service.lastHeadwayHour)
         assertEquals(2, service.headwayCalls)
-        assertEquals(null, repository.cachedFrequencies("TJ-H00001P", ServiceDayName.WD, 10))
+        assertEquals(null, repository.frequencies("TJ-H00001P", ServiceDayName.WD, 10).cached())
     }
 
     @Test
@@ -465,7 +465,7 @@ class StationRepositoryImplTest {
             }
         }
 
-        val forecast = StationRepositoryImpl(service, queries()).crowding("KCI-MRI", ServiceDayName.WD).getOrNull()!!
+        val forecast = StationRepositoryImpl(service, queries()).crowding("KCI-MRI", ServiceDayName.WD).fetch().getOrNull()!!
 
         assertEquals(Triple("KCI", "MRI", "WD"), asked)
         assertEquals(24, forecast.hours.size)
@@ -479,9 +479,9 @@ class StationRepositoryImplTest {
         val service = FakeCommuteService().apply { density = { _, _, _ -> fixture<StationDensity>("density.json") } }
         val repository = StationRepositoryImpl(service, queries())
 
-        repository.crowding("KCI-MRI", ServiceDayName.WD)
-        repository.crowding("KCI-MRI", ServiceDayName.WD)
-        repository.crowding("KCI-MRI", ServiceDayName.SAT)
+        repository.crowding("KCI-MRI", ServiceDayName.WD).fetch()
+        repository.crowding("KCI-MRI", ServiceDayName.WD).fetch()
+        repository.crowding("KCI-MRI", ServiceDayName.SAT).fetch()
 
         assertEquals(2, service.densityCalls)
     }

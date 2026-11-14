@@ -1,9 +1,9 @@
 package id.shiorilabs.commute.feature.station.data
 
 import arrow.core.Either
-import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.Refetched
-import id.shiorilabs.commute.core.query.queryOnce
+import id.shiorilabs.commute.core.query.Resource
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.domain.CrowdForecast
@@ -13,57 +13,35 @@ import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Stations and their boards. Answers are cached, on disk too, so the suspend calls answer at once
- * while what they hold is fresh, and fall back to an older copy when the network fails; only with
- * nothing held is the failure returned.
+ * Stations and their boards, each a [Resource]: cached, on disk too, so a fetch answers at once
+ * while what is held is fresh, and falls back to an older copy when the network fails.
  */
 interface StationRepository {
 
     /** The station with id `OPERATOR-CODE`. */
-    suspend fun station(stationId: String): Either<Failure, Station>
+    fun station(stationId: String): Resource<Station>
 
     /** The station's departures on [day], one entry per line that runs then. */
-    suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>>
+    fun timetable(stationId: String, day: ServiceDayName): Resource<List<LineTimetable>>
 
     /** The stations a rider can walk to from this one, nearest first as the API orders them. */
-    suspend fun transfers(stationId: String): Either<Failure, List<Transfer>>
+    fun transfers(stationId: String): Resource<List<Transfer>>
 
     /** The station's exits and the signs at them. Most stations have none recorded yet. */
-    suspend fun exits(stationId: String): Either<Failure, List<StationExit>> = Either.Right(emptyList())
+    fun exits(stationId: String): Resource<List<StationExit>> = resourceOnce { Either.Right(emptyList()) }
 
     /**
      * How often each line passes the station on [day] at [hour] (0-23, Jakarta), in the API's order.
      * Not a schedule. A corridor's figure changes through the day, so each hour is its own answer.
      */
-    suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>>
+    fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Resource<List<Frequency>>
 
     /** How crowded the station usually is on [day], hour by hour. A forecast, and rail only. */
-    suspend fun crowding(stationId: String, day: ServiceDayName): Either<Failure, CrowdForecast> =
-        Either.Right(CrowdForecast.NONE)
-
-    // The observe calls are stale-while-revalidate: what is held first, however old, then a fresh
-    // answer if it was due one. They don't complete. The defaults serve an implementation with no
-    // cache of its own (a test's fake) from the suspend calls.
-
-    /** [station], as it changes. */
-    fun observeStation(stationId: String): Flow<Query<Station>> =
-        queryOnce(cachedStation(stationId)) { station(stationId) }
-
-    /** [timetable], as it changes. */
-    fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
-        queryOnce(cachedTimetable(stationId, day)) { timetable(stationId, day) }
-
-    /** [frequencies], as they change. */
-    fun observeFrequencies(stationId: String, day: ServiceDayName, hour: Int): Flow<Query<List<Frequency>>> =
-        queryOnce(cachedFrequencies(stationId, day, hour)) { frequencies(stationId, day, hour) }
-
-    /** [crowding], as it changes. */
-    fun observeCrowding(stationId: String, day: ServiceDayName): Flow<Query<CrowdForecast>> =
-        queryOnce(null) { crowding(stationId, day) }
+    fun crowding(stationId: String, day: ServiceDayName): Resource<CrowdForecast> =
+        resourceOnce { Either.Right(CrowdForecast.NONE) }
 
     /**
      * Asks again for every part of [stationId] being observed (the station, its boards, a halte's
@@ -71,21 +49,6 @@ interface StationRepository {
      * A pull to refresh.
      */
     suspend fun refresh(stationId: String): Refetched = Refetched()
-
-    /**
-     * The station as already loaded this session, without asking or reading the disk. A screen
-     * opening onto data another one just loaded starts from it, rather than from a skeleton.
-     */
-    fun cachedStation(stationId: String): Station? = null
-
-    /** [timetable] as already loaded this session, without asking. */
-    fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? = null
-
-    /** [transfers] as already loaded this session, without asking. */
-    fun cachedTransfers(stationId: String): List<Transfer>? = null
-
-    /** [frequencies] as already loaded this session, without asking. */
-    fun cachedFrequencies(stationId: String, day: ServiceDayName, hour: Int): List<Frequency>? = null
 }
 
 interface LineRepository {

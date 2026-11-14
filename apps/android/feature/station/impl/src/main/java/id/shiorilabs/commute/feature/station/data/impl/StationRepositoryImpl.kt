@@ -6,12 +6,13 @@ import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.HeadwayRow
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.network.service.CommuteService
-import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.QueryClient
 import id.shiorilabs.commute.core.query.QueryPolicy
 import id.shiorilabs.commute.core.query.QuerySpec
 import id.shiorilabs.commute.core.query.Refetched
+import id.shiorilabs.commute.core.query.Resource
 import id.shiorilabs.commute.core.query.queryKey
+import id.shiorilabs.commute.core.query.resource
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.data.LineRepository
@@ -26,16 +27,13 @@ import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
 import javax.inject.Inject
@@ -119,54 +117,26 @@ class StationRepositoryImpl @Inject constructor(
             service.getDensity(operator, code, day.name, etag)
         }
 
-    override suspend fun station(stationId: String): Either<Failure, Station> =
-        queries.fetch(stationQuery(stationId)).mapOnDataThread { it.toStation() }
+    override fun station(stationId: String): Resource<Station> =
+        queries.resource(stationQuery(stationId)) { it.toStation() }
 
-    override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> =
-        queries.fetch(timetableQuery(stationId, day)).mapOnDataThread { it.toLineTimetables() }
+    override fun timetable(stationId: String, day: ServiceDayName): Resource<List<LineTimetable>> =
+        queries.resource(timetableQuery(stationId, day)) { rows -> rows.map { it.toLineTimetable() } }
 
-    override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> =
-        queries.fetch(transfersQuery(stationId)).mapOnDataThread { rows -> rows.map { it.toTransfer() } }
+    override fun transfers(stationId: String): Resource<List<Transfer>> =
+        queries.resource(transfersQuery(stationId)) { rows -> rows.map { it.toTransfer() } }
 
-    override suspend fun exits(stationId: String): Either<Failure, List<StationExit>> =
-        queries.fetch(exitsQuery(stationId)).mapOnDataThread { rows -> rows.map { it.toStationExit() } }
+    override fun exits(stationId: String): Resource<List<StationExit>> =
+        queries.resource(exitsQuery(stationId)) { rows -> rows.map { it.toStationExit() } }
 
-    override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> =
-        queries.fetch(frequenciesQuery(stationId, day, hour)).mapOnDataThread { it.toFrequencies() }
+    override fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Resource<List<Frequency>> =
+        queries.resource(frequenciesQuery(stationId, day, hour)) { rows -> rows.map { it.toFrequency() } }
 
-    override suspend fun crowding(stationId: String, day: ServiceDayName): Either<Failure, CrowdForecast> =
-        queries.fetch(crowdingQuery(stationId, day)).mapOnDataThread { it.toCrowdForecast() }
-
-    override fun observeStation(stationId: String): Flow<Query<Station>> =
-        queries.observe(stationQuery(stationId)).mapData { it.toStation() }
-
-    override fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
-        queries.observe(timetableQuery(stationId, day)).mapData { it.toLineTimetables() }
-
-    override fun observeFrequencies(stationId: String, day: ServiceDayName, hour: Int): Flow<Query<List<Frequency>>> =
-        queries.observe(frequenciesQuery(stationId, day, hour)).mapData { it.toFrequencies() }
-
-    override fun observeCrowding(stationId: String, day: ServiceDayName): Flow<Query<CrowdForecast>> =
-        queries.observe(crowdingQuery(stationId, day)).mapData { it.toCrowdForecast() }
+    override fun crowding(stationId: String, day: ServiceDayName): Resource<CrowdForecast> =
+        queries.resource(crowdingQuery(stationId, day)) { it.toCrowdForecast() }
 
     override suspend fun refresh(stationId: String): Refetched =
         queries.refetch(queryKey(STATION, stationId))
-
-    override fun cachedStation(stationId: String): Station? =
-        queries.peek(stationQuery(stationId))?.data?.toStation()
-
-    override fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? =
-        queries.peek(timetableQuery(stationId, day))?.data?.toLineTimetables()
-
-    override fun cachedTransfers(stationId: String): List<Transfer>? =
-        queries.peek(transfersQuery(stationId))?.data?.map { it.toTransfer() }
-
-    override fun cachedFrequencies(stationId: String, day: ServiceDayName, hour: Int): List<Frequency>? =
-        queries.peek(frequenciesQuery(stationId, day, hour))?.data?.toFrequencies()
-
-    private fun List<GroupedTimetable>.toLineTimetables(): List<LineTimetable> = map { it.toLineTimetable() }
-
-    private fun List<HeadwayRow>.toFrequencies(): List<Frequency> = map { it.toFrequency() }
 
     /** `KCI-MRI` to (`KCI`, `MRI`). */
     private fun String.splitId(): Pair<String, String> = substringBefore('-') to substringAfter('-')
@@ -252,6 +222,3 @@ class StationDirectoryImpl @Inject constructor(
 /** Maps a wire answer to the domain off the main thread: a board can hold thousands of departures. */
 private suspend fun <A, B> Either<Failure, A>.mapOnDataThread(transform: (A) -> B): Either<Failure, B> =
     onDataThread { map(transform) }
-
-private fun <A, B> Flow<Query<A>>.mapData(transform: (A) -> B): Flow<Query<B>> =
-    map { it.map(transform) }.flowOn(Dispatchers.Default)

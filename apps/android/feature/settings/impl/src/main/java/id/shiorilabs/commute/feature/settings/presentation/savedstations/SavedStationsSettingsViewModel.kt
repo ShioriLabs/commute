@@ -131,14 +131,14 @@ class SavedStationsSettingsViewModel @Inject constructor(
     }
 
     private fun load(stationId: String) {
-        val cached = stationRepository.cachedStation(stationId)
+        val cached = stationRepository.station(stationId).cached()
         if (cached != null) {
             stations.update { it + (stationId to UIState.Success(cached)) }
             return
         }
         stations.update { it + (stationId to UIState.Loading) }
         viewModelScope.launch {
-            val loaded = stationRepository.station(stationId).fold(
+            val loaded = stationRepository.station(stationId).fetch().fold(
                 ifLeft = { UIState.Error() },
                 ifRight = { UIState.Success(it) },
             )

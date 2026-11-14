@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.wearable.WearStation
@@ -52,17 +53,18 @@ class SavedStationsWearSyncTest {
     private class FakeStations : StationRepository {
         val asked = mutableListOf<Pair<String, ServiceDayName>>()
 
-        override suspend fun station(stationId: String): Either<Failure, Station> =
+        override fun station(stationId: String) = resourceOnce {
             Station(stationId, "Name of $stationId", stationId.substringBefore('-'), stationId.substringAfter('-'), listOf("KCI:B")).right()
-
-        override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
-            asked += stationId to day
-            val group = DirectionGroup("S", listOf("Bogor"), null, listOf(DestinationTimetable("Bogor", null, listOf(Departure(null, 600)))))
-            return listOf(LineTimetable("KCI:B", listOf(group))).right()
         }
 
-        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
-        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> = emptyList<Frequency>().right()
+        override fun timetable(stationId: String, day: ServiceDayName) = resourceOnce {
+            asked += stationId to day
+            val group = DirectionGroup("S", listOf("Bogor"), null, listOf(DestinationTimetable("Bogor", null, listOf(Departure(null, 600)))))
+            listOf(LineTimetable("KCI:B", listOf(group))).right()
+        }
+
+        override fun transfers(stationId: String) = resourceOnce { emptyList<Transfer>().right() }
+        override fun frequencies(stationId: String, day: ServiceDayName, hour: Int) = resourceOnce { emptyList<Frequency>().right() }
     }
 
     private class FakeLines : LineRepository {

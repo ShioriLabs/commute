@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -45,47 +46,45 @@ class StationViewModelTest {
         val asked = mutableListOf<Pair<String, ServiceDayName>>()
         var cached = false
 
-        override suspend fun station(stationId: String) = station.invoke(stationId)
+        override fun station(stationId: String) = resourceOnce(
+            cached = { if (cached) Station(stationId, "Manggarai", "KCI", "MRI", listOf("KCI:B")) else null },
+        ) { station.invoke(stationId) }
 
-        override fun cachedStation(stationId: String) =
-            if (cached) Station(stationId, "Manggarai", "KCI", "MRI", listOf("KCI:B")) else null
-
-        override fun cachedTimetable(stationId: String, day: ServiceDayName) =
-            if (cached) listOf(LineTimetable("KCI:B", emptyList())) else null
-
-        override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
+        override fun timetable(stationId: String, day: ServiceDayName) = resourceOnce(
+            cached = { if (cached) listOf(LineTimetable("KCI:B", emptyList())) else null },
+        ) {
             asked += stationId to day
-            return listOf(LineTimetable("KCI:B", emptyList())).right()
+            listOf(LineTimetable("KCI:B", emptyList())).right()
         }
 
         var transfers: Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
 
-        override suspend fun transfers(stationId: String) = transfers
+        override fun transfers(stationId: String) = resourceOnce { transfers }
 
         val askedExits = mutableListOf<String>()
         var exits: Either<Failure, List<StationExit>> = listOf(StationExit("KCI-MRI:A", "A", "Jl. Sultan Agung", emptyList(), fromOsm = false)).right()
 
-        override suspend fun exits(stationId: String): Either<Failure, List<StationExit>> {
+        override fun exits(stationId: String) = resourceOnce {
             askedExits += stationId
-            return exits
+            exits
         }
 
         val askedFrequencies = mutableListOf<Pair<String, ServiceDayName>>()
         val askedHours = mutableListOf<Int>()
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> {
+        override fun frequencies(stationId: String, day: ServiceDayName, hour: Int) = resourceOnce {
             askedFrequencies += stationId to day
             askedHours += hour
-            return listOf(Frequency("TJ:13", 186.0)).right()
+            listOf(Frequency("TJ:13", 186.0)).right()
         }
 
         val askedCrowding = mutableListOf<Pair<String, ServiceDayName>>()
         var crowding: Either<Failure, CrowdForecast> =
             CrowdForecast(List(24) { CrowdRange(CrowdLevel.PADAT, CrowdLevel.SANGAT_PADAT) }).right()
 
-        override suspend fun crowding(stationId: String, day: ServiceDayName): Either<Failure, CrowdForecast> {
+        override fun crowding(stationId: String, day: ServiceDayName) = resourceOnce {
             askedCrowding += stationId to day
-            return crowding
+            crowding
         }
     }
 

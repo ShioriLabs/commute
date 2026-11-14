@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import id.shiorilabs.commute.core.query.Resource
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.line.data.LineDetailRepository
@@ -37,12 +39,10 @@ class LineViewModelTest {
         var cached: LineDetail? = null
         val asked = mutableListOf<Pair<String, String>>()
 
-        override suspend fun line(operator: String, lineCode: String): Either<Failure, LineDetail> {
+        override fun line(operator: String, lineCode: String): Resource<LineDetail> = resourceOnce(cached = { cached }) {
             asked += operator to lineCode
-            return result
+            result
         }
-
-        override fun cachedLine(operator: String, lineCode: String): LineDetail? = cached
     }
 
     private class FakeLineRepository : LineRepository {

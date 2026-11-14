@@ -69,8 +69,8 @@ class SavedStationsWearSync @Inject constructor(
     }
 
     private suspend fun build(id: String, names: Map<String, LineInfo>, now: Instant): WearStation? {
-        val station = stations.station(id).getOrNull() ?: return null
-        val boards = ServiceDayName.entries.mapNotNull { day -> stations.timetable(id, day).getOrNull()?.let { day to it } }.toMap()
+        val station = stations.station(id).fetch().getOrNull() ?: return null
+        val boards = ServiceDayName.entries.mapNotNull { day -> stations.timetable(id, day).fetch().getOrNull()?.let { day to it } }.toMap()
         if (boards.isEmpty()) return null
         return wearStation(station, boards, names, now)
     }

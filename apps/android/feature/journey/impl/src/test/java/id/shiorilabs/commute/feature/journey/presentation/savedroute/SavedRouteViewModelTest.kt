@@ -5,6 +5,7 @@ import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
 import id.shiorilabs.commute.core.query.Query
+import id.shiorilabs.commute.core.query.Resource
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
@@ -45,15 +46,15 @@ class SavedRouteViewModelTest {
     private class FakeJourneyRepository(private val held: TripAnswer?) : JourneyRepository {
         val peeked = mutableListOf<JourneyCriteria>()
 
-        override suspend fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Either<Failure, TripAnswer> =
-            error("The card observes its trips")
+        override fun trips(fromId: String, toId: String, criteria: JourneyCriteria) = object : Resource<TripAnswer> {
+            override suspend fun fetch(): Either<Failure, TripAnswer> = error("The card observes its trips")
 
-        override fun observeTrips(fromId: String, toId: String, criteria: JourneyCriteria): Flow<Query<TripAnswer>> =
-            flow { awaitCancellation() }
+            override fun observe(): Flow<Query<TripAnswer>> = flow { awaitCancellation() }
 
-        override fun cachedTrips(fromId: String, toId: String, criteria: JourneyCriteria): TripAnswer? {
-            peeked += criteria
-            return held
+            override fun cached(): TripAnswer? {
+                peeked += criteria
+                return held
+            }
         }
     }
 

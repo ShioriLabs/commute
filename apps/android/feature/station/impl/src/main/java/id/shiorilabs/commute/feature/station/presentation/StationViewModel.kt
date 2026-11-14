@@ -50,7 +50,7 @@ class StationViewModel @AssistedInject constructor(
     private val board = MutableStateFlow(stationRepository.cachedBoard(stationId, now()) ?: StationBoard.loading(stationId))
     private val lines = lineRepository.dictionary
     private val transfers = MutableStateFlow<UIState<List<Transfer>>>(
-        stationRepository.cachedTransfers(stationId)?.let { UIState.Success(it) } ?: UIState.Idle,
+        stationRepository.transfers(stationId).cached()?.let { UIState.Success(it) } ?: UIState.Idle,
     )
     /** Null until it loads, and left so when it fails: the badge just isn't shown, as on the web. */
     private val crowding = MutableStateFlow<CrowdForecast?>(null)
@@ -146,7 +146,7 @@ class StationViewModel @AssistedInject constructor(
 
     private fun loadExits() {
         viewModelScope.launch {
-            stationRepository.exits(stationId).onRight { exits.value = it }
+            stationRepository.exits(stationId).fetch().onRight { exits.value = it }
         }
     }
 
@@ -159,7 +159,7 @@ class StationViewModel @AssistedInject constructor(
     private fun loadTransfers() {
         transfers.value = UIState.Loading
         viewModelScope.launch {
-            transfers.value = stationRepository.transfers(stationId).fold(
+            transfers.value = stationRepository.transfers(stationId).fetch().fold(
                 ifLeft = { UIState.Error(message = it.message, cause = it.cause) },
                 ifRight = { UIState.Success(it) },
             )
@@ -180,7 +180,7 @@ class StationViewModel @AssistedInject constructor(
             // Rail only, as on the web: the model has no estimate for a halte.
             if (!isTransJakarta(stationId)) {
                 launch {
-                    stationRepository.observeCrowding(stationId, day).collect { query ->
+                    stationRepository.crowding(stationId, day).observe().collect { query ->
                         query.data?.let { crowding.value = it }
                     }
                 }

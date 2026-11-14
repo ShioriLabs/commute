@@ -89,7 +89,7 @@ class SavedRouteViewModel @AssistedInject constructor(
         if (mutableState.value.answer !is UIState.Success) {
             farePreferences.cachedCriteria()
                 ?.let { snapshot -> snapshot.criteria.homeRouteCriteria(now) }
-                ?.let { criteria -> journeyRepository.cachedTrips(fromId, toId, criteria)?.let { held -> criteria to held } }
+                ?.let { criteria -> journeyRepository.trips(fromId, toId, criteria).cached()?.let { held -> criteria to held } }
                 ?.let { (criteria, held) ->
                     mutableState.value = mutableState.value.copy(answer = UIState.Success(held), criteria = criteria)
                 }
@@ -99,7 +99,7 @@ class SavedRouteViewModel @AssistedInject constructor(
             mutableState.value = mutableState.value.copy(criteria = criteria)
             // The cache keeps the rows on screen while a refresh runs, and after one fails; only a
             // first load with nothing held says it failed. Home's pull to refresh lands here too.
-            journeyRepository.observeTrips(fromId, toId, criteria).collect { query ->
+            journeyRepository.trips(fromId, toId, criteria).observe().collect { query ->
                 mutableState.value = mutableState.value.copy(answer = query.toUIState())
             }
         }

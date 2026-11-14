@@ -46,7 +46,7 @@ class HubRepositoryImplTest {
     fun `a hub keeps its members in the API's order, with their lines`() = runTest {
         val service = FakeCommuteService().apply { hub = { fixture() } }
 
-        val hub = HubRepositoryImpl(service, queries()).hub("dukuh-atas").getOrNull()!!
+        val hub = HubRepositoryImpl(service, queries()).hub("dukuh-atas").fetch().getOrNull()!!
 
         assertEquals("Dukuh Atas", hub.name)
         assertEquals(HubKind.HUB, hub.kind)
@@ -63,7 +63,7 @@ class HubRepositoryImplTest {
             hub = { fixture().copy(kind = "complex") }
         }
 
-        val hub = HubRepositoryImpl(service, queries()).hub("dukuh-atas").getOrNull()!!
+        val hub = HubRepositoryImpl(service, queries()).hub("dukuh-atas").fetch().getOrNull()!!
 
         assertEquals(HubKind.INTEGRATED, hub.kind)
     }
@@ -78,14 +78,14 @@ class HubRepositoryImplTest {
             }
         }
         val repository = HubRepositoryImpl(service, queries())
-        assertNull(repository.cachedHub("dukuh-atas"))
+        assertNull(repository.hub("dukuh-atas").cached())
 
-        repository.hub("dukuh-atas")
-        repository.hub("dukuh-atas")
+        repository.hub("dukuh-atas").fetch()
+        repository.hub("dukuh-atas").fetch()
 
         assertEquals("dukuh-atas", asked)
         assertEquals(1, service.hubCalls)
-        assertEquals("Dukuh Atas", repository.cachedHub("dukuh-atas")?.name)
+        assertEquals("Dukuh Atas", repository.hub("dukuh-atas").cached()?.name)
     }
 
     @Test
@@ -94,15 +94,15 @@ class HubRepositoryImplTest {
             etag = "W/\"1\""
             hub = { fixture() }
         }
-        HubRepositoryImpl(service, queries()).hub("dukuh-atas")
+        HubRepositoryImpl(service, queries()).hub("dukuh-atas").fetch()
 
         // Offline at the next launch: a fresh cache, so the hub comes back off the disk.
-        val offline = HubRepositoryImpl(FakeCommuteService(), queries()).hub("dukuh-atas").getOrNull()
+        val offline = HubRepositoryImpl(FakeCommuteService(), queries()).hub("dukuh-atas").fetch().getOrNull()
         assertEquals("Dukuh Atas", offline?.name)
 
         // Hours later, the deploy hasn't changed it: a 304.
         val revalidated = HubRepositoryImpl(service, queries(at = "2026-10-03T12:00:00Z"))
-            .observeHub("dukuh-atas")
+            .hub("dukuh-atas").observe()
             .first { it.updatedAt == Instant.parse("2026-10-03T12:00:00Z") }
 
         assertEquals("Dukuh Atas", revalidated.data?.name)
