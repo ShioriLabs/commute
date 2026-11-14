@@ -55,7 +55,9 @@ pnpm --filter @commute/shirase seed:local   # data/ -> local R2
 pnpm --filter @commute/shirase dev          # http://localhost:3002
 ```
 
-`seed:local` puts objects one at a time. There are 256 glyph ranges per font, so expect it to take a while.
+`seed:local` puts all ~1,300 objects (256 glyph ranges per font) from one process, in about 15 seconds. It uses wrangler's `getPlatformProxy`, which writes to the same local state `wrangler dev` reads. Separate `wrangler r2 object put --local` processes fail when run in parallel, because local R2 doesn't take concurrent writers.
+
+The local edge cache persists in `.wrangler/state/v3/cache`. If you replace an object under the same key locally, delete that folder, or the old response keeps being served. Production never does this: tilesets get new names, and glyph and sprite files don't change.
 
 ## Production (by hand)
 
@@ -64,8 +66,9 @@ These steps are not scripted on purpose. Run them yourself:
 ```sh
 npx wrangler r2 bucket create shirase-tiles
 npx wrangler r2 object put shirase-tiles/jabodetabek-<build>.pmtiles --file data/jabodetabek-<build>.pmtiles --remote
-# glyphs and sprites: same as scripts/seed-local.sh with --remote instead of --local,
-# or `rclone copy data/fonts r2:shirase-tiles/fonts` for the ~1,300 glyph files
+# glyphs and sprites: ~1,300 small files, easiest with rclone against R2's S3 API:
+#   rclone copy data/fonts   r2:shirase-tiles/fonts
+#   rclone copy data/sprites r2:shirase-tiles/sprites
 npx wrangler deploy
 ```
 

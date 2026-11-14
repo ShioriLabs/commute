@@ -23,7 +23,10 @@ BBOX="105.9,-6.8,107.3,-5.85"
 MAXZOOM=15
 
 write=0
-[[ "${1:-}" == "--write" ]] && write=1
+# Anywhere in the arguments: `pnpm ... extract -- --write` passes the `--` through.
+for arg in "$@"; do
+  [[ "$arg" == "--write" ]] && write=1
+done
 
 if [[ -z "${BUILD:-}" ]]; then
   BUILD="$(curl -fsSL https://build-metadata.protomaps.dev/builds.json \
