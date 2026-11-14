@@ -226,12 +226,11 @@ private fun DestinationRow(destination: UpcomingDestination, lineColor: Color, n
         verticalAlignment = Alignment.Top,
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            // Wraps rather than cuts: a terminus may carry a sponsor's name, which is shown whole.
             Text(
                 text = destination.boundFor,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Slate800,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             destination.via?.let { via ->
                 Text(

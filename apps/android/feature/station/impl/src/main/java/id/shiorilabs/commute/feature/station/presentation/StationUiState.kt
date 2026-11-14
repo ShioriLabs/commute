@@ -25,6 +25,8 @@ data class StationUiState(
     val retired: RetiredStation? = null,
     /** How crowded the station usually is, hour by hour. Null while loading, at a halte, or on failure. */
     val crowding: CrowdForecast? = null,
+    /** The forecast is still being asked for: its row is held open, so the page doesn't jump when it lands. */
+    val crowdingPending: Boolean = false,
     /** The exits and their signs. Empty while loading, on failure, and for most stations, which is "not yet": the page leaves the section out. */
     val exits: List<StationExit> = emptyList(),
 )

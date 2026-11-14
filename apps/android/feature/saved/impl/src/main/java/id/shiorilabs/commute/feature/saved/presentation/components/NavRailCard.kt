@@ -13,11 +13,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -25,6 +28,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -121,26 +125,35 @@ fun NavRailCard(
                 tint = iconColor,
             )
         }
-        Column(
-            modifier = Modifier
-                .then(if (animateFace) Modifier.navCardFace(NavCardFacePart.TEXT) else Modifier)
-                .padding(16.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = contentColor,
-            )
-            Text(
-                text = subtitle,
-                // Tighter than the body default so a two-line subtitle clears the icon, as on web.
-                style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 20.sp),
-                color = contentColor,
-            )
+        // The card doesn't grow, so its words stop growing where three lines of them still fit:
+        // past that a larger font would cut the last one off. A screen reader reads [description].
+        val density = LocalDensity.current
+        val capped = remember(density) { Density(density.density, density.fontScale.coerceAtMost(MAX_FONT_SCALE)) }
+        CompositionLocalProvider(LocalDensity provides capped) {
+            Column(
+                modifier = Modifier
+                    .then(if (animateFace) Modifier.navCardFace(NavCardFacePart.TEXT) else Modifier)
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                )
+                Text(
+                    text = subtitle,
+                    // Tighter than the body default so a two-line subtitle clears the icon, as on web.
+                    style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 20.sp),
+                    color = contentColor,
+                )
+            }
         }
     }
 }
+
+/** The largest font scale at which "Mau ke mana?" keeps to one line of the card. */
+private const val MAX_FONT_SCALE = 1.15f
 
 @Preview
 @Composable
