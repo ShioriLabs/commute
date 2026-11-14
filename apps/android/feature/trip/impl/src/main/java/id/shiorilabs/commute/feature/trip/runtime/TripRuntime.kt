@@ -6,9 +6,12 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.floor
 
 /** Where the running trip, and the one that last ended, are kept between process deaths. */
 interface TripStore {
@@ -76,15 +79,39 @@ interface TripRuntime {
     fun stopTracking(tripOver: Boolean = false)
 }
 
+/**
+ * The trip on disk. A ride steps on a fix every few seconds, and most only move the rider along
+ * the hop they're on: those are written at most every [WRITE_EVERY], everything else at once
+ * ([writesNow]). A process killed in between restores from a trip that far behind along its hop,
+ * and nothing else; it carries on by the clock from there either way.
+ */
 @Singleton
-class ActiveTripFileStore @Inject constructor(private val file: ActiveTripStore) : TripStore {
+class ActiveTripFileStore @Inject constructor(
+    private val file: ActiveTripStore,
+    private val clock: Clock,
+) : TripStore {
 
+    /** The trip as last written, and when. */
+    private var written: ActiveTrip? = null
+    private var writtenAt: Instant? = null
+
+    @Synchronized
     override fun read(): ActiveTrip? = file.read()
 
-    override fun write(trip: ActiveTrip) = file.write(trip)
+    @Synchronized
+    override fun write(trip: ActiveTrip) {
+        val now = clock.instant()
+        if (!writesNow(written, writtenAt, trip, now)) return
+        file.write(trip)
+        written = trip
+        writtenAt = now
+    }
 
+    @Synchronized
     override fun clear() {
         file.clear()
+        written = null
+        writtenAt = null
     }
 
     override fun readFinished(): FinishedTrip? = file.readFinished()
@@ -94,6 +121,31 @@ class ActiveTripFileStore @Inject constructor(private val file: ActiveTripStore)
     override fun clearFinished() {
         file.clearFinished()
     }
+}
+
+/** How far behind along its hop the stored trip may fall. */
+internal val WRITE_EVERY: Duration = Duration.ofSeconds(30)
+
+/**
+ * Whether [next] goes to disk now, [written] having gone at [writtenAt]: unless all that's new is
+ * where along the same hop the rider is, when a fix last said so, and the speeds lately read.
+ * Those go once [WRITE_EVERY] has passed. A stop reached, an alert sent, a phase, a plan, how late
+ * the ride runs, what the train was seen doing: always at once.
+ */
+internal fun writesNow(written: ActiveTrip?, writtenAt: Instant?, next: ActiveTrip, now: Instant): Boolean {
+    if (written == null || writtenAt == null) return true
+    if (next == written) return false
+    if (Duration.between(writtenAt, now) >= WRITE_EVERY || now.isBefore(writtenAt)) return true
+    val was = written.state
+    val state = next.state
+    if (floor(state.position) != floor(was.position) || floor(state.confirmedPosition) != floor(was.confirmedPosition)) return true
+    val alongTheHop = state.copy(
+        position = was.position,
+        confirmedPosition = was.confirmedPosition,
+        confirmedAt = was.confirmedAt,
+        recentSpeeds = was.recentSpeeds,
+    )
+    return next.copy(state = alongTheHop) != written
 }
 
 @Singleton

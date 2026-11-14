@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import java.io.File
+import java.io.FileOutputStream
 import java.time.Clock
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -41,23 +42,45 @@ class FileTripLog @Inject constructor(
     private val file by lazy { File(context.filesDir, FILE_NAME) }
     private val lock = Any()
 
+    /**
+     * The file, held open between events: a ride writes a line every few seconds. Unbuffered, so
+     * what's read back from the file ([lines], [share]) has every line. Guarded by [lock].
+     */
+    private var out: FileOutputStream? = null
+
+    /** The file's length while [out] is open. */
+    private var length = 0L
+
     override fun event(name: String, fields: Map<String, Any?>) {
         Log.i(TAG, fields.entries.joinToString(" ", prefix = "$name ") { (key, value) -> "$key=$value" })
         val line = line(STAMP.format(clock.instant()), name, fields)
         synchronized(lock) {
             runCatching {
-                file.appendText(line)
-                if (file.length() > MAX_BYTES) keepNewest()
-            }
+                val bytes = line.encodeToByteArray()
+                val stream = out ?: FileOutputStream(file, true).also {
+                    out = it
+                    length = file.length()
+                }
+                stream.write(bytes)
+                length += bytes.size
+                if (length > MAX_BYTES) keepNewest()
+            }.onFailure { close() }
         }
     }
 
     /** The newer half, from the start of a line. */
     private fun keepNewest() {
+        close()
         val bytes = file.readBytes()
         val tail = bytes.copyOfRange(bytes.size - MAX_BYTES / 2, bytes.size)
         val from = tail.indexOf('\n'.code.toByte()) + 1
         file.writeBytes(tail.copyOfRange(from, tail.size))
+    }
+
+    /** Called with [lock] held; the next event opens the file again. */
+    private fun close() {
+        runCatching { out?.close() }
+        out = null
     }
 
     /** Every line kept, oldest first: for [TripUploader] to pick one trip's out of. */
@@ -86,7 +109,10 @@ class FileTripLog @Inject constructor(
     }
 
     override suspend fun clear() = withContext(Dispatchers.IO) {
-        synchronized(lock) { runCatching { file.delete() } }
+        synchronized(lock) {
+            close()
+            runCatching { file.delete() }
+        }
         File(context.cacheDir, SHARED_DIR).listFiles()?.forEach { it.delete() }
         Unit
     }
