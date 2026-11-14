@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.station.presentation
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -22,11 +23,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -54,6 +57,7 @@ import id.shiorilabs.commute.core.ui.time.rememberTimetableNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
+import id.shiorilabs.commute.feature.station.domain.CrowdLevel
 import id.shiorilabs.commute.feature.station.domain.CrowdRange
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
@@ -322,6 +326,7 @@ private fun StationList(
             retired = state.retired != null,
             // The clock's hour, so the badge moves on with the page rather than with a refetch.
             crowd = state.crowding?.at(now.hour),
+            crowdPending = state.crowdingPending,
             onOpenCrowdLegend = { crowdLegendOpen = true },
             onRetry = onRetry,
             onOtw = onOtw,
@@ -415,6 +420,7 @@ private fun LazyListScope.departures(
     offline: Boolean,
     retired: Boolean,
     crowd: CrowdRange?,
+    crowdPending: Boolean,
     onOpenCrowdLegend: () -> Unit,
     onRetry: () -> Unit,
     onOtw: () -> Unit,
@@ -460,9 +466,17 @@ private fun LazyListScope.departures(
                     }
                 }
                 // Over a real board only, as on the web: a halte's frequencies get none.
+                // While the forecast is asked for its row is there already, unseen: the buttons
+                // under it don't move from under a thumb when it lands.
                 if (crowd != null) {
                     item(key = "crowd") {
                         CrowdBadge(range = crowd, onClick = onOpenCrowdLegend, modifier = inset.padding(bottom = 16.dp))
+                    }
+                } else if (crowdPending) {
+                    item(key = "crowd") {
+                        Box(modifier = inset.padding(bottom = 16.dp).alpha(0f).clearAndSetSemantics {}) {
+                            CrowdBadge(range = CrowdPlaceholder, onClick = {})
+                        }
                     }
                 }
                 item(key = "actions") {
@@ -530,6 +544,9 @@ private fun LazyListScope.departures(
     }
 }
 
+/** Stands in for the forecast while it loads: only its size is used. */
+private val CrowdPlaceholder = CrowdRange(CrowdLevel.LENGANG, CrowdLevel.LENGANG)
+
 /** The "Kereta terakhir" cards, one item each, under a heading of their own. */
 private fun LazyListScope.lastTrains(timetable: List<LineTimetable>, lines: Map<String, LineInfo>) {
     val lastTrainLines = lastTrains(timetable)
@@ -537,7 +554,8 @@ private fun LazyListScope.lastTrains(timetable: List<LineTimetable>, lines: Map<
         return
     }
     item(key = "last-trains-heading") {
-        LastTrainsHeading(Modifier.padding(top = 32.dp, bottom = 16.dp))
+        // Inset by the page's gutter and then the section's own, as the headings further down are.
+        LastTrainsHeading(Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp, bottom = 16.dp))
     }
     itemsIndexed(lastTrainLines, key = { _, line -> "last-train:${line.lineKey}" }) { index, line ->
         LastTrainCard(

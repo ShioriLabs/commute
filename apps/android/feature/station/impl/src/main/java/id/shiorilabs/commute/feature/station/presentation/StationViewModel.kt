@@ -53,7 +53,18 @@ class StationViewModel @AssistedInject constructor(
         stationRepository.transfers(stationId).cached()?.let { UIState.Success(it) } ?: UIState.Idle,
     )
     /** Null until it loads, and left so when it fails: the badge just isn't shown, as on the web. */
-    private val crowding = MutableStateFlow<CrowdForecast?>(null)
+    private val crowding = MutableStateFlow(
+        if (isTransJakarta(stationId)) null else stationRepository.crowding(stationId, serviceDayOf(now())).cached(),
+    )
+
+    /**
+     * Asked for and not answered yet: the page keeps the badge's row open meanwhile. From the
+     * first frame, as a row that joined the list later would land above what's on screen, unseen
+     * until the rider scrolled up to it.
+     */
+    private val crowdingPending = MutableStateFlow(
+        !isTransJakarta(stationId) && unservedStation(stationId) == null && crowding.value == null,
+    )
     /** Empty until it loads, and left so when it fails or the station has none: the section just isn't shown. */
     private val exits = MutableStateFlow<List<StationExit>>(emptyList())
     private var load: Job? = null
@@ -86,6 +97,8 @@ class StationViewModel @AssistedInject constructor(
         )
     }.combine(exits) { state, exits ->
         state.copy(exits = exits)
+    }.combine(crowdingPending) { state, pending ->
+        state.copy(crowdingPending = pending)
     }.stateIn(
         scope = viewModelScope,
         started = WhileUiSubscribed,
@@ -96,6 +109,8 @@ class StationViewModel @AssistedInject constructor(
             transfers = transfers.value,
             unserved = unserved,
             retired = retired,
+            crowding = crowding.value,
+            crowdingPending = crowdingPending.value,
         ),
     )
 
@@ -179,9 +194,12 @@ class StationViewModel @AssistedInject constructor(
             }
             // Rail only, as on the web: the model has no estimate for a halte.
             if (!isTransJakarta(stationId)) {
+                crowdingPending.value = crowding.value == null
                 launch {
                     stationRepository.crowding(stationId, day).observe().collect { query ->
                         query.data?.let { crowding.value = it }
+                        // Answered, or given up on: a failure leaves no badge, and no gap for one.
+                        if (query.data != null || !query.isFetching) crowdingPending.value = false
                     }
                 }
             }
