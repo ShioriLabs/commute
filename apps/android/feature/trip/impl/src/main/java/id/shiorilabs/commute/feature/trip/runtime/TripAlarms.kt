@@ -22,12 +22,20 @@ class TripAlarms @Inject constructor(
 
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
+    /** The moment the alarm is set for, `null` with none set: every step asks again, most for the same one. */
+    private var setFor: Instant? = null
+
+    @Synchronized
     fun wakeAt(at: Instant) {
+        if (at == setFor) return
         alarms?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at.toEpochMilli(), tick())
+        setFor = at
     }
 
+    @Synchronized
     fun cancel() {
         alarms?.cancel(tick())
+        setFor = null
     }
 
     private fun tick() = TripReceiver.pendingIntent(context, TripReceiver.ACTION_TICK)
