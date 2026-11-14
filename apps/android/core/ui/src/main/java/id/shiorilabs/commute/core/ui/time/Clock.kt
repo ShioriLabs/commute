@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -13,6 +14,7 @@ import id.shiorilabs.commute.core.time.JAKARTA
 import kotlinx.coroutines.delay
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
@@ -56,17 +58,30 @@ fun nextTimetableTick(now: LocalDateTime): LocalDateTime {
     return TIMETABLE_SECONDS.map(minute::plusSeconds).firstOrNull { it.isAfter(now) } ?: minute.plusMinutes(1)
 }
 
+/**
+ * The moment it is, refreshed every [periodMillis] while the screen is resumed: what a countdown
+ * of minutes ("3 mnt lagi") is read against. Paused and caught up as [rememberJakartaNow] is.
+ */
 @Composable
-private fun rememberTickingNow(clock: Clock, wait: (LocalDateTime) -> Long): LocalDateTime {
-    var now by remember { mutableStateOf(LocalDateTime.now(clock)) }
-    val lifecycleOwner = LocalLifecycleOwner.current
+fun rememberNow(periodMillis: Long): Instant = rememberTicking(Unit, Instant::now) { periodMillis }
 
-    LaunchedEffect(lifecycleOwner, clock) {
+@Composable
+private fun rememberTickingNow(clock: Clock, wait: (LocalDateTime) -> Long): LocalDateTime =
+    rememberTicking(clock, { LocalDateTime.now(clock) }, wait)
+
+/** [read] again after each [wait], while resumed, and the moment the screen comes back. */
+@Composable
+private fun <T> rememberTicking(key: Any, read: () -> T, wait: (T) -> Long): T {
+    var now by remember(key) { mutableStateOf(read()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentWait by rememberUpdatedState(wait)
+
+    LaunchedEffect(lifecycleOwner, key) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
-                val read = LocalDateTime.now(clock)
-                now = read
-                delay(wait(read))
+                val value = read()
+                now = value
+                delay(currentWait(value))
             }
         }
     }
