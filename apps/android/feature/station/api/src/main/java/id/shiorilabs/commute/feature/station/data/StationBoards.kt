@@ -32,12 +32,12 @@ fun StationRepository.board(stationId: String, now: LocalDateTime): Flow<Station
     val day = serviceDayOf(now)
     val nextDay = nextServiceDayOf(now)
     val halte = isTransJakarta(stationId)
-    val nextBoard = if (nextDay != day) observeTimetable(stationId, nextDay) else flowOf(null)
-    val frequencies = if (halte) observeFrequencies(stationId, day, now.hour) else flowOf(null)
+    val nextBoard = if (nextDay != day) timetable(stationId, nextDay).observe() else flowOf(null)
+    val frequencies = if (halte) frequencies(stationId, day, now.hour).observe() else flowOf(null)
 
     return combine(
-        observeStation(stationId),
-        observeTimetable(stationId, day),
+        station(stationId).observe(),
+        timetable(stationId, day).observe(),
         nextBoard,
         frequencies,
     ) { station, timetable, next, frequency ->
@@ -74,16 +74,16 @@ private fun Query<List<LineTimetable>>.toBoardState(halte: Boolean): UIState<Lis
 fun StationRepository.cachedBoard(stationId: String, now: LocalDateTime): StationBoard? {
     val day = serviceDayOf(now)
     val nextDay = nextServiceDayOf(now)
-    val station = cachedStation(stationId) ?: return null
-    val timetable = cachedTimetable(stationId, day) ?: return null
+    val station = station(stationId).cached() ?: return null
+    val timetable = timetable(stationId, day).cached() ?: return null
     return StationBoard(
         stationId = stationId,
         station = UIState.Success(station),
         timetable = UIState.Success(timetable),
-        nextDayBoard = if (nextDay != day) cachedTimetable(stationId, nextDay)?.associateBy { it.lineKey } else null,
+        nextDayBoard = if (nextDay != day) timetable(stationId, nextDay).cached()?.associateBy { it.lineKey } else null,
         nextDayDiffers = nextDay != day,
         frequencies = if (isTransJakarta(stationId)) {
-            cachedFrequencies(stationId, day, now.hour)?.let { UIState.Success(it) } ?: UIState.Loading
+            frequencies(stationId, day, now.hour).cached()?.let { UIState.Success(it) } ?: UIState.Loading
         } else {
             UIState.Idle
         },

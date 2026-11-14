@@ -3,6 +3,8 @@ package id.shiorilabs.commute.feature.hub.presentation
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import id.shiorilabs.commute.core.query.Resource
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.hub.data.HubRepository
@@ -40,12 +42,10 @@ class HubViewModelTest {
         var cached: Hub? = null
         val asked = mutableListOf<String>()
 
-        override suspend fun hub(slug: String): Either<Failure, Hub> {
+        override fun hub(slug: String): Resource<Hub> = resourceOnce(cached = { cached }) {
             asked += slug
-            return result
+            result
         }
-
-        override fun cachedHub(slug: String): Hub? = cached
     }
 
     private class FakeLineRepository : LineRepository {

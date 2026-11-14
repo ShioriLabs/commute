@@ -33,7 +33,7 @@ class HubViewModel @AssistedInject constructor(
     }
 
     // Seeded from memory, so a hub opened again this session arrives whole on its first frame.
-    private val hub = MutableStateFlow(hubRepository.cachedHub(slug)?.let { Query(it) } ?: Query(isFetching = true))
+    private val hub = MutableStateFlow(hubRepository.hub(slug).cached()?.let { Query(it) } ?: Query(isFetching = true))
     private val lines = lineRepository.dictionary
     private var load: Job? = null
 
@@ -55,7 +55,7 @@ class HubViewModel @AssistedInject constructor(
         // A retry replaces a load still in flight, which would otherwise land after it.
         load?.cancel()
         load = viewModelScope.launch {
-            hubRepository.observeHub(slug).collect { hub.value = it }
+            hubRepository.hub(slug).observe().collect { hub.value = it }
         }
         // Still empty (its fetch failed): a retry asks again.
         if (lines.value.isEmpty()) {

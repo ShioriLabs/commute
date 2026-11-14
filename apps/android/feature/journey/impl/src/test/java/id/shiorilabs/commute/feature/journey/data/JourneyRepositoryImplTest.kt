@@ -66,7 +66,7 @@ class JourneyRepositoryImplTest {
 
     @Test
     fun `every journey maps, labels and all`() = runTest {
-        val answer = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
+        val answer = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().getOrNull()!!
 
         assertEquals("Bogor", answer.from.name)
         assertEquals(4, answer.journeys.size)
@@ -77,7 +77,7 @@ class JourneyRepositoryImplTest {
 
     @Test
     fun `a timed journey carries its clock, an untimed one does not`() = runTest {
-        val journeys = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
+        val journeys = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().getOrNull()!!.journeys
 
         val timed = journeys[0]
         assertEquals(Instant.parse("2026-10-05T02:49:50Z"), timed.arrivalAt)
@@ -99,7 +99,7 @@ class JourneyRepositoryImplTest {
         }
         val service = FakeCommuteService().apply { trips = { _, _, _ -> live } }
         val leg = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
-            .trips("KCI-MRI", "KCI-DP", JourneyCriteria()).getOrNull()!!
+            .trips("KCI-MRI", "KCI-DP", JourneyCriteria()).fetch().getOrNull()!!
             .journeys[0].legs[0] as JourneyLeg.Ride
 
         assertEquals(13, leg.stops.size)
@@ -120,7 +120,7 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
 
         val journeys = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
-            .trips("MRTJ-DKA", "KCI-SUD", JourneyCriteria()).getOrNull()!!.journeys
+            .trips("MRTJ-DKA", "KCI-SUD", JourneyCriteria()).fetch().getOrNull()!!.journeys
 
         assertEquals("D", (journeys[0].legs[0] as JourneyLeg.Transfer).fromExit)
         assertNull((journeys[1].legs[0] as JourneyLeg.Transfer).fromExit)
@@ -136,7 +136,7 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
 
         val journeys = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
-            .trips("MRTJ-DKA", "KCI-SUD", JourneyCriteria()).getOrNull()!!.journeys
+            .trips("MRTJ-DKA", "KCI-SUD", JourneyCriteria()).fetch().getOrNull()!!.journeys
 
         assertEquals(
             listOf(ExitSignLine("Jl. Kendal", null), ExitSignLine("MRT Dukuh Atas BNI", "MRTJ-DKA")),
@@ -148,7 +148,7 @@ class JourneyRepositoryImplTest {
     @Test
     fun `a route carries its other boardings and each leg its trains and change allowance`() = runTest {
         val journey = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock))
-            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().getOrNull()!!
             .journeys[0]
         val first = journey.legs[0] as JourneyLeg.Ride
         val second = journey.legs[1] as JourneyLeg.Ride
@@ -179,7 +179,7 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
 
         val legs = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
-            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys[0].legs
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().getOrNull()!!.journeys[0].legs
         val second = legs[1] as JourneyLeg.Ride
 
         assertEquals(CrossingVia.CONCOURSE, second.crossingVia)
@@ -202,7 +202,7 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
 
         val second = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
-            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys[0].legs[1] as JourneyLeg.Ride
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().getOrNull()!!.journeys[0].legs[1] as JourneyLeg.Ride
 
         assertNull(second.crossingVia)
     }
@@ -210,7 +210,7 @@ class JourneyRepositoryImplTest {
     @Test
     fun `an answer from before the trip-mode fields maps without them`() = runTest {
         val leg = JourneyRepositoryImpl(legacyService(), testQueryClient(backgroundScope, clock))
-            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().getOrNull()!!
             .journeys[0].legs[0] as JourneyLeg.Ride
 
         assertTrue(leg.stopTimes.isEmpty())
@@ -222,7 +222,7 @@ class JourneyRepositoryImplTest {
 
     @Test
     fun `a leg on shared track keeps every line, and a plain one names its own`() = runTest {
-        val journeys = JourneyRepositoryImpl(legacyService(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
+        val journeys = JourneyRepositoryImpl(legacyService(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().getOrNull()!!.journeys
 
         assertEquals(3, (journeys[3].legs[3] as JourneyLeg.Ride).serviceLines.size)
         val plain = journeys[0].legs.first() as JourneyLeg.Ride
@@ -243,7 +243,7 @@ class JourneyRepositoryImplTest {
         }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch()
         assertEquals(FakeCommuteService.TripCriteria(null, null, null, null), sent)
 
         val at = Instant.parse("2026-10-05T03:20:00Z")
@@ -251,7 +251,7 @@ class JourneyRepositoryImplTest {
             "KCI-BOO",
             "MRTJ-LBB",
             JourneyCriteria(PaymentMethod.QRIS_TAP, Departure.At(at), Modes.RAIL, WalkingSpeed.SLOWEST),
-        )
+        ).fetch()
         assertEquals(FakeCommuteService.TripCriteria("QRIS_TAP", "2026-10-05T03:20:00Z", "rail", "SLOWEST"), sent)
     }
 
@@ -260,13 +260,13 @@ class JourneyRepositoryImplTest {
         val service = service()
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch()
         clock.now = Instant.parse("2026-10-05T01:19:00Z")
-        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch()
         assertEquals(1, service.tripsCalls)
 
         clock.now = Instant.parse("2026-10-05T01:20:00Z")
-        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch()
         assertEquals(2, service.tripsCalls)
     }
 
@@ -278,9 +278,9 @@ class JourneyRepositoryImplTest {
         }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        assertTrue(repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).leftOrNull() is Failure.Network)
+        assertTrue(repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().leftOrNull() is Failure.Network)
         fail = false
-        assertTrue(repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).isRight())
+        assertTrue(repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch().isRight())
     }
 
     @Test
@@ -290,11 +290,11 @@ class JourneyRepositoryImplTest {
             trips = { _, _, _ -> if (fail) throw IOException("tunnel") else fixture }
         }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
-        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch()
 
         fail = true
         clock.now = Instant.parse("2026-10-05T02:30:00Z")
-        val answer = repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+        val answer = repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch()
 
         assertEquals(2, service.tripsCalls)
         assertEquals(4, answer.getOrNull()?.journeys?.size)
@@ -318,7 +318,7 @@ class JourneyRepositoryImplTest {
         }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        val answer = repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).getOrNull()!!
+        val answer = repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).fetch().getOrNull()!!
 
         assertEquals(listOf(null, "2026-10-18T04:12:00+07:00"), asked)
         assertEquals(4, answer.journeys.size)
@@ -329,7 +329,7 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply { trips = { _, _, _ -> throw closedUntil(null, code = "NO_ROUTE") } }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        val failure = repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).leftOrNull()
+        val failure = repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).fetch().leftOrNull()
 
         assertEquals(404, (failure as Failure.Remote).code)
         assertEquals(1, service.tripsCalls)
@@ -340,7 +340,7 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply { trips = { _, _, _ -> throw closedUntil(null) } }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        assertTrue(repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).leftOrNull() is Failure.Remote)
+        assertTrue(repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).fetch().leftOrNull() is Failure.Remote)
         assertEquals(1, service.tripsCalls)
     }
 
@@ -349,7 +349,7 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply { trips = { _, _, _ -> throw closedUntil("2026-10-18T04:12:00+07:00") } }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        assertTrue(repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).isLeft())
+        assertTrue(repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).fetch().isLeft())
         assertEquals(2, service.tripsCalls)
     }
 
@@ -361,7 +361,7 @@ class JourneyRepositoryImplTest {
             }
         }
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
-        backgroundScope.launch { repository.observeTrips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).collect() }
+        backgroundScope.launch { repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).observe().collect() }
         runCurrent()
 
         val refetched = repository.refresh("KCI-CUK", "LRTJBDB-SET")
@@ -374,8 +374,8 @@ class JourneyRepositoryImplTest {
         val service = service()
         val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
-        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
-        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria(departure = Departure.At(Instant.parse("2026-10-05T03:20:00Z"))))
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).fetch()
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria(departure = Departure.At(Instant.parse("2026-10-05T03:20:00Z")))).fetch()
 
         assertEquals(2, service.tripsCalls)
     }

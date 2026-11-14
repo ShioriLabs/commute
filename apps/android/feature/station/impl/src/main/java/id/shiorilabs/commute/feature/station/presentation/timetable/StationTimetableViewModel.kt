@@ -72,9 +72,9 @@ class StationTimetableViewModel @AssistedInject constructor(
         fun create(stationId: String): StationTimetableViewModel
     }
 
-    private val title = MutableStateFlow(stationRepository.cachedStation(stationId)?.name)
+    private val title = MutableStateFlow(stationRepository.station(stationId).cached()?.name)
     private val sections = MutableStateFlow(
-        stationRepository.cachedTimetable(stationId, serviceDayOf(now()))
+        stationRepository.timetable(stationId, serviceDayOf(now())).cached()
             ?.let { Query(timetableSections(it)) }
             ?: Query(isFetching = true),
     )
@@ -91,7 +91,7 @@ class StationTimetableViewModel @AssistedInject constructor(
     init {
         if (title.value == null) {
             viewModelScope.launch {
-                stationRepository.station(stationId).onRight { title.value = it.name }
+                stationRepository.station(stationId).fetch().onRight { title.value = it.name }
             }
         }
         if (lines.value.isEmpty()) {
@@ -124,7 +124,7 @@ class StationTimetableViewModel @AssistedInject constructor(
         // A retry replaces a load still in flight, which would otherwise land after it.
         load?.cancel()
         load = viewModelScope.launch {
-            stationRepository.observeTimetable(stationId, serviceDayOf(now()))
+            stationRepository.timetable(stationId, serviceDayOf(now())).observe()
                 .map { query -> query.map(::timetableSections) }
                 .flowOn(Dispatchers.Default)
                 .collect { sections.value = it }

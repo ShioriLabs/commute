@@ -2,6 +2,8 @@ package id.shiorilabs.commute.feature.station.presentation.timetable
 
 import arrow.core.Either
 import arrow.core.right
+import id.shiorilabs.commute.core.query.Resource
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -46,18 +48,16 @@ class StationTimetableViewModelTest {
     private class FakeStationRepository(private val board: List<LineTimetable>) : StationRepository {
         val asked = mutableListOf<ServiceDayName>()
 
-        override suspend fun station(stationId: String): Either<Failure, Station> =
-            Station(stationId, "Manggarai", "KCI", "MRI", emptyList()).right()
+        override fun station(stationId: String) = resourceOnce { Station(stationId, "Manggarai", "KCI", "MRI", emptyList()).right() }
 
-        override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
+        override fun timetable(stationId: String, day: ServiceDayName) = resourceOnce {
             asked += day
-            return board.right()
+            board.right()
         }
 
-        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
+        override fun transfers(stationId: String) = resourceOnce { emptyList<Transfer>().right() }
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> =
-            emptyList<Frequency>().right()
+        override fun frequencies(stationId: String, day: ServiceDayName, hour: Int) = resourceOnce { emptyList<Frequency>().right() }
     }
 
     private class FakeLineRepository : LineRepository {
@@ -94,9 +94,13 @@ class StationTimetableViewModelTest {
     @Test
     fun `a board that couldn't be refreshed is shown with its age, for the offline notice`() = runTest {
         val confirmed = Instant.parse("2026-09-30T00:00:00Z")
-        val stations = object : StationRepository by FakeStationRepository(listOf(line("KCI:B"))) {
-            override fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
-                flowOf(Query(listOf(line("KCI:B")), updatedAt = confirmed, failure = Failure.Network.NoConnection()))
+        val fake = FakeStationRepository(listOf(line("KCI:B")))
+        val stations = object : StationRepository by fake {
+            override fun timetable(stationId: String, day: ServiceDayName) =
+                object : Resource<List<LineTimetable>> by fake.timetable(stationId, day) {
+                    override fun observe(): Flow<Query<List<LineTimetable>>> =
+                        flowOf(Query(listOf(line("KCI:B")), updatedAt = confirmed, failure = Failure.Network.NoConnection()))
+                }
         }
 
         val state = StationTimetableViewModel("KCI-MRI", stations, FakeLineRepository(), clockAt("2026-09-30T08:00:00"))

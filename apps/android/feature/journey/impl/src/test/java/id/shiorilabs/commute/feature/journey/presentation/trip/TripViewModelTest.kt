@@ -12,6 +12,8 @@ import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.datastore.StoredFareCriteria
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.query.Query
+import id.shiorilabs.commute.core.query.Resource
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.Departure
@@ -61,16 +63,18 @@ class TripViewModelTest {
         val asked = mutableListOf<JourneyCriteria>()
         var answer: () -> Either<Failure, TripAnswer> = { answerOf(early, late, viaDukuhAtas).right() }
 
-        override suspend fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Either<Failure, TripAnswer> {
-            asked += criteria
-            return answer()
+        override fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Resource<TripAnswer> {
+            val once = resourceOnce {
+                asked += criteria
+                answer()
+            }
+            return object : Resource<TripAnswer> by once {
+                override fun observe() = observed ?: once.observe()
+            }
         }
 
         /** Stands in for the cache's stale-first stream when set; otherwise [trips] answers once. */
         var observed: Flow<Query<TripAnswer>>? = null
-
-        override fun observeTrips(fromId: String, toId: String, criteria: JourneyCriteria): Flow<Query<TripAnswer>> =
-            observed ?: super.observeTrips(fromId, toId, criteria)
     }
 
     private class FakeLineRepository : LineRepository {

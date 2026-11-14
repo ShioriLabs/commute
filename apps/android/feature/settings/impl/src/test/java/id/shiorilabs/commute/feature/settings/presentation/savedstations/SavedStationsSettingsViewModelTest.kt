@@ -6,6 +6,7 @@ import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.query.resourceOnce
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
@@ -33,15 +34,13 @@ class SavedStationsSettingsViewModelTest {
     private class FakeStationRepository : StationRepository {
         var station: (String) -> Either<Failure, Station> = { id -> Station(id, id, "KCI", id, emptyList()).right() }
 
-        override suspend fun station(stationId: String) = station.invoke(stationId)
+        override fun station(stationId: String) = resourceOnce { station.invoke(stationId) }
 
-        override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> =
-            emptyList<LineTimetable>().right()
+        override fun timetable(stationId: String, day: ServiceDayName) = resourceOnce { emptyList<LineTimetable>().right() }
 
-        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
+        override fun transfers(stationId: String) = resourceOnce { emptyList<Transfer>().right() }
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> =
-            emptyList<Frequency>().right()
+        override fun frequencies(stationId: String, day: ServiceDayName, hour: Int) = resourceOnce { emptyList<Frequency>().right() }
     }
 
     private val saved = SavedRepository(FakePreferencesDataStore())

@@ -1,17 +1,15 @@
 package id.shiorilabs.commute.feature.journey.data.impl
 
-import arrow.core.Either
-import id.shiorilabs.commute.core.ext.onDataThread
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.service.CommuteService
-import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.QueryClient
 import id.shiorilabs.commute.core.query.QueryPolicy
 import id.shiorilabs.commute.core.query.QuerySpec
 import id.shiorilabs.commute.core.query.Refetched
+import id.shiorilabs.commute.core.query.Resource
 import id.shiorilabs.commute.core.query.queryKey
+import id.shiorilabs.commute.core.query.resource
 import id.shiorilabs.commute.core.type.ApiException
-import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_SLOT_MINUTES
 import id.shiorilabs.commute.feature.journey.domain.Departure
@@ -19,10 +17,6 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.journey.domain.quantiseToSlot
 import id.shiorilabs.commute.feature.journey.domain.tripQueryParams
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import java.time.Duration
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -81,16 +75,8 @@ class JourneyRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Either<Failure, TripAnswer> =
-        queries.fetch(tripsQuery(fromId, toId, criteria)).let { result -> onDataThread { result.map { it.toTripAnswer() } } }
-
-    override fun observeTrips(fromId: String, toId: String, criteria: JourneyCriteria): Flow<Query<TripAnswer>> =
-        queries.observe(tripsQuery(fromId, toId, criteria))
-            .map { query -> query.map { it.toTripAnswer() } }
-            .flowOn(Dispatchers.Default)
-
-    override fun cachedTrips(fromId: String, toId: String, criteria: JourneyCriteria): TripAnswer? =
-        queries.peek(tripsQuery(fromId, toId, criteria))?.data?.toTripAnswer()
+    override fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Resource<TripAnswer> =
+        queries.resource(tripsQuery(fromId, toId, criteria)) { it.toTripAnswer() }
 
     override suspend fun refresh(fromId: String, toId: String): Refetched =
         queries.refetch(queryKey(TRIPS, fromId, toId))

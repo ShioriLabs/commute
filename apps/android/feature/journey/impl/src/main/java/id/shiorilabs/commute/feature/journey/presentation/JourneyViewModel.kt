@@ -350,7 +350,7 @@ class JourneyViewModel @AssistedInject constructor(
                 trip.value = TripState.Loading
                 var recorded = false
                 // The last answer held for this ask comes first, however old, then a fresh one.
-                journeyRepository.observeTrips(fromId, toId, criteria).collect { query ->
+                journeyRepository.trips(fromId, toId, criteria).observe().collect { query ->
                     val answer = query.data
                     if (answer == null) {
                         val failure = query.failure
