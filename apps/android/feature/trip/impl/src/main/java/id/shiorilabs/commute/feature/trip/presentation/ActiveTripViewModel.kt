@@ -10,7 +10,6 @@ import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
@@ -55,7 +54,7 @@ class ActiveTripViewModel @Inject constructor(
     otwPreferences: OtwPreferencesRepository,
 ) : ViewModel() {
 
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
     private val stationLines = MutableStateFlow(directory.cached()?.toLineIndex().orEmpty())
 
     val state: StateFlow<ActiveTripUiState> = combine(
@@ -76,7 +75,6 @@ class ActiveTripViewModel @Inject constructor(
         // Opened from the foreground: if the system stopped the location service while the app was
         // away, this is where it may run again.
         controller.resumeTracking()
-        viewModelScope.launch { lineRepository.loadInto(lines) }
         if (stationLines.value.isEmpty()) {
             viewModelScope.launch { directory.all().onRight { stationLines.value = it.toLineIndex() } }
         }
