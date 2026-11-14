@@ -116,7 +116,8 @@ dependencies {
     implementation(project(":feature:map:impl"))
 
     // Crash reports.
-    implementation(libs.sentry.android)
+    implementation(libs.sentry.android.core)
+    implementation(libs.sentry.android.ndk)
     implementation(libs.arrow.core)
 
     // AndroidX

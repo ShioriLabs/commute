@@ -54,7 +54,9 @@ profileinstaller = "1.4.1"
 # zstd for the trip log's export, as the Android AAR (native, 16 KB pages).
 zstd-jni = { group = "com.github.luben", name = "zstd-jni", version.ref = "zstdJni" }
 # Crash and ANR reports (Java and native), sent to Sentry.
-sentry-android = { module = "io.sentry:sentry-android", version.ref = "sentry" }
+# The two halves the app uses, not the `sentry-android` umbrella, which also brings session replay.
+sentry-android-core = { module = "io.sentry:sentry-android-core", version.ref = "sentry" }
+sentry-android-ndk = { module = "io.sentry:sentry-android-ndk", version.ref = "sentry" }
 # KotlinX
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
