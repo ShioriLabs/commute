@@ -19,11 +19,13 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@protomaps/basemaps": "5.7.2",
     "hono": "^4.13.13",
     "pmtiles": "^4.5.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260714.1",
+    "@maplibre/maplibre-gl-style-spec": "^24.10.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.9",
     "wrangler": "^4.110.0"

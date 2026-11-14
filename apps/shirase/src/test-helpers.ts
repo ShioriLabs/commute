@@ -121,6 +121,17 @@ export class FakeBucket {
     }
   }
 
+  /** Root-level listing with delimiter '/', as the /map route asks for. */
+  async list(options?: { delimiter?: string }) {
+    const keys = [...this.objects.keys()]
+    const rootOnly = options?.delimiter === '/'
+    return {
+      objects: keys.filter(k => !rootOnly || !k.includes('/')).map(key => ({ key })),
+      delimitedPrefixes: rootOnly ? [...new Set(keys.filter(k => k.includes('/')).map(k => `${k.split('/')[0]}/`))] : [],
+      truncated: false
+    }
+  }
+
   asR2(): R2Bucket {
     return this as unknown as R2Bucket
   }

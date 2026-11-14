@@ -9,6 +9,7 @@ It serves three things from one R2 bucket, all from one origin:
 - **Vector tiles** from a Protomaps PMTiles extract of Jabodetabek, as plain `/{tileset}/{z}/{x}/{y}.mvt` URLs. Every tile caches at the edge and in the web app's service worker like a static file, and the browser needs no PMTiles library.
 - **Glyphs** in PT Sans and PT Sans Narrow, the typefaces JakLingko's guideline uses for wayfinding, instead of Protomaps' default Noto Sans.
 - **Sprites**, the Protomaps v4 light and dark icon sets.
+- **Finished MapLibre styles** (`/styles/light.json`, `/styles/dark.json`). The web app and Android load one URL and need to know nothing about Protomaps layers, fonts or tilesets.
 
 ## Routes
 
@@ -18,6 +19,8 @@ It serves three things from one R2 bucket, all from one origin:
 | `GET /{tileset}.json` | TileJSON 3.0 for the tileset. Use it as the style source's `url`. |
 | `GET /fonts/{font}/{start}-{end}.pbf` | A glyph range. Each stack is a single font, so a comma-joined stack returns `404`. |
 | `GET /sprites/{name}.json` and `.png` | `light`, `light@2x`, `dark`, `dark@2x`. |
+| `GET /styles/{theme}.json` | A complete MapLibre style, `light` or `dark`, pointing at the newest tileset (`?tileset=` pins one), cached for 5 minutes. Built from Protomaps' basemap layers with Indonesian labels and PT Sans fonts (src/style.ts). |
+| `GET /map` | A test map that loads `/styles/{theme}.json`, so it shows exactly what the apps get. `?tileset=` and `?theme=` pick the archive and theme. There's also a tile-boundaries toggle, and the map is available as `window.shiraseMap` in the console. |
 
 A tileset is named for its build date, e.g. `jabodetabek-20261114`. To refresh the map you upload a new name and point the style at it. Nothing is overwritten in place, so a cached tile can never outlive its archive.
 
@@ -80,3 +83,23 @@ The map must show the attributions that come with the tiles:
 
 - Tiles: © OpenStreetMap contributors (ODbL), built by Protomaps. The TileJSON's `attribution` field carries this.
 - Glyphs: PT Sans and PT Sans Narrow, © ParaType, SIL Open Font License 1.1.
+
+## Using the styles in an app
+
+```js
+// Web (MapLibre GL JS)
+const map = new maplibregl.Map({ container, style: 'https://<shirase>/styles/light.json' })
+// Add Commute's own layers (bus lines, haltes, rail dots) below the labels:
+map.addLayer({ id: 'bus-lines', type: 'line', source: 'bus', /* ... */ }, 'commute-overlay')
+```
+
+```kotlin
+// Android (MapLibre Native)
+map.setStyle("https://<shirase>/styles/light.json") { style ->
+    style.addLayerBelow(busLines, "commute-overlay")
+}
+```
+
+`commute-overlay` is an empty, hidden layer that sits above every fill and line and directly below the first label layer. Anything added before it draws under street and place names.
+
+When you upload a new extract, the styles pick it up within 5 minutes, with no app release. Theme names belong to the app. What `light` and `dark` look like can be changed in `src/style.ts` without any app changing its URL.
