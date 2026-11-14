@@ -399,14 +399,14 @@ class TripNotifier @Inject constructor(
         return style
     }
 
-    private fun copy() = TripCopy(context.resources, lines.cachedLines().orEmpty())
+    private fun copy() = TripCopy(context.resources, lines.dictionary.value)
 
     private fun rideName(ride: TripLeg.Ride): String = copy().rideName(ride)
 
     private fun colorOf(ride: TripLeg.Ride): Int = lineColorOrNull(ride) ?: FALLBACK_LINE
 
     private fun lineColorOrNull(ride: TripLeg.Ride): Int? =
-        lines.cachedLines()?.get(ride.line)?.colorCode?.let { runCatching { it.toColorInt() }.getOrNull() }
+        lines.dictionary.value[ride.line]?.colorCode?.let { runCatching { it.toColorInt() }.getOrNull() }
 
     /** The chip follows the line the headline is about: the one being ridden, or boarded next. */
     private fun chipColor(headline: Headline): Int {

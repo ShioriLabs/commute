@@ -12,7 +12,6 @@ import id.shiorilabs.commute.core.query.toUIState
 import id.shiorilabs.commute.feature.hub.data.HubRepository
 import id.shiorilabs.commute.feature.hub.domain.Hub
 import id.shiorilabs.commute.feature.station.data.LineRepository
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +34,7 @@ class HubViewModel @AssistedInject constructor(
 
     // Seeded from memory, so a hub opened again this session arrives whole on its first frame.
     private val hub = MutableStateFlow(hubRepository.cachedHub(slug)?.let { Query(it) } ?: Query(isFetching = true))
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
     private var load: Job? = null
 
     val state: StateFlow<HubUiState> = combine(hub, lines, ::uiState).stateIn(
@@ -58,10 +57,9 @@ class HubViewModel @AssistedInject constructor(
         load = viewModelScope.launch {
             hubRepository.observeHub(slug).collect { hub.value = it }
         }
+        // Still empty (its fetch failed): a retry asks again.
         if (lines.value.isEmpty()) {
-            viewModelScope.launch {
-                lineRepository.loadInto(lines)
-            }
+            viewModelScope.launch { lineRepository.lines() }
         }
     }
 

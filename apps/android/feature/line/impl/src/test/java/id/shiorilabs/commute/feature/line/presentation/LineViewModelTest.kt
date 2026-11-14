@@ -13,6 +13,7 @@ import id.shiorilabs.commute.feature.line.domain.StripRow
 import id.shiorilabs.commute.feature.line.lineFixture
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -45,6 +46,8 @@ class LineViewModelTest {
     }
 
     private class FakeLineRepository : LineRepository {
+        override val dictionary = MutableStateFlow<Map<String, LineInfo>>(mapOf("KCI:C" to LineInfo("Lin Cikarang", "C", "#25B8EB", "KCI")))
+
         override suspend fun lines(): Either<Failure, Map<String, LineInfo>> =
             mapOf("KCI:C" to LineInfo("Lin Cikarang", "C", "#25B8EB", "KCI")).right()
     }

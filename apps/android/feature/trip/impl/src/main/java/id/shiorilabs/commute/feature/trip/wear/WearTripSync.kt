@@ -105,7 +105,7 @@ class WearTripSync @Inject constructor(
     }
 
     private fun ActiveTrip.toWear(finished: FinishReason?): WearTrip {
-        val known = lines.cachedLines().orEmpty()
+        val known = lines.dictionary.value
         val names = plan.rideIndices.map { plan.ride(it).line }.distinct().mapNotNull { key ->
             val line = known[key] ?: return@mapNotNull null
             val color = runCatching { line.colorCode.toColorInt() }.getOrNull() ?: return@mapNotNull null

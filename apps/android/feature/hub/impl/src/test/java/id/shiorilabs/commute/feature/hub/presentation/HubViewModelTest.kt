@@ -11,6 +11,7 @@ import id.shiorilabs.commute.feature.hub.domain.HubKind
 import id.shiorilabs.commute.feature.hub.domain.HubMember
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -48,11 +49,13 @@ class HubViewModelTest {
     }
 
     private class FakeLineRepository : LineRepository {
+        override val dictionary = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
+
         var calls = 0
 
         override suspend fun lines(): Either<Failure, Map<String, LineInfo>> {
             calls++
-            return mapOf("KCI:C" to LineInfo("Lin Cikarang", "C", "#25B8EB", "KCI")).right()
+            return mapOf("KCI:C" to LineInfo("Lin Cikarang", "C", "#25B8EB", "KCI")).right().onRight { dictionary.value = it }
         }
     }
 

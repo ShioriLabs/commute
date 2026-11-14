@@ -1,10 +1,8 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -14,16 +12,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.query.di.ApplicationScope
+import id.shiorilabs.commute.core.ui.time.rememberNow
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.trip.ActiveTripBar
 import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -60,16 +57,10 @@ class ActiveTripBarImpl @Inject constructor(
         val current = trip ?: return
         val navigator = LocalNavigator.current
         val context = LocalContext.current
-        var names by remember { mutableStateOf(lines.cachedLines().orEmpty()) }
-        LaunchedEffect(Unit) { lines.lines().onRight { names = it } }
+        val names by lines.dictionary.collectAsStateWithLifecycle()
         val copy = remember(context, names) { TripCopy(context.resources, names) }
         // The minutes count down between the trip's own updates, as on the board.
-        val now by produceState(Instant.now()) {
-            while (true) {
-                delay(CLOCK_TICK_MILLIS)
-                value = Instant.now()
-            }
-        }
+        val now = rememberNow(CLOCK_TICK_MILLIS)
         val onTripPage = navigator.currentKey == Route.ActiveTrip
 
         PidsBar(
