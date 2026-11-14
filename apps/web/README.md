@@ -15,7 +15,7 @@ pnpm install
 pnpm --filter @commute/web dev
 ```
 
-The app is available at `http://localhost:5173`.
+The app is available at `http://localhost:5173` (fixed; see [docs/dev-ports.md](../../docs/dev-ports.md)).
 
 ### Typecheck & lint
 

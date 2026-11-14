@@ -13,7 +13,7 @@ let bucket: FakeBucket
 
 const request = (path: string, init: RequestInit = {}) => {
   const ctx = fakeExecutionContext()
-  const env = { TILES: bucket.asR2(), ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5174` }
+  const env = { TILES: bucket.asR2(), ALLOWED_ORIGINS: `${ORIGIN},http://localhost:5173` }
   return { ctx, response: app.request(`https://shirase.example${path}`, init, env, ctx) }
 }
 
@@ -146,10 +146,10 @@ describe('edge cache', () => {
     expect(stored.headers.get('access-control-allow-origin')).toBeNull()
 
     const gets = bucket.gets
-    const second = await request(`/${TILESET}/0/0/0.mvt`, { headers: { origin: 'http://localhost:5174' } }).response
+    const second = await request(`/${TILESET}/0/0/0.mvt`, { headers: { origin: 'http://localhost:5173' } }).response
     expect(second.status).toBe(200)
     expect(bucket.gets).toBe(gets)
-    expect(second.headers.get('access-control-allow-origin')).toBe('http://localhost:5174')
+    expect(second.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
     expect(new Uint8Array(await second.arrayBuffer())).toEqual(new Uint8Array([9]))
   })
 
