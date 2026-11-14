@@ -68,8 +68,14 @@ export default defineConfig({
     // file is dead weight in the archive, and keeping the plugin would make
     // packaging depend on Cloudflare tooling for nothing. The lite bundle bound
     // for Pages wants it for exactly the reason production does.
-    ...(IS_LITE_BUILD && LITE_HOST === 'apache' ? [] : [cloudflare()])
+    // inspectorPort pinned like every wrangler app's (docs/dev-ports.md);
+    // left to default it took the first free port from 9229, the api's slot.
+    ...(IS_LITE_BUILD && LITE_HOST === 'apache' ? [] : [cloudflare({ inspectorPort: 9234 })])
   ],
+  // Fixed, and strict: apps/data-platform owns 5174, and before this both apps
+  // took whichever of 5173/5174 was free, so which port was which depended on
+  // start order. A collision now fails loudly instead of swapping.
+  server: { port: 5173, strictPort: true },
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version)
   }

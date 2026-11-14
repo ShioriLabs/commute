@@ -670,7 +670,7 @@ This needs Phase 1's `DensityBadge` to accept an optional `label` override and `
 
 - [ ] **Step 5: Verify in the running app**
 
-Open `/stations/KCI/MRI` and `/stations/KCI/POC` on the :5174 dev server (reuse the user's if running), against a local API. Expected:
+Open `/stations/KCI/MRI` and `/stations/KCI/POC` on the web dev server (:5173) (reuse the user's if running), against a local API. Expected:
 - B-line rows show a train level under the next departure, and it matches `TRAIN_LOAD_LEVELS` for that hour
 - rows whose headsign has no data show nothing
 - the map station sheet (no `trainLoad` prop) is unchanged
