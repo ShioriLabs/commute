@@ -37,7 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,6 +76,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
 import id.shiorilabs.commute.core.ui.components.CommuteButtonText
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.time.rememberNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.card.api.CardFareCheck
 import id.shiorilabs.commute.feature.journey.R
@@ -95,7 +95,6 @@ import id.shiorilabs.commute.feature.journey.presentation.components.JourneyDeta
 import id.shiorilabs.commute.feature.journey.presentation.components.RouteBar
 import id.shiorilabs.commute.feature.journey.presentation.components.legLines
 import id.shiorilabs.commute.feature.station.domain.LineInfo
-import kotlinx.coroutines.delay
 import java.time.Instant
 
 /**
@@ -254,12 +253,7 @@ internal fun TripContent(
                             )
                         }
                         // A minute-granular countdown, so a page left open keeps counting.
-                        val now by produceState(Instant.now()) {
-                            while (true) {
-                                delay(CLOCK_TICK_MILLIS)
-                                value = Instant.now()
-                            }
-                        }
+                        val now = rememberNow(CLOCK_TICK_MILLIS)
                         JourneyDetail(
                             journey = trip.journey,
                             lines = state.lines,

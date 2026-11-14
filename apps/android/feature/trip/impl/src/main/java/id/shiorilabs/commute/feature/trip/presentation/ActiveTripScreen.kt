@@ -48,7 +48,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,7 +67,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import java.time.Instant
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -112,6 +110,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
+import id.shiorilabs.commute.core.ui.time.rememberNow
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.trip.ActiveTrip
@@ -202,12 +201,7 @@ private fun ActiveTripContent(
     var overlayHeight by remember { mutableStateOf(0.dp) }
     val copy = remember(context, state.lines) { TripCopy(context.resources, state.lines) }
     // The board's minutes count down between the trip's own updates.
-    val now by produceState(Instant.now()) {
-        while (true) {
-            delay(CLOCK_TICK_MILLIS)
-            value = Instant.now()
-        }
-    }
+    val now = rememberNow(CLOCK_TICK_MILLIS)
 
     // The app's trip bar, over the page, folds the big name into itself once the name has
     // scrolled up under it: past the list's top edge, where the bar ends.
