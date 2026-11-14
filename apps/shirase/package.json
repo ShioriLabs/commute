@@ -17,7 +17,7 @@
     "fetch:sprites": "bash scripts/fetch-sprites.sh",
     "seed:local": "node scripts/seed-local.mjs"
   },
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE.md",
   "dependencies": {
     "@protomaps/basemaps": "5.7.2",
     "hono": "^4.13.13",
