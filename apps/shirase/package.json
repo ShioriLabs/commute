@@ -1,0 +1,31 @@
+{
+  "name": "@commute/shirase",
+  "version": "1.0.0",
+  "description": "Basemap tiles for Peta Bus: serves a Protomaps PMTiles extract from R2 as plain z/x/y vector tiles, plus its glyphs and sprites.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "build": "wrangler build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "extract": "bash scripts/extract.sh",
+    "build:glyphs": "bash scripts/build-glyphs.sh",
+    "fetch:sprites": "bash scripts/fetch-sprites.sh",
+    "seed:local": "bash scripts/seed-local.sh"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^4.13.13",
+    "pmtiles": "^4.5.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260714.1",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.9",
+    "wrangler": "^4.110.0"
+  }
+}

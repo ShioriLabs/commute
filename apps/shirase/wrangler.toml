@@ -1,0 +1,26 @@
+# shirase: basemap tiles for Peta Bus. Named for the icebreaker Shirase from
+# A Place Further than the Universe (Sora yori mo Tooi Basho).
+# See README.md for the data steps; deploying is done by hand, never from here.
+name = "shirase"
+main = "src/app.ts"
+dev.port = 3002
+# Clear of 9229-9231, which the other local workerd dev servers take.
+dev.inspector_port = 9240
+compatibility_date = "2025-10-18"
+
+# See apps/api/wrangler.toml for the 0.8 rationale. Tile traffic is many small
+# requests per map view, so this is the worker most likely to want it lower.
+[observability]
+enabled = true
+head_sampling_rate = 0.8
+
+[vars]
+# Comma-separated. Tile, glyph and sprite fetches from MapLibre are CORS
+# requests, so the web app's origins (prod and the two dev ports) are listed.
+ALLOWED_ORIGINS = "https://commute.shiorilabs.id,http://localhost:5173,http://localhost:5174"
+
+# The PMTiles archives at the bucket root (`<tileset>.pmtiles`), glyphs under
+# `fonts/<stack>/<range>.pbf`, sprites under `sprites/<name>`.
+[[r2_buckets]]
+binding = "TILES"
+bucket_name = "shirase-tiles"

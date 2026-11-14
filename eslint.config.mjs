@@ -40,6 +40,8 @@ export default defineConfig([
     'apps/data-platform/dist/**/*',
     'apps/opengraph/.wrangler/**/*',
     'apps/opengraph/dist/**/*',
+    'apps/shirase/.wrangler/**/*',
+    'apps/shirase/dist/**/*',
     // Build output of the routing engine, emitted by `tsc -p libs/tsundere`.
     'libs/*/dist/**/*',
     // Generated data: a vendored base64 font and the SVG card template string.
