@@ -77,12 +77,20 @@ npx wrangler deploy
 
 Then attach a custom domain to the worker (e.g. `shirase.shiorilabs.id`). If the web app is served from another origin, add it to `ALLOWED_ORIGINS` in `wrangler.toml`.
 
-## Attribution
+## License and attribution
+
+[LICENSE.md](LICENSE.md) has the full terms:
+
+- Code is MIT.
+- Data is ODbL.
+- Creative assets Shiori Labs makes are all rights reserved, for use in Commute only.
+- Third-party glyphs and sprites keep their own licenses.
 
 The map must show the attributions that come with the tiles:
 
 - Tiles: © OpenStreetMap contributors (ODbL), built by Protomaps. The TileJSON's `attribution` field carries this.
 - Glyphs: PT Sans and PT Sans Narrow, © ParaType, SIL Open Font License 1.1.
+- Sprites: from Protomaps, derived from tangrams/icons, © 2017 Mapzen, MIT.
 
 ## Using the styles in an app
 

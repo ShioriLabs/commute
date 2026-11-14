@@ -6,12 +6,17 @@ This repository contains material under several different licenses and
 ownership terms. Which one applies depends on the kind of material, as
 described below.
 
+`apps/shirase`, the basemap tile worker, has its own
+[LICENSE.md](apps/shirase/LICENSE.md). Its basemap tiles come from
+OpenStreetMap, not from Forum Diskusi Transportasi Jakarta, so section 4 does
+not cover them.
+
 | Material                                   | License                                  |
 | ------------------------------------------ | ---------------------------------------- |
 | Source code                                | [MIT](#1-source-code--mit)               |
 | Data (generated files, `.sql`, etc.)       | [ODbL 1.0](#2-data--odbl-10)             |
 | OpenStreetMap-derived geometry             | [© OpenStreetMap contributors, ODbL 1.0](#3-openstreetmap-derived-data--openstreetmap-contributors) |
-| Maps and map tiles                         | [Forum Diskusi Transportasi Jakarta](#4-maps-and-tiles--forum-diskusi-transportasi-jakarta) |
+| Maps and map tiles (except `apps/shirase`) | [Forum Diskusi Transportasi Jakarta](#4-maps-and-tiles--forum-diskusi-transportasi-jakarta) |
 | Art, media, fonts, icons and other assets  | [Atribusi Aset Kreatif](#5-art-media-and-other-assets--atribusi-aset-kreatif) |
 
 ## 1. Source code — MIT
