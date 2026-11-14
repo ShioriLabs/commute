@@ -121,6 +121,81 @@ describe('glyphs and sprites', () => {
   })
 })
 
+describe('/styles', () => {
+  it('serves a theme pointing at the newest tileset, briefly cached', async () => {
+    bucket.put('jabodetabek-20261001.pmtiles', new Uint8Array([0]))
+    const res = await request('/styles/light.json', { headers: { origin: ORIGIN } }).response
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/json')
+    expect(res.headers.get('cache-control')).toBe('public, max-age=300')
+    expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN)
+    const style = await res.json() as { sources: { protomaps: { url: string } }, sprite: string }
+    expect(style.sources.protomaps.url).toBe(`https://shirase.example/${TILESET}.json`)
+    expect(style.sprite).toBe('https://shirase.example/sprites/light')
+  })
+
+  it('pins ?tileset= when the bucket holds it', async () => {
+    bucket.put('jabodetabek-20261001.pmtiles', new Uint8Array([0]))
+    const style = await (await request('/styles/dark.json?tileset=jabodetabek-20261001').response).json() as { sources: { protomaps: { url: string } } }
+    expect(style.sources.protomaps.url).toBe('https://shirase.example/jabodetabek-20261001.json')
+  })
+
+  it.each([
+    ['an unknown theme', '/styles/neon.json'],
+    ['the wrong extension', '/styles/light.yaml'],
+    ['a tileset the bucket lacks', '/styles/light.json?tileset=nope']
+  ])('answers 404 for %s', async (_, path) => {
+    expect((await request(path).response).status).toBe(404)
+  })
+
+  it('answers 404 when the bucket has no archives', async () => {
+    bucket.objects.delete(`${TILESET}.pmtiles`)
+    expect((await request('/styles/light.json').response).status).toBe(404)
+  })
+})
+
+describe('/map test page', () => {
+  const configOf = async (res: Response) => {
+    const html = await res.text()
+    const json = /<script type="application\/json" id="config">(.*?)<\/script>/s.exec(html)?.[1]
+    return JSON.parse(json!) as { origin: string, tilesets: string[], tileset: string, theme: string, themes: string[] }
+  }
+
+  it('offers every archive, newest first, and opens the newest', async () => {
+    bucket.put('jabodetabek-20261001.pmtiles', new Uint8Array([0]))
+    const res = await request('/map').response
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const config = await configOf(res)
+    expect(config.tilesets).toEqual([TILESET, 'jabodetabek-20261001'])
+    expect(config.tileset).toBe(TILESET)
+    expect(config.origin).toBe('https://shirase.example')
+    expect(config.theme).toBe('light')
+    expect(config.themes).toEqual(['light', 'dark'])
+  })
+
+  it('opens the requested tileset and theme, ignoring unknown ones', async () => {
+    bucket.put('jabodetabek-20261001.pmtiles', new Uint8Array([0]))
+    expect(await configOf(await request('/map?tileset=jabodetabek-20261001&theme=dark').response))
+      .toMatchObject({ tileset: 'jabodetabek-20261001', theme: 'dark' })
+    expect(await configOf(await request('/map?tileset=nope&theme=neon').response))
+      .toMatchObject({ tileset: TILESET, theme: 'light' })
+  })
+
+  it('says so when the bucket has no archives', async () => {
+    bucket.objects.delete(`${TILESET}.pmtiles`)
+    const html = await (await request('/map').response).text()
+    expect(html).toContain('No tilesets in the bucket')
+    expect(html).not.toContain('maplibre-gl.mjs')
+  })
+
+  it('is not taken over by the TileJSON route', async () => {
+    expect((await request('/map').response).status).toBe(200)
+    expect((await request('/map.json').response).status).toBe(404)
+  })
+})
+
 describe('CORS', () => {
   it('allows the web app origin', async () => {
     const res = await request(`/${TILESET}/0/0/0.mvt`, { headers: { origin: ORIGIN } }).response

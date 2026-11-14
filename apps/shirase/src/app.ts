@@ -1,6 +1,8 @@
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { ArchiveNotFound, contentEncoding, getRawTile, openArchive } from './archive'
+import { renderMapPage } from './map-page'
+import { buildStyle, isTheme, type Theme } from './style'
 
 /*
  * shirase: the basemap behind Peta Bus. Named for the icebreaker Shirase,
@@ -11,7 +13,9 @@ import { ArchiveNotFound, contentEncoding, getRawTile, openArchive } from './arc
  * so every tile caches at the edge and in the web app's service worker like any
  * other static file, and the browser needs no PMTiles library. Also serves the
  * glyphs (PT Sans and PT Sans Narrow, per JakLingko's guideline) and sprites the
- * basemap style needs, so the whole basemap comes from one origin.
+ * basemap style needs, and the finished MapLibre styles themselves
+ * (/styles/{theme}.json, src/style.ts), so the web app and Android load one URL
+ * and the whole basemap comes from one origin.
  *
  * R2 layout (bucket `shirase-tiles`):
  *   <tileset>.pmtiles             e.g. jabodetabek-20261114.pmtiles
@@ -50,6 +54,12 @@ const SPRITE_FILE = /^[a-z0-9-]+(@2x)?\.(json|png)$/
  */
 const TILE_CACHE = 'public, max-age=86400, stale-while-revalidate=604800'
 const ASSET_CACHE = 'public, max-age=2592000, immutable'
+/*
+ * A style names the newest tileset, so it changes when an extract is uploaded.
+ * Five minutes is how long that takes to reach the apps, with no app release.
+ */
+const STYLE_CACHE = 'public, max-age=300'
+const STYLE_FILE = /^([a-z0-9-]+)\.json$/
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -117,6 +127,58 @@ async function serveObject(c: AppContext, key: string, contentType: string): Pro
 }
 
 app.get('/', c => c.text('shirase: basemap tiles for Commute\n'))
+
+// Browsers ask for it on /map; empty rather than a 404 in the console.
+app.get('/favicon.ico', c => c.body(null, 204))
+
+/** Every archive in the bucket, newest first (the build date is in the name). */
+async function listTilesets(bucket: R2Bucket): Promise<string[]> {
+  const listing = await bucket.list({ delimiter: '/' })
+  return listing.objects
+    .filter(o => o.key.endsWith('.pmtiles'))
+    .map(o => o.key.replace(/\.pmtiles$/, ''))
+    .filter(name => TILESET.test(name))
+    .sort((a, b) => b.localeCompare(a))
+}
+
+/*
+ * A finished MapLibre style (src/style.ts) pointing at the newest tileset, or
+ * at `?tileset=` when it names one the bucket holds. Every URL inside is
+ * absolute, built from this request's origin, so the same document works for
+ * the web app and for Android.
+ */
+app.get('/styles/:file', async (c) => {
+  const theme = STYLE_FILE.exec(c.req.param('file'))?.[1]
+  if (!theme || !isTheme(theme)) return c.notFound()
+  return cached(c, async () => {
+    const tilesets = await listTilesets(c.env.TILES)
+    const requested = c.req.query('tileset')
+    const tileset = requested ?? tilesets[0]
+    if (!tileset || !tilesets.includes(tileset)) return c.notFound()
+
+    const style = buildStyle({ origin: new URL(c.req.url).origin, tileset, theme })
+    return new Response(JSON.stringify(style), {
+      headers: { 'content-type': 'application/json', 'cache-control': STYLE_CACHE, 'vary': 'Origin' }
+    })
+  })
+})
+
+/*
+ * A test map over whatever archives the bucket holds (src/map-page.tsx),
+ * loading the same /styles/{theme}.json the apps do. Registered before
+ * `/:file` so the TileJSON route doesn't swallow it. Not cached: the tileset
+ * list changes whenever an extract is uploaded.
+ */
+app.get('/map', async (c) => {
+  const tilesets = await listTilesets(c.env.TILES)
+  const requested = c.req.query('tileset')
+  const tileset = requested && tilesets.includes(requested) ? requested : tilesets[0] ?? ''
+  const themeParam = c.req.query('theme') ?? ''
+  const theme: Theme = isTheme(themeParam) ? themeParam : 'light'
+
+  c.header('cache-control', 'no-store')
+  return c.html(renderMapPage({ origin: new URL(c.req.url).origin, tilesets, tileset, theme }))
+})
 
 app.get('/fonts/:stack/:range', (c) => {
   const stack = c.req.param('stack')
