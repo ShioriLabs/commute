@@ -101,7 +101,8 @@ fun HubMemberRow(
                                 color = OperatorColor,
                                 fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             ),
-                        ) { append(operatorName) }
+                            // Unbreakable within itself: "LRT Jabodebek" moves down whole.
+                        ) { append(operatorName.replace(' ', '\u00A0')) }
                     },
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,

@@ -1,6 +1,8 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.PageGround
 import androidx.compose.foundation.background
@@ -98,6 +100,9 @@ internal fun StationFields(
     }
 }
 
+/** The label column's width in the label's own ems: 32 dp at the default 14 sp. */
+private const val LABEL_WIDTH_EM = 32f / 14f
+
 @Composable
 private fun StationField(label: String, endpoint: PairEndpoint?, onClick: () -> Unit) {
     Row(
@@ -113,7 +118,14 @@ private fun StationField(label: String, endpoint: PairEndpoint?, onClick: () -> 
     ) {
         Text(
             text = label,
-            modifier = Modifier.width(32.dp),
+            // As wide as the label's own size makes "Dari", so it keeps to one line at a larger
+            // font and both rows keep one column. From the size it's set in: Android scales large
+            // sizes less than small ones, so 32.sp would not have grown with a 14 sp word.
+            modifier = Modifier.width(
+                with(LocalDensity.current) { MaterialTheme.typography.bodyMedium.fontSize.toDp() } * LABEL_WIDTH_EM,
+            ),
+            maxLines = 1,
+            softWrap = false,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = Slate500,

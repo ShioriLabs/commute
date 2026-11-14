@@ -19,7 +19,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.CommuteCard
@@ -94,12 +93,11 @@ fun LastTrainCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    // Wraps rather than cuts: a terminus may carry a sponsor's name.
                     Text(
                         text = destination.boundFor,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Slate800,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                     destination.via?.let { via ->
                         Text(
