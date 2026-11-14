@@ -31,7 +31,7 @@ class JourneyTripReplanner @Inject constructor(
         val now = clock.instant()
         val criteria = farePreferences.criteria.first().homeRouteCriteria(now)
             .copy(departure = replanDeparture(readyAt, now))
-        val answer = journeys.trips(fromId, toId, criteria).getOrNull() ?: return null
+        val answer = journeys.trips(fromId, toId, criteria).fetch().getOrNull() ?: return null
         return onwardJourney(answer.journeys, fromId, readyAt, line)?.toTripPlan()
     }
 }

@@ -192,12 +192,12 @@ class SavedStationsViewModel @Inject constructor(
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
     private fun loadName(stationId: String) {
-        stationRepository.cachedStation(stationId)?.let { station ->
+        stationRepository.station(stationId).cached()?.let { station ->
             names.update { it + (stationId to station.name) }
             return
         }
         viewModelScope.launch {
-            stationRepository.station(stationId).onRight { station ->
+            stationRepository.station(stationId).fetch().onRight { station ->
                 names.update { it + (stationId to station.name) }
             }
         }

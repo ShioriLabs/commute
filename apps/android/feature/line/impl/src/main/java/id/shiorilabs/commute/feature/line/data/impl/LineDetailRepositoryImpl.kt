@@ -1,17 +1,14 @@
 package id.shiorilabs.commute.feature.line.data.impl
 
-import arrow.core.Either
 import id.shiorilabs.commute.core.network.service.CommuteService
-import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.QueryClient
 import id.shiorilabs.commute.core.query.QueryPolicy
 import id.shiorilabs.commute.core.query.QuerySpec
+import id.shiorilabs.commute.core.query.Resource
 import id.shiorilabs.commute.core.query.queryKey
-import id.shiorilabs.commute.core.type.Failure
+import id.shiorilabs.commute.core.query.resource
 import id.shiorilabs.commute.feature.line.data.LineDetailRepository
 import id.shiorilabs.commute.feature.line.domain.LineDetail
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 import id.shiorilabs.commute.core.model.models.LineDetail as LineDetailDto
@@ -31,14 +28,8 @@ class LineDetailRepositoryImpl @Inject constructor(
             service.getLine(operator, lineCode, etag)
         }
 
-    override suspend fun line(operator: String, lineCode: String): Either<Failure, LineDetail> =
-        queries.fetch(lineQuery(operator, lineCode)).map { it.toLineDetail() }
-
-    override fun observeLine(operator: String, lineCode: String): Flow<Query<LineDetail>> =
-        queries.observe(lineQuery(operator, lineCode)).map { query -> query.map { it.toLineDetail() } }
-
-    override fun cachedLine(operator: String, lineCode: String): LineDetail? =
-        queries.peek(lineQuery(operator, lineCode))?.data?.toLineDetail()
+    override fun line(operator: String, lineCode: String): Resource<LineDetail> =
+        queries.resource(lineQuery(operator, lineCode)) { it.toLineDetail() }
 
     private companion object {
 

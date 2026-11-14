@@ -29,7 +29,7 @@ class SavedRoutesWarmup @Inject constructor(
         val criteria = farePreferences.criteria.first().homeRouteCriteria(clock.instant())
         for (route in routes) {
             // The first value is what the disk held; a stale one goes on refreshing on its own.
-            launch { journeyRepository.observeTrips(route.fromId, route.toId, criteria).first() }
+            launch { journeyRepository.trips(route.fromId, route.toId, criteria).observe().first() }
         }
     }
 }

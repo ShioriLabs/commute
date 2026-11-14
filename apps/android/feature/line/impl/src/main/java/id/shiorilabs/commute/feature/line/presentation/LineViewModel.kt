@@ -38,7 +38,7 @@ class LineViewModel @AssistedInject constructor(
 
     // Seeded from memory, so a line opened again this session arrives whole on its first frame.
     private val line = MutableStateFlow(
-        lineDetailRepository.cachedLine(operator, lineCode)?.let { Query(it) } ?: Query(isFetching = true),
+        lineDetailRepository.line(operator, lineCode).cached()?.let { Query(it) } ?: Query(isFetching = true),
     )
     private val lines = lineRepository.dictionary
 
@@ -69,7 +69,7 @@ class LineViewModel @AssistedInject constructor(
         // A retry replaces a load still in flight, which would otherwise land after it.
         load?.cancel()
         load = viewModelScope.launch {
-            lineDetailRepository.observeLine(operator, lineCode).collect { line.value = it }
+            lineDetailRepository.line(operator, lineCode).observe().collect { line.value = it }
         }
         // Still empty (its fetch failed): a retry asks again.
         if (lines.value.isEmpty()) {

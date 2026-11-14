@@ -32,7 +32,7 @@ class LineDetailRepositoryImplTest {
     fun `a line carries its operator, colour and segments in the API's order`() = runTest {
         val service = FakeCommuteService().apply { line = { _, _ -> lineFixture("line_bogor.json") } }
 
-        val line = LineDetailRepositoryImpl(service, queries()).line("KCI", "B").getOrNull()!!
+        val line = LineDetailRepositoryImpl(service, queries()).line("KCI", "B").fetch().getOrNull()!!
 
         assertEquals("KCI", line.operator)
         assertEquals("Commuter Line", line.operatorName)
@@ -57,21 +57,21 @@ class LineDetailRepositoryImplTest {
         }
         val repository = LineDetailRepositoryImpl(service, queries())
 
-        repository.line("KCI", "B")
-        repository.line("KCI", "B")
+        repository.line("KCI", "B").fetch()
+        repository.line("KCI", "B").fetch()
 
         assertEquals("KCI" to "B", asked)
         assertEquals(1, service.lineCalls)
-        assertEquals("Lin Bogor", repository.cachedLine("KCI", "B")?.name)
+        assertEquals("Lin Bogor", repository.line("KCI", "B").cached()?.name)
     }
 
     @Test
     fun `a line survives a trip through the disk`() = runTest {
         val service = FakeCommuteService().apply { line = { _, _ -> lineFixture("line_cikarang.json") } }
-        LineDetailRepositoryImpl(service, queries()).line("KCI", "C")
+        LineDetailRepositoryImpl(service, queries()).line("KCI", "C").fetch()
 
         // Offline at the next launch: a fresh cache, so the line comes back off the disk.
-        val stored = LineDetailRepositoryImpl(FakeCommuteService(), queries()).line("KCI", "C").getOrNull()
+        val stored = LineDetailRepositoryImpl(FakeCommuteService(), queries()).line("KCI", "C").fetch().getOrNull()
 
         assertEquals(listOf(SegmentKind.TRUNK, SegmentKind.LOOP), stored?.segments?.map { it.kind })
     }

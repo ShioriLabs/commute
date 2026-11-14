@@ -184,7 +184,7 @@ class TripViewModel @AssistedInject constructor(
                 trip.value = TripPageState.Loading
                 // The last answer held for this ask comes first, however old, then a fresh one; the
                 // journey is found again in each, by its route and the boarding it was opened on.
-                journeyRepository.observeTrips(route.fromId, route.toId, criteria).collect { query ->
+                journeyRepository.trips(route.fromId, route.toId, criteria).observe().collect { query ->
                     val answer = query.data
                     if (answer == null) {
                         val failure = query.failure
