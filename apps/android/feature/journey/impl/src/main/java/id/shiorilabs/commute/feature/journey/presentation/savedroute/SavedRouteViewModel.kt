@@ -56,7 +56,7 @@ class SavedRouteViewModel @AssistedInject constructor(
         fun create(@Assisted("from") fromId: String, @Assisted("to") toId: String): SavedRouteViewModel
     }
 
-    private val mutableState = MutableStateFlow(SavedRouteUiState(lines = lineRepository.cachedLines().orEmpty()))
+    private val mutableState = MutableStateFlow(SavedRouteUiState(lines = lineRepository.dictionary.value))
     val state: StateFlow<SavedRouteUiState> = mutableState.asStateFlow()
 
     /** The departure slot the answer was asked in. */
@@ -64,10 +64,8 @@ class SavedRouteViewModel @AssistedInject constructor(
     private var load: Job? = null
 
     init {
-        if (mutableState.value.lines.isEmpty()) {
-            viewModelScope.launch {
-                lineRepository.lines().onRight { lines -> mutableState.value = mutableState.value.copy(lines = lines) }
-            }
+        viewModelScope.launch {
+            lineRepository.dictionary.collect { lines -> mutableState.value = mutableState.value.copy(lines = lines) }
         }
         load(clock.instant())
     }

@@ -15,7 +15,6 @@ import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.data.boardHour
 import id.shiorilabs.commute.feature.station.data.cachedBoard
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import kotlinx.coroutines.Job
@@ -48,7 +47,7 @@ class SavedStationsViewModel @Inject constructor(
     /** A pull to refresh in flight, and what the last one found until it has been shown. */
     private val pull = MutableStateFlow(Pull())
     private val loads = mutableMapOf<String, Job>()
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
 
     /** The names of the stations at either end of a pinned pair, by id, as they load. */
     private val names = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -88,11 +87,6 @@ class SavedStationsViewModel @Inject constructor(
         )
 
     init {
-        if (lines.value.isEmpty()) {
-            viewModelScope.launch {
-                lineRepository.loadInto(lines)
-            }
-        }
 
         // A newly saved station loads on arrival; one already loaded keeps its card. A pair needs
         // only its stations' names for its title: its card asks for its own trips.
@@ -189,10 +183,9 @@ class SavedStationsViewModel @Inject constructor(
 
     fun retry(stationId: String) {
         load(stationId)
+        // Still empty (its fetch failed): a retry asks again.
         if (lines.value.isEmpty()) {
-            viewModelScope.launch {
-                lineRepository.loadInto(lines)
-            }
+            viewModelScope.launch { lineRepository.lines() }
         }
     }
 

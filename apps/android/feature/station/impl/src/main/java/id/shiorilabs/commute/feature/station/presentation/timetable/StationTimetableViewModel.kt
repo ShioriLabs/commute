@@ -13,7 +13,6 @@ import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -79,7 +78,7 @@ class StationTimetableViewModel @AssistedInject constructor(
             ?.let { Query(timetableSections(it)) }
             ?: Query(isFetching = true),
     )
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
     private val excluded = MutableStateFlow<Set<String>>(emptySet())
     private var load: Job? = null
 
@@ -117,7 +116,7 @@ class StationTimetableViewModel @AssistedInject constructor(
 
     private fun loadLines() {
         viewModelScope.launch {
-            lineRepository.loadInto(lines)
+            lineRepository.lines()
         }
     }
 

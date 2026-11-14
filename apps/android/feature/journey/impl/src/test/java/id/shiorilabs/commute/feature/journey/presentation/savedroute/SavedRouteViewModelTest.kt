@@ -16,6 +16,7 @@ import id.shiorilabs.commute.feature.journey.domain.ride
 import id.shiorilabs.commute.feature.journey.domain.stop
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -57,6 +58,8 @@ class SavedRouteViewModelTest {
     }
 
     private class FakeLineRepository : LineRepository {
+        override val dictionary = MutableStateFlow<Map<String, LineInfo>>(emptyMap<String, LineInfo>())
+
         override suspend fun lines(): Either<Failure, Map<String, LineInfo>> = emptyMap<String, LineInfo>().right()
     }
 

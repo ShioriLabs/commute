@@ -29,7 +29,6 @@ import id.shiorilabs.commute.feature.journey.domain.toCriteria
 import id.shiorilabs.commute.feature.journey.domain.toLinkParams
 import id.shiorilabs.commute.feature.journey.domain.withLink
 import id.shiorilabs.commute.feature.station.data.LineRepository
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.trip.TripController
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -74,7 +73,7 @@ class TripViewModel @AssistedInject constructor(
 
     /** `null` until stored settings are read: nothing is fetched under the wrong payment method. */
     private val criteria = MutableStateFlow<JourneyCriteria?>(null)
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
     private val trip = MutableStateFlow<TripPageState>(TripPageState.Loading)
     private val retries = MutableStateFlow(0)
 
@@ -146,9 +145,6 @@ class TripViewModel @AssistedInject constructor(
             val now = clock.instant()
             criteria.value = farePreferences.criteria.first().toCriteria(now)
                 .withLink(route.paymentMethod, route.at, route.modes, route.walking, now)
-        }
-        if (lines.value.isEmpty()) {
-            viewModelScope.launch { lineRepository.loadInto(lines) }
         }
         viewModelScope.launch { fetchTrip() }
     }

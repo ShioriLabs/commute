@@ -20,6 +20,7 @@ import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -89,13 +90,15 @@ class StationViewModelTest {
     }
 
     private class FakeLineRepository : LineRepository {
+        override val dictionary = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
+
         var calls = 0
         var result: Either<Failure, Map<String, LineInfo>> =
             mapOf("KCI:B" to LineInfo("Lin Bogor", "B", "#EE3D43", "KCI")).right()
 
         override suspend fun lines(): Either<Failure, Map<String, LineInfo>> {
             calls++
-            return result
+            return result.onRight { dictionary.value = it }
         }
     }
 

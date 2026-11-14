@@ -14,7 +14,6 @@ import id.shiorilabs.commute.feature.line.data.LineDetailRepository
 import id.shiorilabs.commute.feature.line.domain.LineDetail
 import id.shiorilabs.commute.feature.line.domain.lineStrip
 import id.shiorilabs.commute.feature.station.data.LineRepository
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,7 +40,7 @@ class LineViewModel @AssistedInject constructor(
     private val line = MutableStateFlow(
         lineDetailRepository.cachedLine(operator, lineCode)?.let { Query(it) } ?: Query(isFetching = true),
     )
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
 
     /** The branch shown inline past the junction. Kept across process death, like a scroll. */
     private val activeTail = savedState.getStateFlow(ACTIVE_TAIL, 0)
@@ -72,10 +71,9 @@ class LineViewModel @AssistedInject constructor(
         load = viewModelScope.launch {
             lineDetailRepository.observeLine(operator, lineCode).collect { line.value = it }
         }
+        // Still empty (its fetch failed): a retry asks again.
         if (lines.value.isEmpty()) {
-            viewModelScope.launch {
-                lineRepository.loadInto(lines)
-            }
+            viewModelScope.launch { lineRepository.lines() }
         }
     }
 

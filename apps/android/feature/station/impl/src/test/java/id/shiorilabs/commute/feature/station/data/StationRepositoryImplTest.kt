@@ -29,6 +29,7 @@ import id.shiorilabs.commute.core.query.testing.FakeNetworkMonitor
 import id.shiorilabs.commute.core.query.testing.FakeQueryStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -76,7 +77,7 @@ class StationRepositoryImplTest {
             operators = { fixture<List<OperatorWithLines>>("operators.json") }
         }
         val online = StationRepositoryImpl(service, queries())
-        val onlineLines = LineRepositoryImpl(service, queries())
+        val onlineLines = LineRepositoryImpl(service, queries(), backgroundScope)
         val fetched = listOf(
             online.station("KCI-MRI"),
             online.timetable("KCI-MRI", ServiceDayName.WD),
@@ -88,7 +89,7 @@ class StationRepositoryImplTest {
         // The next launch, offline: a fresh cache, so everything comes back off the disk.
         val offline = FakeCommuteService()
         val later = StationRepositoryImpl(offline, queries())
-        val laterLines = LineRepositoryImpl(offline, queries())
+        val laterLines = LineRepositoryImpl(offline, queries(), backgroundScope)
         val stored = listOf(
             later.station("KCI-MRI"),
             later.timetable("KCI-MRI", ServiceDayName.WD),
@@ -197,7 +198,7 @@ class StationRepositoryImplTest {
     @Test
     fun `the line dictionary is keyed by operator and code, and fetched once`() = runTest {
         val service = FakeCommuteService().apply { operators = { fixture<List<OperatorWithLines>>("operators.json") } }
-        val repository = LineRepositoryImpl(service, queries())
+        val repository = LineRepositoryImpl(service, queries(), backgroundScope)
 
         val lines = repository.lines().getOrNull()!!
         repository.lines()
@@ -209,12 +210,27 @@ class StationRepositoryImplTest {
     }
 
     @Test
+    fun `the dictionary is held for every screen once answered, and read off the disk at the next launch`() = runTest {
+        val service = FakeCommuteService().apply { operators = { fixture<List<OperatorWithLines>>("operators.json") } }
+        val repository = LineRepositoryImpl(service, queries(), backgroundScope)
+        assertTrue(repository.dictionary.value.isEmpty())
+
+        repository.lines()
+        assertEquals(setOf("KCI:C", "KCI:B", "MRTJ:M"), repository.dictionary.value.keys)
+
+        // The next launch, offline: nobody asks, and it's there all the same.
+        val later = LineRepositoryImpl(FakeCommuteService(), queries(), backgroundScope)
+        runCurrent()
+        assertEquals(setOf("KCI:C", "KCI:B", "MRTJ:M"), later.dictionary.value.keys)
+    }
+
+    @Test
     fun `a failed dictionary fetch is retried next time`() = runTest {
         var fail = true
         val service = FakeCommuteService().apply {
             operators = { if (fail) throw IOException("offline") else emptyList() }
         }
-        val repository = LineRepositoryImpl(service, queries())
+        val repository = LineRepositoryImpl(service, queries(), backgroundScope)
 
         assertTrue(repository.lines().leftOrNull() is Failure.Network.NoConnection)
         fail = false

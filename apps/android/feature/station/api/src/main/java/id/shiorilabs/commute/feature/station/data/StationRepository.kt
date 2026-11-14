@@ -14,7 +14,7 @@ import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Stations and their boards. Answers are cached, on disk too, so the suspend calls answer at once
@@ -96,11 +96,11 @@ interface LineRepository {
      */
     suspend fun lines(): Either<Failure, Map<String, LineInfo>>
 
-    /** The dictionary if it has been loaded this session, without asking. */
-    fun cachedLines(): Map<String, LineInfo>? = null
-}
-
-/** Loads the line dictionary into [target], which keeps what it held when the lookup fails. */
-suspend fun LineRepository.loadInto(target: MutableStateFlow<Map<String, LineInfo>>) {
-    lines().onRight { target.value = it }
+    /**
+     * The dictionary as the app holds it, one for every screen: empty until it has loaded, then
+     * whatever was last fetched. It loads by itself (at launch, on reconnecting, and whenever
+     * someone starts watching it still empty), so a screen only watches; its value is there for
+     * whoever just needs it now. A retry asks with [lines], whose answer lands here too.
+     */
+    val dictionary: StateFlow<Map<String, LineInfo>>
 }

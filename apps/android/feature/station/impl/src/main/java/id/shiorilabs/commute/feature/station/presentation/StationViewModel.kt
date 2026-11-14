@@ -16,7 +16,6 @@ import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.data.boardHour
 import id.shiorilabs.commute.feature.station.data.cachedBoard
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.CrowdForecast
 import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -49,7 +48,7 @@ class StationViewModel @AssistedInject constructor(
     // Seeded from what the home feed already loaded, so a page opened from there arrives whole: its
     // title and cards are there to meet the shared-element transition on its first frame.
     private val board = MutableStateFlow(stationRepository.cachedBoard(stationId, now()) ?: StationBoard.loading(stationId))
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
     private val transfers = MutableStateFlow<UIState<List<Transfer>>>(
         stationRepository.cachedTransfers(stationId)?.let { UIState.Success(it) } ?: UIState.Idle,
     )
@@ -153,7 +152,7 @@ class StationViewModel @AssistedInject constructor(
 
     private fun loadLines() {
         viewModelScope.launch {
-            lineRepository.loadInto(lines)
+            lineRepository.lines()
         }
     }
 

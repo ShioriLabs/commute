@@ -57,10 +57,6 @@ class MapViewModel @Inject constructor(
         if (hubs.value.isEmpty()) {
             viewModelScope.launch { hubDirectory.hubs().onRight { list -> hubs.value = list.associateBy { it.id } } }
         }
-        // The line dictionary the rings are tinted from, ahead of the first tap.
-        if (lineRepository.cachedLines() == null) {
-            viewModelScope.launch { lineRepository.lines() }
-        }
     }
 
     fun retry() {
@@ -85,7 +81,7 @@ class MapViewModel @Inject constructor(
             initialSnapshot = session.snapshot,
             hubFor = ::hubFor,
             ringColorOf = ::ringColorOf,
-            lineColorOf = { key -> lineRepository.cachedLines()?.get(key)?.colorCode },
+            lineColorOf = { key -> lineRepository.dictionary.value[key]?.colorCode },
         ).also { controller = data to it }
     }
 
@@ -101,7 +97,7 @@ class MapViewModel @Inject constructor(
     /** The hub tap target [hubId] names, by its slug, with its busiest line's colour for the ring. */
     fun hubFor(hubId: String): Pair<String, Rgb?>? {
         val hub: HubSummary = hubs.value[hubId] ?: return null
-        val color = hub.lineKeys.firstOrNull()?.let { lineRepository.cachedLines()?.get(it) }?.colorCode
+        val color = hub.lineKeys.firstOrNull()?.let { lineRepository.dictionary.value[it] }?.colorCode
         return hub.slug to Rgb.parse(color)
     }
 
@@ -109,7 +105,7 @@ class MapViewModel @Inject constructor(
     suspend fun ringColorOf(stationId: String): Rgb? {
         val station = (stationDirectory.cached() ?: stationDirectory.all().getOrNull())?.firstOrNull { it.id == stationId }
         val lineKey = station?.lineKeys?.firstOrNull() ?: return null
-        val lines = lineRepository.cachedLines() ?: lineRepository.lines().getOrNull() ?: return null
+        val lines = lineRepository.dictionary.value.ifEmpty { lineRepository.lines().getOrNull() ?: return null }
         return Rgb.parse(lines[lineKey]?.colorCode)
     }
 

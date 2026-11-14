@@ -30,7 +30,6 @@ import id.shiorilabs.commute.feature.journey.domain.withLink
 import id.shiorilabs.commute.feature.search.data.SearchRepository
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
-import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.nearbyStations
 import id.shiorilabs.commute.feature.journey.domain.nearbyPicks
 import id.shiorilabs.commute.core.location.LocationClient
@@ -100,7 +99,7 @@ class JourneyViewModel @AssistedInject constructor(
     /** `null` until stored settings are read: nothing is fetched under the wrong payment method. */
     private val criteria = MutableStateFlow<JourneyCriteria?>(null)
     private val stations = MutableStateFlow<List<PickableStation>?>(null)
-    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val lines = lineRepository.dictionary
     private val trip = MutableStateFlow<TripState>(TripState.Idle)
 
     /**
@@ -214,9 +213,6 @@ class JourneyViewModel @AssistedInject constructor(
                 .withLink(seed.paymentMethod, seed.at, seed.modes, seed.walking, now)
         }
         loadStations()
-        if (lines.value.isEmpty()) {
-            viewModelScope.launch { lineRepository.loadInto(lines) }
-        }
         viewModelScope.launch { fetchTrips() }
         viewModelScope.launch { followDeparture() }
     }

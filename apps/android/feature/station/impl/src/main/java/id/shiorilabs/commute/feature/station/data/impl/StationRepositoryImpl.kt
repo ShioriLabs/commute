@@ -24,7 +24,15 @@ import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
+import id.shiorilabs.commute.core.query.di.ApplicationScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -172,12 +180,20 @@ class StationRepositoryImpl @Inject constructor(
 /**
  * Serves the dictionary through the [QueryClient]: it is small and only changes with a deploy, so
  * it is held a day at a time, on disk too.
+ *
+ * [dictionary] is watched for the app's whole life, so the cache keeps it up: read off the disk at
+ * launch, fetched again when it goes stale or the phone comes back online.
  */
 @Singleton
 class LineRepositoryImpl @Inject constructor(
     private val service: CommuteService,
     private val queries: QueryClient,
+    @ApplicationScope scope: CoroutineScope,
 ) : LineRepository {
+
+    private val held = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
+
+    override val dictionary: StateFlow<Map<String, LineInfo>> = held.asStateFlow()
 
     private val linesQuery = QuerySpec(
         key = queryKey("operators"),
@@ -185,10 +201,26 @@ class LineRepositoryImpl @Inject constructor(
         policy = QueryPolicy.Static,
     ) { etag -> service.getOperators(etag) }
 
-    override suspend fun lines(): Either<Failure, Map<String, LineInfo>> =
-        queries.fetch(linesQuery).mapOnDataThread { it.toLineDictionary() }
+    init {
+        scope.launch {
+            queries.observe(linesQuery)
+                .mapNotNull { it.data }
+                .distinctUntilChanged()
+                .collect { held.value = it.toLineDictionary() }
+        }
+        // A fetch that failed for something other than the connection isn't asked again by the
+        // cache: the next screen to watch an empty dictionary asks.
+        scope.launch {
+            held.subscriptionCount.map { it > 0 }.distinctUntilChanged().collect { watched ->
+                if (watched && held.value.isEmpty()) lines()
+            }
+        }
+    }
 
-    override fun cachedLines(): Map<String, LineInfo>? = queries.peek(linesQuery)?.data?.toLineDictionary()
+    // Held as soon as it's answered, not a hop later through the watcher: the launch's warm-up
+    // waits on this, and the first screen reads [dictionary] right after.
+    override suspend fun lines(): Either<Failure, Map<String, LineInfo>> =
+        queries.fetch(linesQuery).mapOnDataThread { it.toLineDictionary() }.onRight { held.value = it }
 }
 
 /**
