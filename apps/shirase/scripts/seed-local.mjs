@@ -48,7 +48,7 @@ function readdirSafe(dir) {
 process.chdir(SHIRASE_DIR)
 const { env, dispose } = await getPlatformProxy({ configPath: path.join(SHIRASE_DIR, 'wrangler.toml') })
 try {
-  console.log(`Putting ${objects.length} objects into local ${'shirase-tiles'}`)
+  console.log(`Putting ${objects.length} objects into local ${'shirase'}`)
   let done = 0
   for (const [key, file] of objects) {
     await env.TILES.put(key, readFileSync(file))

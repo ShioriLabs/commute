@@ -24,7 +24,7 @@ It serves three things from one R2 bucket, all from one origin:
 
 A tileset is named for its build date, e.g. `jabodetabek-20261114`. To refresh the map you upload a new name and point the style at it. Nothing is overwritten in place, so a cached tile can never outlive its archive.
 
-## R2 layout (`shirase-tiles`)
+## R2 layout (`shirase`)
 
 ```
 jabodetabek-20261114.pmtiles
@@ -110,11 +110,11 @@ The local edge cache persists in `.wrangler/state/v3/cache`. If you replace an o
 These steps are not scripted on purpose. Run them yourself:
 
 ```sh
-npx wrangler r2 bucket create shirase-tiles
-npx wrangler r2 object put shirase-tiles/jabodetabek-<build>.pmtiles --file data/jabodetabek-<build>.pmtiles --remote
+npx wrangler r2 bucket create shirase
+npx wrangler r2 object put shirase/jabodetabek-<build>.pmtiles --file data/jabodetabek-<build>.pmtiles --remote
 # glyphs and sprites: ~1,300 small files, easiest with rclone against R2's S3 API:
-#   rclone copy data/fonts   r2:shirase-tiles/fonts
-#   rclone copy data/sprites r2:shirase-tiles/sprites
+#   rclone copy data/fonts   r2:shirase/fonts
+#   rclone copy data/sprites r2:shirase/sprites
 npx wrangler deploy
 ```
 

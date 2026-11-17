@@ -17,7 +17,7 @@ import { buildStyle, isTheme, type Theme } from './style'
  * (/styles/{theme}.json, src/style.ts), so the web app and Android load one URL
  * and the whole basemap comes from one origin.
  *
- * R2 layout (bucket `shirase-tiles`):
+ * R2 layout (bucket `shirase`):
  *   <tileset>.pmtiles             e.g. jabodetabek-20261114.pmtiles
  *   fonts/<font stack>/<a>-<b>.pbf
  *   sprites/<name>.json|.png      light, light@2x, dark, dark@2x
