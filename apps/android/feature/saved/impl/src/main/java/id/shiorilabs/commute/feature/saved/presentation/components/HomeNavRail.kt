@@ -64,8 +64,8 @@ fun HomeNavRail(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Opens the integration map; its card sits after search, as on the web. */
-    onMapClick: () -> Unit = {},
+    /** Opens the integration map; its card sits after search, as on the web. None without it. */
+    onMapClick: (() -> Unit)? = {},
     bottomInset: Dp = 0.dp,
     slidesWithPage: Boolean = true,
     /** Where the card button before settings comes from; none without it. */
@@ -110,7 +110,7 @@ fun HomeNavRail(
                 animateFace = !slidesWithPage && opened == RailCard.SEARCH,
             )
         }
-        Box(Modifier.navEntrance(1).navRailCardTransition(1, enabled = slidesWithPage)) {
+        if (onMapClick != null) Box(Modifier.navEntrance(1).navRailCardTransition(1, enabled = slidesWithPage)) {
             NavRailCard(
                 title = stringResource(R.string.saved_nav_map_title),
                 subtitle = stringResource(R.string.saved_nav_map_subtitle),

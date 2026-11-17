@@ -66,6 +66,9 @@ class MapViewModel @Inject constructor(
 
     private var controller: Pair<MapData, MapController>? = null
 
+    /** Home on the map: whether it has opened around the rider yet. Once per map. */
+    var homeCentred = false
+
     /**
      * The map's controller for [data], made once and kept while the map is on the back stack: a page
      * over the map and back finds it as it was, textures and all.

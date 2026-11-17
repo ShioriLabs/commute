@@ -55,6 +55,7 @@ class ExperimentalViewModel @Inject constructor(
     val detailedRecording: StateFlow<Boolean> = preferences.detailedRecording.stateIn(viewModelScope, WhileUiSubscribed, false)
     val yishunPids: StateFlow<Boolean> = preferences.yishunPids.stateIn(viewModelScope, WhileUiSubscribed, false)
     val mapHitboxes: StateFlow<Boolean> = preferences.mapHitboxes.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val mapHome: StateFlow<Boolean> = preferences.mapHome.stateIn(viewModelScope, WhileUiSubscribed, false)
 
     val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, WhileUiSubscribed, true)
 
@@ -77,6 +78,8 @@ class ExperimentalViewModel @Inject constructor(
     fun setYishunPids(enabled: Boolean) = viewModelScope.launch { preferences.setYishunPids(enabled) }
 
     fun setMapHitboxes(enabled: Boolean) = viewModelScope.launch { preferences.setMapHitboxes(enabled) }
+
+    fun setMapHome(enabled: Boolean) = viewModelScope.launch { preferences.setMapHome(enabled) }
 
     /** The trip log's share sheet, or `null` with nothing logged yet. */
     fun shareTripLog(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(tripLog.share()) }
@@ -113,6 +116,7 @@ fun ExperimentalScreen(
     val imuSpeed by viewModel.imuSpeed.collectAsStateWithLifecycle()
     val detailedRecording by viewModel.detailedRecording.collectAsStateWithLifecycle()
     val yishunPids by viewModel.yishunPids.collectAsStateWithLifecycle()
+    val mapHome by viewModel.mapHome.collectAsStateWithLifecycle()
     val mapHitboxes by viewModel.mapHitboxes.collectAsStateWithLifecycle()
     val watchAutoOpen by viewModel.watchAutoOpen.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
@@ -131,6 +135,7 @@ fun ExperimentalScreen(
         imuSpeed = imuSpeed,
         detailedRecording = detailedRecording,
         yishunPids = yishunPids,
+        mapHome = mapHome,
         mapHitboxes = mapHitboxes,
         watchAutoOpen = watchAutoOpen,
         canHide = !debug,
@@ -144,6 +149,7 @@ fun ExperimentalScreen(
         onImuSpeed = { viewModel.setImuSpeed(it) },
         onDetailedRecording = { viewModel.setDetailedRecording(it) },
         onYishunPids = { viewModel.setYishunPids(it) },
+        onMapHome = { viewModel.setMapHome(it) },
         onMapHitboxes = { viewModel.setMapHitboxes(it) },
         onWatchAutoOpen = { viewModel.setWatchAutoOpen(it) },
         onShareTripLog = {
@@ -180,6 +186,7 @@ private fun ExperimentalContent(
     imuSpeed: Boolean = false,
     detailedRecording: Boolean = false,
     yishunPids: Boolean = false,
+    mapHome: Boolean = false,
     mapHitboxes: Boolean = false,
     watchAutoOpen: Boolean = true,
     onBack: () -> Unit = {},
@@ -191,6 +198,7 @@ private fun ExperimentalContent(
     onImuSpeed: (Boolean) -> Unit = {},
     onDetailedRecording: (Boolean) -> Unit = {},
     onYishunPids: (Boolean) -> Unit = {},
+    onMapHome: (Boolean) -> Unit = {},
     onMapHitboxes: (Boolean) -> Unit = {},
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
@@ -247,6 +255,12 @@ private fun ExperimentalContent(
             subtitle = stringResource(R.string.settings_experimental_yishun_pids_detail),
             checked = yishunPids,
             onCheckedChange = onYishunPids,
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_map_home),
+            subtitle = stringResource(R.string.settings_experimental_map_home_detail),
+            checked = mapHome,
+            onCheckedChange = onMapHome,
         )
         SettingsSwitch(
             title = stringResource(R.string.settings_experimental_imu_speed),

@@ -20,6 +20,8 @@ dependencies {
     implementation(project(":core:ui"))
     // StationRepository/LineRepository, the domain models, and LineCard.
     implementation(project(":feature:station:api"))
+    // MapHome: home on the map, the Experimental prototype. The map feature's seam.
+    implementation(project(":feature:map:api"))
     // SavedRouteCard: a pinned pair's card, the journey feature's seam.
     implementation(project(":feature:journey:api"))
     // CardTap: a card touched to the phone, read on home. The card feature's seam.
