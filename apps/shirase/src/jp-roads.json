@@ -1,0 +1,324 @@
+{
+  "$comment": [
+    "The jp theme's road cross-sections: Japanese road markings drawn on Jakarta's roads.",
+    "Read by scripts/build-jp-roads.mjs (which bakes the road surfaces and markings into the tileset) and src/jp-roads.ts (which styles them), so the two cannot disagree.",
+    "Sources: 道路標識、区画線及び道路標示に関する命令 (S35総理府・建設省令3, as in force 2026-09-01) 別表第三〜第六;",
+    "MLIT circular 区画線の設置様式について (S49.12.26 都街発67・道企発99), whose standard values are what is actually painted;",
+    "道路構造令 第5条 (lane widths) and 第8条 (shoulders). All lengths in metres.",
+    "Every cross-section is symmetric about its centre, so a road reads the same whichever way it was drawn.",
+    "Each `lines` entry is drawn at +offset and -offset (once when offset is 0). `dash` is [painted, gap]; omitted means solid.",
+    "The baked tileset is shared by every theme: jp draws its markings, light and dark only the surfaces and kerbs. Paint features carry k: kerb (the asphalt outline), edge (edge lines) or mark (everything else).",
+    "pavement: mapped sidewalks (OSM footway=sidewalk) paved as a widthM strip joined to the nearest kerb within reachM, surface paving `sidewalk`; pedestrian streets (kind_detail pedestrian) a streetWidthM strip. Light and dark draw it as Apple Maps' block edges; jp leaves it out.",
+    "medians: planted strips between carriageways, inferred (OSM barely maps them): a named road's carriageways and the busways along it, closed over gaps up to maxWidthM, minus every road surface, kept in pieces at least minLengthM long; surface paving `median`, light and dark only. Only on the stretches listed: a road (name contains `name`) inside `box` ([W, S, E, N], lon/lat), where its medians are known to be green.",
+    "highwayKinds: roads paved `highway` on top of the asphalt, so light and dark keep toll roads tinted up close; jp draws them as asphalt.",
+    "tileset: the baked roads (scripts/build-jp-roads.mjs), versioned by name: bump it whenever it is rebuilt with different geometry or markings, since tiles are cached for a day.",
+    "boldStripeFactor: stripes are drawn this much wider at minzoom, easing to true width at trueFromZoom, so a 0.15 m line is visible at z17.",
+    "kerbRadiusM: inside corners where roads meet are rounded to this radius, like a kerb return (5 m is a common urban radius), and only near junctions, so medians between one-way pairs stay open.",
+    "smoothing: centrelines are drawn as a curve through the OSM vertices (centripetal Catmull-Rom), resampled every stepM, except across turns sharper than maxTurnDeg, which stay corners.",
+    "Rows with `link: true` match only link roads (ramps); every other row excludes them. Rows with `named: true` match only roads that have a name. Rows with no `lines` are surface only: they make the road network one continuous plane without being marked.",
+    "edge: true marks a 車道外側線. Except on motorways, edge lines are not offset per road: they are the outline of the merged road surface inset by the shoulder, so they follow every kerb return round a corner and never cross a junction mouth, as real edge lines do.",
+    "hiddenAccess (per row): roads of that row with these OSM access values are not drawn. Only service roads use it: a building's internal roads are private service roads, while gated neighbourhood streets (Kebayoran's portal streets, Jalan Lamandau) are private too but residential, named, and real streets. Never `no`: TransJakarta busways and some bus-only ramps are tagged access=no.",
+    "edgesAlongRoad: true keeps a row's edge lines as per-road offsets (motorways: their wider shoulder differs from the 0.5 m every other row shares, and they meet nothing at grade)."
+  ],
+  "tileset": "roads-v1",
+  "highwayKinds": ["motorway", "motorway_link"],
+  "pavement": { "widthM": 2, "reachM": 8, "streetWidthM": 6 },
+  "footbridges": { "widthM": 3 },
+  "merge": {
+    "maxGapM": 40,
+    "sampleM": 4,
+    "minLengthM": 10,
+    "medianM": 1.5,
+    "islandMaxM2": 800,
+    "islandReachM": 4,
+    "islandStraightenM": 0.4,
+    "islandCornerM": 1.5,
+    "stretches": [
+      { "name": "Jalan Doktor Ide Anak Agung Gde Agung", "box": [106.8245, -6.2335, 106.8315, -6.2230], "medianM": 3, "green": true, "note": "Mega Kuningan's spine, to SMBC Tower: a planted median about a person wide" },
+      { "name": "Jalan Gilimanuk", "box": [106.8293, -6.2345, 106.8320, -6.2320], "medianM": 3, "green": true, "note": "Mega Kuningan's entrance from Rasuna Said, continuing it" },
+      { "name": "Jalan Profesor Doktor Satrio", "box": [106.8170, -6.2267, 106.8491, -6.2111], "medianM": 4, "green": true, "note": "recon 2026-11-17: full length, grass, 4 m" },
+      { "name": "Jalan Haji Oemar Said Cokroaminoto", "box": [106.8271, -6.2035, 106.8308, -6.1864], "medianM": 1, "note": "recon: full length, kerb, 1 m" },
+      { "name": "Jalan Kyai Haji Mas Mansyur", "box": [106.8134, -6.2154, 106.8198, -6.1876], "medianM": 1, "note": "recon: full length, kerb, 1 m" },
+      { "name": "Jalan Pangeran Antasari", "box": [106.8017, -6.2936, 106.8096, -6.2549], "medianM": 2, "green": true, "note": "recon: full length, grass, 2 m" },
+      { "name": "Jalan RS Fatmawati", "box": [106.7936, -6.2930, 106.7986, -6.2578], "medianM": 2, "green": true, "note": "recon: TB Simatupang to Dharmawangsa X, grass, ~2 m" },
+      { "name": "Jalan RS Fatmawati", "box": [106.7936, -6.2578, 106.7986, -6.2540], "medianM": 2, "note": "recon: Dharmawangsa X to Panglima Polim, herringbone (painted), ~2 m" },
+      { "name": "Jalan Sultan Iskandar Muda", "box": [106.7804, -6.2666, 106.7864, -6.2338], "medianM": 1, "green": true, "note": "recon: full length, grass, 1 m" },
+      { "name": "Jalan Metro Pondok Indah", "box": [106.7770, -6.2894, 106.7846, -6.2629], "medianM": 1, "green": true, "note": "recon: full length, grass, 1 m" },
+      { "name": "Jalan Kapten Tendean", "box": [106.8170, -6.2415, 106.8343, -6.2381], "medianM": 1.5, "green": true, "note": "recon: Tendean-Monginsidi-Trunojoyo-Kyai Maja, grass, 1-2 m" },
+      { "name": "Jalan Robert Wolter Monginsidi", "box": [106.8017, -6.2408, 106.8186, -6.2379], "medianM": 1.5, "green": true, "note": "recon: as Tendean" },
+      { "name": "Jalan Trunojoyo", "box": [106.7977, -6.2408, 106.8033, -6.2390], "medianM": 1.5, "green": true, "note": "recon: as Tendean" },
+      { "name": "Jalan Kyai Maja", "box": [106.7853, -6.2428, 106.7993, -6.2379], "medianM": 1.5, "green": true, "note": "recon: as Tendean" },
+      { "name": "Jalan Jenderal Sudirman", "box": [106.8159, -6.2160, 106.8235, -6.2032], "medianM": 5, "green": true, "note": "recon: Semanggi to the Karet flyover by Landmark Tower (Margono Djojohadikoesoemo), grass, 5 m; Koridor 1 down the middle, the median between its lanes" },
+      { "name": "Jalan Jenderal Sudirman", "box": [106.8217, -6.2032, 106.8241, -6.200684626687531], "medianM": 1, "note": "recon: Margono to -6.20068, 106.82314, kerb, 1 m" },
+      { "name": "Jalan Jenderal Sudirman", "box": [106.8215, -6.200684626687531, 106.8250, -6.1950], "medianM": 2, "green": true, "note": "recon: -6.20068, 106.82314 to Bundaran HI, grass, 2 m" }
+    ]
+  },
+  "medians": {
+    "maxWidthM": 12,
+    "minLengthM": 30,
+    "stretches": [
+      { "name": "Rasuna Said", "box": [106.826, -6.2336, 106.842, -6.2050], "note": "Kuningan Flyover's south end to the Singapore Embassy" },
+      { "name": "Jenderal Sudirman", "box": [106.799, -6.2275, 106.820, -6.2160], "note": "Semanggi flyover to Bundaran Senayan" },
+      { "name": "Husni Thamrin", "box": [106.819, -6.1992, 106.828, -6.1870], "note": "The City Tower, through Bundaran HI, to the Wahid Hasyim junction" },
+      { "name": "Jalan Panjang Raya", "box": [106.760, -6.2165, 106.778, -6.1600], "note": "its south end to the rail crossing at Pesing/Kedoya" }
+    ]
+  },
+  "minzoom": 17,
+  "trueFromZoom": 20,
+  "boldStripeFactor": 2.5,
+  "kerbRadiusM": 5,
+  "smoothing": {
+    "maxTurnDeg": 60,
+    "stepM": 1
+  },
+  "colours": {
+    "asphalt": "#4b4e52",
+    "white": "#f2f2ee",
+    "yellow": "#f0a81c",
+    "busLane": "#a24a35"
+  },
+  "rows": [
+    {
+      "id": "local",
+      "kindDetail": [
+        "residential",
+        "unclassified"
+      ],
+      "oneway": "any",
+      "widthM": 5,
+      "background": "asphalt",
+      "lines": [
+        {
+          "offsetM": 2,
+          "widthM": 0.15,
+          "colour": "white",
+          "ref": "路側帯 (108) / 車道外側線 (103): white solid 0.15–0.20",
+          "edge": true
+        }
+      ],
+      "note": "A carriageway under 5.5 m gets no centre line (別表第三), just the roadside strips, like a Japanese 生活道路."
+    },
+    {
+      "id": "collector-twoway",
+      "kindDetail": [
+        "secondary",
+        "tertiary"
+      ],
+      "oneway": "no",
+      "widthM": 7,
+      "background": "asphalt",
+      "lines": [
+        {
+          "offsetM": 0,
+          "widthM": 0.15,
+          "colour": "white",
+          "dash": [
+            5,
+            5
+          ],
+          "ref": "車道中央線 (101) broken, two-lane road: width 0.12–0.15, ℓ1 3–10, ℓ2 = ℓ1; circular standard 5.00 / 5.00, width 0.15"
+        },
+        {
+          "offsetM": 3,
+          "widthM": 0.15,
+          "colour": "white",
+          "ref": "車道外側線 (103): 0.15",
+          "edge": true
+        }
+      ],
+      "note": "One 3.0 m lane each way: a 6.0 m carriageway, over the 5.5 m that requires a centre line (別表第三)."
+    },
+    {
+      "id": "collector-oneway",
+      "kindDetail": [
+        "secondary",
+        "tertiary"
+      ],
+      "oneway": "yes",
+      "widthM": 7,
+      "background": "asphalt",
+      "lines": [
+        {
+          "offsetM": 0,
+          "widthM": 0.15,
+          "colour": "white",
+          "dash": [
+            5,
+            5
+          ],
+          "ref": "車線境界線 (102) broken: circular note 1(2) allows 1:1 at ℓ1 = ℓ2 = 5 m in dense urban areas"
+        },
+        {
+          "offsetM": 3,
+          "widthM": 0.15,
+          "colour": "white",
+          "ref": "車道外側線 (103): 0.15",
+          "edge": true
+        }
+      ],
+      "note": "Two 3.0 m lanes (第5条) plus 0.5 m shoulders."
+    },
+    {
+      "id": "arterial-twoway",
+      "kindDetail": [
+        "trunk",
+        "primary"
+      ],
+      "oneway": "no",
+      "widthM": 14,
+      "background": "asphalt",
+      "lines": [
+        {
+          "offsetM": 0.15,
+          "widthM": 0.15,
+          "colour": "yellow",
+          "ref": "追越しのための右側部分はみ出し通行禁止 (102): yellow; drawn as the two-line 車道中央線 the circular recommends for 4+ lanes without a median (note 4): width 0.15, spacing 0.15"
+        },
+        {
+          "offsetM": 3.25,
+          "widthM": 0.15,
+          "colour": "white",
+          "dash": [
+            6,
+            9
+          ],
+          "ref": "車線境界線 (102) broken: circular ① 6.00 / 9.00"
+        },
+        {
+          "offsetM": 6.5,
+          "widthM": 0.15,
+          "colour": "white",
+          "ref": "車道外側線 (103): 0.15",
+          "edge": true
+        }
+      ],
+      "note": "Two 3.25 m lanes each way plus 0.5 m shoulders."
+    },
+    {
+      "id": "arterial-oneway",
+      "kindDetail": [
+        "trunk",
+        "primary"
+      ],
+      "oneway": "yes",
+      "widthM": 10.75,
+      "background": "asphalt",
+      "lines": [
+        {
+          "offsetM": 4.875,
+          "widthM": 0.15,
+          "colour": "white",
+          "ref": "車道外側線 (103): circular standard 0.15 for ① urban roads",
+          "edge": true
+        },
+        {
+          "offsetM": 1.625,
+          "widthM": 0.15,
+          "colour": "white",
+          "dash": [
+            6,
+            9
+          ],
+          "ref": "車線境界線 (102) broken: circular ① standard 6.00 / 9.00, width 0.15"
+        }
+      ],
+      "note": "Three 3.25 m lanes (道路構造令 第5条, 第四種第一級) plus 0.5 m shoulders (第8条, 第四種)."
+    },
+    {
+      "id": "motorway",
+      "kindDetail": [
+        "motorway"
+      ],
+      "oneway": "any",
+      "widthM": 13.5,
+      "background": "asphalt",
+      "lines": [
+        {
+          "offsetM": 5.25,
+          "widthM": 0.2,
+          "colour": "white",
+          "ref": "車道外側線 (103): 0.15–0.20, circular standard 0.20 for ③ (80 km/h+ motorways)",
+          "edge": true
+        },
+        {
+          "offsetM": 1.75,
+          "widthM": 0.15,
+          "colour": "white",
+          "dash": [
+            8,
+            12
+          ],
+          "ref": "車線境界線 (102) broken: ℓ1 3–10, ℓ2 (1.0–2.0)ℓ1; circular ③ standard 8.00 / 12.00, width 0.15"
+        }
+      ],
+      "note": "Three 3.5 m lanes (道路構造令 第5条, 第一種) plus 1.5 m on each side; the left shoulder (2.5 m) is split evenly to keep the section symmetric.",
+      "edgesAlongRoad": true
+    },
+    {
+      "id": "link",
+      "kindDetail": [
+        "motorway_link",
+        "trunk_link",
+        "primary_link",
+        "secondary_link",
+        "tertiary_link"
+      ],
+      "oneway": "any",
+      "link": true,
+      "widthM": 5.5,
+      "background": "asphalt",
+      "lines": [
+        {
+          "offsetM": 2.25,
+          "widthM": 0.15,
+          "colour": "white",
+          "ref": "車道外側線 (103): white solid 0.15–0.20; a one-lane ramp keeps its edge lines",
+          "edge": true
+        }
+      ],
+      "note": "One 3.5 m lane plus shoulders, the usual ramp."
+    },
+    {
+      "id": "service",
+      "kindDetail": [
+        "service"
+      ],
+      "oneway": "any",
+      "named": true,
+      "hiddenAccess": ["private"],
+      "widthM": 4,
+      "background": "asphalt",
+      "lines": [],
+      "note": "Access roads: surface only, so the street network reads as one plane. Named ones only: the tiles drop OSM's service=* subtype, so a mall's lobby loops and parking aisles (Grand Indonesia) look exactly like a public service lane, except that they have no name."
+    },
+    {
+      "id": "living",
+      "kindDetail": [
+        "living_street"
+      ],
+      "oneway": "any",
+      "widthM": 4,
+      "background": "asphalt",
+      "lines": [],
+      "note": "Gang and living streets: surface only."
+    },
+    {
+      "id": "busway",
+      "kindDetail": [
+        "busway"
+      ],
+      "oneway": "any",
+      "widthM": 3.5,
+      "background": "busLane",
+      "lines": [
+        {
+          "offsetM": 1.6,
+          "widthM": 0.15,
+          "colour": "yellow",
+          "ref": "進路変更禁止 (102の2): yellow solid, 0.10–0.15; buses may not leave, and nothing may enter"
+        }
+      ],
+      "note": "TransJakarta busway lanes as a Japanese bus-only lane: coloured paving (a common Japanese treatment, colour not set by the ordinance) inside yellow no-lane-change lines. The painted バス専用 text (109の6) is not drawn: a line pattern cannot place it, and PT Sans has no kana."
+    }
+  ]
+}

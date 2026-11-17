@@ -57,6 +57,16 @@ export function openArchive(bucket: R2Bucket, tileset: string): Archive {
   return archive
 }
 
+/*
+ * Forget one archive, so the next request opens it afresh. Called when the
+ * object turned out to be missing: the pmtiles cache keeps the failed header
+ * read, so without this an archive asked for before it was uploaded stays a
+ * 404 for the life of the isolate (seen with jp-roads-v2 locally).
+ */
+export function closeArchive(tileset: string): void {
+  archives.delete(`${tileset}.pmtiles`)
+}
+
 /** For tests: forget every open archive. */
 export function closeArchives(): void {
   archives.clear()

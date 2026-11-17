@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
-import { ArchiveNotFound, contentEncoding, getRawTile, openArchive } from './archive'
+import { ArchiveNotFound, closeArchive, contentEncoding, getRawTile, openArchive } from './archive'
 import { renderMapPage } from './map-page'
 import { buildStyle, isTheme, type Theme } from './style'
 
@@ -131,13 +131,21 @@ app.get('/', c => c.text('shirase: basemap tiles for Commute\n'))
 // Browsers ask for it on /map; empty rather than a 404 in the console.
 app.get('/favicon.ico', c => c.body(null, 204))
 
-/** Every archive in the bucket, newest first (the build date is in the name). */
+/*
+ * A basemap archive is named for its build date (`jabodetabek-20261114`).
+ * Other archives in the bucket, like the jp theme's baked roads, serve
+ * tiles too but are never a basemap: sorted by name alongside, they would
+ * have been picked as the "newest".
+ */
+const BASEMAP_TILESET = /^[a-z0-9-]+-\d{8}$/
+
+/** Every basemap archive in the bucket, newest first (the build date is in the name). */
 async function listTilesets(bucket: R2Bucket): Promise<string[]> {
   const listing = await bucket.list({ delimiter: '/' })
   return listing.objects
     .filter(o => o.key.endsWith('.pmtiles'))
     .map(o => o.key.replace(/\.pmtiles$/, ''))
-    .filter(name => TILESET.test(name))
+    .filter(name => BASEMAP_TILESET.test(name))
     .sort((a, b) => b.localeCompare(a))
 }
 
@@ -150,17 +158,27 @@ async function listTilesets(bucket: R2Bucket): Promise<string[]> {
 app.get('/styles/:file', async (c) => {
   const theme = STYLE_FILE.exec(c.req.param('file'))?.[1]
   if (!theme || !isTheme(theme)) return c.notFound()
-  return cached(c, async () => {
+
+  /*
+   * On a local dev server the style is built fresh every time: style code is
+   * what changes there, and the 5-minute cache kept serving the previous
+   * version of the jp theme mid-edit (twice). Production keeps the cache.
+   */
+  const url = new URL(c.req.url)
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+
+  const build = async () => {
     const tilesets = await listTilesets(c.env.TILES)
     const requested = c.req.query('tileset')
     const tileset = requested ?? tilesets[0]
     if (!tileset || !tilesets.includes(tileset)) return c.notFound()
 
-    const style = buildStyle({ origin: new URL(c.req.url).origin, tileset, theme })
+    const style = buildStyle({ origin: url.origin, tileset, theme })
     return new Response(JSON.stringify(style), {
-      headers: { 'content-type': 'application/json', 'cache-control': STYLE_CACHE, 'vary': 'Origin' }
+      headers: { 'content-type': 'application/json', 'cache-control': local ? 'no-store' : STYLE_CACHE, 'vary': 'Origin' }
     })
-  })
+  }
+  return local ? build() : cached(c, build)
 })
 
 /*
@@ -206,7 +224,10 @@ app.get('/:file', (c) => {
         headers: { 'content-type': 'application/json', 'cache-control': TILE_CACHE, 'vary': 'Origin' }
       })
     } catch (error) {
-      if (error instanceof ArchiveNotFound) return c.notFound()
+      if (error instanceof ArchiveNotFound) {
+        closeArchive(tileset)
+        return c.notFound()
+      }
       throw error
     }
   })
@@ -233,6 +254,7 @@ app.get('/:tileset/:z/:x/:file', (c) => {
        */
       return new Response(tile.data, { headers, encodeBody: 'manual' })
     } catch (error) {
+      if (error instanceof ArchiveNotFound) closeArchive(tileset)
       if (error instanceof ArchiveNotFound || error instanceof RangeError) return c.notFound()
       throw error
     }

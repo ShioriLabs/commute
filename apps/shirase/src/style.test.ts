@@ -1,3 +1,4 @@
+import POIS from './pois.json'
 import { describe, expect, it } from 'vitest'
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec'
 import { buildStyle, OVERLAY_LAYER_ID, remapFonts, THEMES, type Theme } from './style'
@@ -22,7 +23,7 @@ describe('buildStyle', () => {
   it('points every URL back at shirase, absolutely', () => {
     const style = styleFor('dark')
     expect(style.glyphs).toBe(`${ORIGIN}/fonts/{fontstack}/{range}.pbf`)
-    expect(style.sprite).toBe(`${ORIGIN}/sprites/dark`)
+    expect(style.sprite).toBe(`${ORIGIN}/sprites/${POIS.themes.dark.sprite}`)
     expect(style.sources.protomaps).toEqual({ type: 'vector', url: `${ORIGIN}/${TILESET}.json` })
     expect(style.metadata).toMatchObject({ 'shirase:tileset': TILESET, 'shirase:theme': 'dark' })
   })

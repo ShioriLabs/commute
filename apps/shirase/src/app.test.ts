@@ -1,3 +1,4 @@
+import POIS from './pois.json'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import app from './app'
 import { closeArchives } from './archive'
@@ -61,6 +62,19 @@ describe('tiles', () => {
     ['an archive that is not there', '/nowhere/0/0/0.mvt']
   ])('answers 404 for %s', async (_, path) => {
     expect((await request(path).response).status).toBe(404)
+  })
+
+  /*
+   * The spec bump to jp-roads-v2 made a browser ask for it before the build
+   * had uploaded it; the failed header read stayed cached with the archive,
+   * and v2 answered 404 for the life of the isolate even once uploaded.
+   */
+  it('serves an archive uploaded after a request for it 404ed', async () => {
+    expect((await request('/later-20261201.json').response).status).toBe(404)
+    expect((await request('/later-20261201/0/0/0.mvt').response).status).toBe(404)
+    bucket.put('later-20261201.pmtiles', buildArchive([{ z: 0, x: 0, y: 0, data: new Uint8Array([4]) }]))
+    expect((await request('/later-20261201.json').response).status).toBe(200)
+    expect((await request('/later-20261201/0/0/0.mvt').response).status).toBe(200)
   })
 
   it('re-reads the header when the archive is replaced under a live isolate', async () => {
@@ -131,7 +145,25 @@ describe('/styles', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN)
     const style = await res.json() as { sources: { protomaps: { url: string } }, sprite: string }
     expect(style.sources.protomaps.url).toBe(`https://shirase.example/${TILESET}.json`)
-    expect(style.sprite).toBe('https://shirase.example/sprites/light')
+    expect(style.sprite).toBe(`https://shirase.example/sprites/${POIS.themes.light.sprite}`)
+  })
+
+  it('builds fresh, uncached, on a local dev host', async () => {
+    const cache = new FakeCache();
+    (globalThis as { caches?: unknown }).caches = { default: cache }
+    const env = { TILES: bucket.asR2(), ALLOWED_ORIGINS: ORIGIN }
+    const ctx = fakeExecutionContext()
+    const res = await app.request('http://localhost:3002/styles/light.json', {}, env, ctx)
+    await ctx.settle()
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(cache.store.size).toBe(0)
+  })
+
+  it('never takes the junction archive for the newest basemap', async () => {
+    bucket.put('jp-junctions-v1.pmtiles', new Uint8Array([0]))
+    const style = await (await request('/styles/light.json').response).json() as { sources: { protomaps: { url: string } } }
+    expect(style.sources.protomaps.url).toBe(`https://shirase.example/${TILESET}.json`)
   })
 
   it('pins ?tileset= when the bucket holds it', async () => {
@@ -172,7 +204,7 @@ describe('/map test page', () => {
     expect(config.tileset).toBe(TILESET)
     expect(config.origin).toBe('https://shirase.example')
     expect(config.theme).toBe('light')
-    expect(config.themes).toEqual(['light', 'dark'])
+    expect(config.themes).toEqual(['light', 'dark', 'jp'])
   })
 
   it('opens the requested tileset and theme, ignoring unknown ones', async () => {

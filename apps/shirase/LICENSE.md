@@ -90,8 +90,10 @@ This repository grants no license to them. They may be used only as part of
 Commute. Any other use, copying or redistribution needs permission from
 Shiori Labs.
 
-None exist yet. Everything shirase currently serves under `/fonts/` and
-`/sprites/` is third-party (section 5).
+So far that is only the place icons' design in the `commute-*` sprite sheets:
+each glyph on a coloured circle with a halo ring, in Commute's category colours.
+The glyphs themselves and the rest of those sheets are third-party (section 5),
+as is everything under `/fonts/`.
 
 ## 5. Third-party glyphs and sprites
 
@@ -118,6 +120,11 @@ The sprite sheets under `/sprites/` come from
 are derived from [tangrams/icons](https://github.com/tangrams/icons),
 Copyright (c) 2017 Mapzen, licensed under the
 [MIT License](https://github.com/tangrams/icons/blob/master/LICENSE.md).
+
+The `commute-*` sheets copy those sheets unchanged and add place icons drawn
+with glyphs from [Maki](https://github.com/mapbox/maki) by Mapbox, dedicated to
+the public domain under
+[CC0 1.0](https://github.com/mapbox/maki/blob/main/LICENSE.txt).
 
 ## 6. SIL Open Font License 1.1
 
