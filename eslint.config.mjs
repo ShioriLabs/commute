@@ -21,6 +21,11 @@ export default defineConfig([
     files: ['apps/ward/**/*.ts'],
     languageOptions: { globals: globals.node }
   },
+  {
+    // shirase's local data scripts (seeding local R2) run under Node.
+    files: ['apps/shirase/scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node }
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   stylistic.configs.customize({
@@ -40,6 +45,8 @@ export default defineConfig([
     'apps/data-platform/dist/**/*',
     'apps/opengraph/.wrangler/**/*',
     'apps/opengraph/dist/**/*',
+    'apps/shirase/.wrangler/**/*',
+    'apps/shirase/dist/**/*',
     // Build output of the routing engine, emitted by `tsc -p libs/tsundere`.
     'libs/*/dist/**/*',
     // Generated data: a vendored base64 font and the SVG card template string.
