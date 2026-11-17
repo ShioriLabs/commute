@@ -55,6 +55,9 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Kotak Sentuh Peta": the map draws every tap target over the artwork, as the web's `?debug=hitboxes`. */
     val mapHitboxes: Flow<Boolean> = dataStore.data.map { it[MAP_HITBOXES] == true }
 
+    /** "Peta di Beranda": home opens on the map, the saved stations in its sheet. A prototype. */
+    val mapHome: Flow<Boolean> = dataStore.data.map { it[MAP_HOME] == true }
+
     suspend fun setExperimentalUnlocked(unlocked: Boolean) = set(EXPERIMENTAL_UNLOCKED, unlocked)
 
     suspend fun setForceTripStart(enabled: Boolean) = set(FORCE_TRIP_START, enabled)
@@ -77,6 +80,8 @@ class DeveloperPreferencesRepository @Inject constructor(
 
     suspend fun setMapHitboxes(enabled: Boolean) = set(MAP_HITBOXES, enabled)
 
+    suspend fun setMapHome(enabled: Boolean) = set(MAP_HOME, enabled)
+
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         dataStore.edit { it[key] = value }
     }
@@ -94,5 +99,6 @@ class DeveloperPreferencesRepository @Inject constructor(
         val YISHUN_PIDS = booleanPreferencesKey("yishun_pids")
         val WATCH_AUTO_OPEN = booleanPreferencesKey("watch_auto_open")
         val MAP_HITBOXES = booleanPreferencesKey("map_hitboxes")
+        val MAP_HOME = booleanPreferencesKey("map_home")
     }
 }

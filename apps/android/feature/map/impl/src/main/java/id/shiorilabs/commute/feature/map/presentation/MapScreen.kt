@@ -11,6 +11,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.AndroidExternalSurface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -48,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -117,6 +120,7 @@ import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.MapLine
 import id.shiorilabs.commute.feature.map.domain.MapSelection
 import id.shiorilabs.commute.feature.map.domain.Viewport
+import id.shiorilabs.commute.feature.map.domain.approximateSpot
 import id.shiorilabs.commute.feature.station.presentation.StationSheet
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -173,7 +177,7 @@ fun MapScreen(
  * is false.
  */
 @Composable
-private fun BoxScope.MapChrome(innerPadding: PaddingValues, onBack: () -> Unit, title: Boolean = false, titleVisible: Boolean = true) {
+private fun BoxScope.MapChrome(innerPadding: PaddingValues, onBack: (() -> Unit)?, title: Boolean = false, titleVisible: Boolean = true) {
     // Light icons over a navy scrim that fades out below the status bar, as KitKat's translucent
     // bar did, whatever the theme: the artwork's busy top edge would otherwise run under the
     // clock, and a solid bar would cut it off.
@@ -185,7 +189,7 @@ private fun BoxScope.MapChrome(innerPadding: PaddingValues, onBack: () -> Unit, 
             .background(StatusScrim),
     )
 
-    CommuteIconButton(
+    if (onBack != null) CommuteIconButton(
         onClick = onBack,
         modifier = Modifier
             .align(Alignment.TopEnd)
@@ -330,6 +334,7 @@ private fun MapWithSheet(
     hubSheet: HubSheet,
     lineSheet: LineSheet,
     routeSheet: MapRouteSheet,
+    home: HomeSlots? = null,
 ) {
     val navigator = LocalNavigator.current
     val density = LocalDensity.current.density
@@ -387,16 +392,68 @@ private fun MapWithSheet(
     var routeSheetFull by remember { mutableStateOf(false) }
     // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
     // sheet does rather than once it has gone.
+    // Home on the map: its feed in the sheet until the map is panned, then the stations in view.
+    var mode by remember { mutableStateOf(HomeMode.Feed) }
+    var nearbyIds by remember { mutableStateOf(emptyList<String>()) }
+    var moves by remember { mutableIntStateOf(0) }
+    SideEffect {
+        controller.onUserMove = if (home != null) {
+            {
+                if (controller.selection.value == null && mode == HomeMode.Feed) mode = HomeMode.Nearby
+                moves++
+            }
+        } else {
+            {}
+        }
+    }
+    // Opens around the rider once home knows where they are, or on Manggarai with them nowhere near
+    // a station: once for this map, so neither coming back to it nor a later look moves the camera.
+    LaunchedEffect(controller, home?.riderNear) {
+        val near = home?.riderNear ?: return@LaunchedEffect
+        if (viewModel.homeCentred) return@LaunchedEffect
+        viewModel.homeCentred = true
+        val spot = approximateSpot(data.points, near.map { it.stationId to it.distanceM })
+        val at = spot ?: data.initialPoint?.let { it.centerX to it.centerY } ?: return@LaunchedEffect
+        controller.centreOn(at.first, at.second)
+    }
+    // The stations in view once the map has stopped under the finger, and again once a fling has.
+    LaunchedEffect(moves, mode) {
+        if (home == null || mode != HomeMode.Nearby) return@LaunchedEffect
+        delay(NEARBY_SETTLE_MS)
+        nearbyIds = controller.stationsInView()
+        delay(NEARBY_FLING_MS)
+        nearbyIds = controller.stationsInView()
+    }
+    LaunchedEffect(home != null, mode) {
+        controller.setRestInset(
+            when {
+                home == null -> 0.0
+                mode == HomeMode.Feed -> HOME_REST_FRACTION
+                else -> Viewport.PEEK_FRACTION
+            },
+        )
+    }
     val sheetState = rememberMapSheetState(
-        onHiding = { if (controller.selection.value != null) controller.clearSelection() },
+        onHiding = {
+            if (controller.selection.value != null) controller.clearSelection() else if (home != null) mode = HomeMode.Feed
+        },
     )
+    // Home's feed in a sheet of its own, so it slides away as the map's comes up over it, as
+    // Citymapper's does, and keeps its place in the list meanwhile. Up at its rest from the start.
+    // Dragged away, it leaves the map to be looked at, as a pan does.
+    val feedState = rememberMapSheetState(onHiding = { mode = HomeMode.Nearby }, initial = SheetStop.Rest)
+    val feedShown = home != null && selection == null && mode == HomeMode.Feed
+    LaunchedEffect(feedShown) {
+        feedState.moveTo(if (feedShown) SheetStop.Rest else SheetStop.Hidden)
+    }
 
     // Up at its peek for a selection, away without one, and down to it for a line, which is drawn
     // on the map rather than in the sheet.
     val showsLine = selection is MapSelection.Line
-    LaunchedEffect(selection != null, showsLine, routeSheetFull) {
+    LaunchedEffect(selection != null, showsLine, routeSheetFull, mode) {
         sheetState.moveTo(
             when {
+                selection == null && home != null -> if (mode == HomeMode.Feed) SheetStop.Hidden else SheetStop.Peek
                 selection == null -> SheetStop.Hidden
                 routeSheetFull && selection == MapSelection.Route -> SheetStop.Full
                 else -> SheetStop.Peek
@@ -414,6 +471,8 @@ private fun MapWithSheet(
             else -> controller.clearSelection()
         }
     }
+    // Back from the stations in view to home's feed, the map left where it is.
+    BackHandler(enabled = home != null && selection == null && mode == HomeMode.Nearby) { mode = HomeMode.Feed }
     // Declared after, so they go first.
     BackHandler(enabled = picking != null) { viewModel.disarm() }
     BackHandler(enabled = lineChoices.isNotEmpty()) { controller.dismissLineChoices() }
@@ -435,8 +494,38 @@ private fun MapWithSheet(
             TapRipples(controller)
             val lost by controller.isLost.collectAsStateWithLifecycle()
             if (lost) MapLost(onRetry = controller::retryRenderer)
-            MapChrome(innerPadding, onBack = { navigator.pop() }, title = true, titleVisible = chromeVisible)
+            if (home == null) {
+                MapChrome(innerPadding, onBack = { navigator.pop() }, title = true, titleVisible = chromeVisible)
+            } else {
+                MapChrome(innerPadding, onBack = null)
+            }
         }
+        if (home != null) {
+            MapSheet(
+                state = feedState,
+                screenHeight = height,
+                height = height - topInset - SHEET_TOP_GAP,
+                peek = height * Viewport.PEEK_FRACTION.toFloat(),
+                fullTop = topInset + SHEET_TOP_GAP,
+                shape = RoundedCornerShape(topStart = SHEET_CORNER, topEnd = SHEET_CORNER),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                shadowElevation = 8.dp,
+                rest = height * HOME_REST_FRACTION.toFloat(),
+                stops = HomeFeedStops,
+            ) {
+                home.feed(openStation)
+            }
+            // Home's rail over the foot of the feed, leaving and coming back with it.
+            AnimatedVisibility(
+                visible = feedShown && picking == null,
+                enter = slideInVertically(tween(RAIL_SLIDE_MILLIS)) { it },
+                exit = slideOutVertically(tween(RAIL_SLIDE_MILLIS)) { it },
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            ) {
+                Box(Modifier.fillMaxWidth()) { home.rail(this) }
+            }
+        }
+
         // Full stops short of the status bar, the clock left clear.
         MapSheet(
             state = sheetState,
@@ -517,13 +606,22 @@ private fun MapWithSheet(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                null -> Unit
+                // Kept while it slides away for home's feed, rather than emptied as it goes.
+                null -> if (home != null) {
+                    Column(Modifier.fillMaxSize()) {
+                        NearbyHeader(onClose = { mode = HomeMode.Feed })
+                        home.nearby(nearbyIds, openStation)
+                    }
+                }
             }
         }
 
         // With no sheet up, as the web's phone corners: at the left the end being picked, the route
         // folded away, or the way into OTW; at the right the way back to the whole map and the credit.
-        if (selection == null) {
+        // On home, only once the map is being looked at or a pair is under way, and above the sheet.
+        val homeRow = home == null || mode == HomeMode.Nearby || picking != null || mapRoute.isSet
+        val sheetHeightPx = with(LocalDensity.current) { height.toPx() }
+        if (selection == null && homeRow) {
             val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             AnimatedVisibility(
                 visible = attributionOpen,
@@ -538,8 +636,12 @@ private fun MapWithSheet(
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .offset {
+                        val top = if (home != null) minOf(sheetState.offset, feedState.offset) else sheetHeightPx
+                        IntOffset(0, -(sheetHeightPx - top).coerceAtLeast(0f).toInt())
+                    }
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = bottom),
+                    .padding(start = 16.dp, end = 16.dp, bottom = if (home != null) 12.dp else bottom),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -929,3 +1031,95 @@ private const val STAND_IN_MAX_WAIT_MS = 800L
 
 /** How long the map waits in the background before letting its tiles go: the web's 3 s. */
 private const val BACKGROUND_RELEASE_MS = 3_000L
+
+/** What home on the map hands in: its feed, its list of stations in view, and its rail. */
+internal class HomeSlots(
+    val feed: @Composable (openStation: (stationId: String) -> Unit) -> Unit,
+    val nearby: @Composable (stationIds: List<String>, openStation: (stationId: String) -> Unit) -> Unit,
+    val rail: @Composable BoxScope.() -> Unit,
+    val riderNear: List<NearStation>?,
+)
+
+/** What home's sheet shows with nothing selected: its feed, or the stations in view once panned. */
+private enum class HomeMode { Feed, Nearby }
+
+/**
+ * Home on the map, the Experimental prototype: the map's own sheet, with home's feed in it resting
+ * part way up, and no way back, home being the root.
+ */
+@Composable
+internal fun MapHomeScreen(
+    innerPadding: PaddingValues,
+    slots: HomeSlots,
+    stationSheet: StationSheet,
+    hubSheet: HubSheet,
+    lineSheet: LineSheet,
+    routeSheet: MapRouteSheet,
+    modifier: Modifier = Modifier,
+    viewModel: MapViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    Box(modifier.fillMaxSize().background(Color.White)) {
+        when (val current = state) {
+            is UIState.Success -> MapWithSheet(
+                data = current.data,
+                route = Route.Map(),
+                viewModel = viewModel,
+                innerPadding = innerPadding,
+                stationSheet = stationSheet,
+                hubSheet = hubSheet,
+                lineSheet = lineSheet,
+                routeSheet = routeSheet,
+                home = slots,
+            )
+
+            is UIState.Error -> ProblemPanel(
+                message = stringResource(R.string.map_load_failed),
+                retryLabel = stringResource(R.string.map_retry),
+                onRetry = viewModel::retry,
+                modifier = Modifier.align(Alignment.Center).padding(24.dp),
+            )
+
+            else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+        }
+    }
+}
+
+/** "Sekitar": over the stations in view, with the way back to home's feed. */
+@Composable
+private fun NearbyHeader(onClose: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, top = 16.dp, end = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.map_home_nearby_title),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        CommuteIconButton(onClick = onClose) {
+            Icon(
+                imageVector = CommuteIcons.Close,
+                contentDescription = stringResource(R.string.map_home_nearby_close),
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** How much of the screen home's sheet covers at rest: the map shows over the rest. */
+private const val HOME_REST_FRACTION = 0.55
+
+/** Home's feed rests, goes full, or goes away below the screen for the map's sheet. */
+private val HomeFeedStops = setOf(SheetStop.Full, SheetStop.Rest, SheetStop.Hidden)
+
+/** The rail's slide off the foot of the screen with the feed, and back. */
+private const val RAIL_SLIDE_MILLIS = 250
+
+/** How long after the last pan the stations in view are looked up, and again for a fling's end. */
+private const val NEARBY_SETTLE_MS = 300L
+private const val NEARBY_FLING_MS = 700L

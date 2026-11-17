@@ -53,6 +53,7 @@ import id.shiorilabs.commute.feature.map.domain.Viewport
 import id.shiorilabs.commute.feature.map.domain.hitTest
 import id.shiorilabs.commute.feature.map.domain.lerpTransform
 import id.shiorilabs.commute.feature.map.domain.settled
+import id.shiorilabs.commute.feature.map.domain.stationsInView
 import id.shiorilabs.commute.feature.map.render.MapRenderThread
 import id.shiorilabs.commute.feature.map.render.RenderFrame
 import kotlinx.coroutines.CoroutineScope
@@ -94,6 +95,18 @@ class MapController(
 
     /** A tap opened something: the screen showing the map plays its haptic. */
     var onHit: () -> Unit = {}
+
+    /** The rider panned or pinched the map: home on the map turns its sheet to what's in view. */
+    var onUserMove: () -> Unit = {}
+
+    /**
+     * How much of the view's height a sheet covers with nothing selected: none on the map's own
+     * page, home's feed on home's map. The camera keeps the map clear of it as of a selection's.
+     */
+    private var restFraction: Double = 0.0
+
+    /** Where to open once the surface is up, asked for before it was. */
+    private var startSpot: Pair<Double, Double>? = null
 
     /**
      * While an end of OTW's pair is being picked on the map: a station tapped, by its id, instead
@@ -238,14 +251,17 @@ class MapController(
             height = height,
             worldWidth = manifest.worldWidth,
             worldHeight = manifest.worldHeight,
-            insetBottom = if (selected.value != null) height * Viewport.PEEK_FRACTION else 0.0,
+            insetBottom = height * if (selected.value != null) Viewport.PEEK_FRACTION else restFraction,
         )
         viewport = view
         fun recentred(t: Transform): Transform =
             if (previous == null) view.clamp(t) else view.centeredOn(t, t.worldX(previous.width / 2), t.worldY(previous.height / 2))
-        val start = rendered?.let(::recentred) ?: view.initial(data.initialPoint?.centerX, data.initialPoint?.centerY)
+        val opening = rendered?.let(::recentred) ?: view.initial(data.initialPoint?.centerX, data.initialPoint?.centerY)
+        val asked = startSpot
+        startSpot = null
+        val start = if (asked != null) view.focus(opening, asked.first, asked.second) else opening
         rendered = start
-        target = target?.let(::recentred) ?: start
+        target = if (asked != null) start else target?.let(::recentred) ?: start
         renderer.resize()
         invalidate()
     }
@@ -433,7 +449,7 @@ class MapController(
         val now = SystemClock.uptimeMillis()
         spotlight?.exit(now)
         isolate?.exit(now)
-        setSheetInset(0.0)
+        viewport?.let { setSheetInset(it.height * restFraction) }
         invalidate()
     }
 
@@ -534,6 +550,38 @@ class MapController(
         val current = rendered ?: return
         val clamped = view.clamp(current)
         if (settle && clamped != current) fly(current, clamped, Flight.SETTLE_MS) else target = target?.let(view::clamp)
+    }
+
+    /**
+     * With nothing selected, a sheet now covers [fraction] of the view's height: the camera keeps
+     * the map clear of it from here on.
+     */
+    fun setRestInset(fraction: Double) {
+        if (fraction == restFraction) return
+        restFraction = fraction
+        val view = viewport ?: return
+        if (selected.value == null) setSheetInset(view.height * fraction, settle = false)
+    }
+
+    /** The stations shown above the sheet, nearest the middle of what shows first. */
+    fun stationsInView(limit: Int = STATIONS_IN_VIEW): List<String> {
+        val view = viewport ?: return emptyList()
+        val at = rendered ?: return emptyList()
+        return stationsInView(data.points, at, view, limit)
+    }
+
+    /**
+     * Brings world point ([x], [y]) to the middle of what the sheet leaves showing: flown to with the
+     * map up, or where it opens with the surface not there yet.
+     */
+    fun centreOn(x: Double, y: Double) {
+        val view = viewport
+        val from = rendered
+        if (view == null || from == null) {
+            startSpot = x to y
+            return
+        }
+        fly(from, view.focus(from, x, y), Flight.TO_POINT_MS)
     }
 
     /** Back to the whole map, as the web's "Kembali ke tampilan penuh". */
@@ -734,6 +782,7 @@ class MapController(
                 is MapGestures.Event.Pan -> {
                     target = view.clamp(Transform(t.tx + event.dx, t.ty + event.dy, t.scale))
                     chromeVisible.value = false
+                    onUserMove()
                 }
 
                 MapGestures.Event.PinchStarted -> pinchStartScale = t.scale
@@ -741,6 +790,7 @@ class MapController(
                 is MapGestures.Event.Pinch -> {
                     target = view.zoomAt(t, event.anchorX, event.anchorY, pinchStartScale * event.factor / t.scale)
                     chromeVisible.value = false
+                    onUserMove()
                 }
 
                 is MapGestures.Event.Fling -> fling = Fling(event.vx, event.vy)
@@ -852,6 +902,9 @@ class MapController(
 
         /** The web's ripples: four at once at most. */
         const val MAX_RIPPLES = 4
+
+        /** How many stations "Sekitar" lists for a panned map. */
+        const val STATIONS_IN_VIEW = 6
 
         /** A route's framing keeps this clear of the view's edges, as on the web. */
         const val ROUTE_FIT_PADDING_DP = 48.0

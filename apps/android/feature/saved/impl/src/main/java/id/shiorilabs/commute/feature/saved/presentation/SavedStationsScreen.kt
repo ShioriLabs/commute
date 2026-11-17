@@ -15,7 +15,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -79,6 +79,9 @@ import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.saved.presentation.components.ChevronPullIndicator
 import id.shiorilabs.commute.feature.saved.presentation.components.HomeNavRail
 import id.shiorilabs.commute.feature.saved.presentation.components.LandedAbovePill
+import id.shiorilabs.commute.feature.map.presentation.MapHome
+import id.shiorilabs.commute.feature.map.presentation.NearStation
+import id.shiorilabs.commute.feature.saved.presentation.nearby.MapNearbyList
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyHeading
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyPromptCard
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyUiState
@@ -102,6 +105,8 @@ fun SavedStationsScreen(
     innerPadding: PaddingValues,
     savedRouteCard: SavedRouteCard,
     cardTap: CardTap,
+    /** Home on the map (Experimental): the feed goes into its sheet. Null for the list home. */
+    mapHome: MapHome? = null,
     viewModel: SavedStationsViewModel = hiltViewModel(),
     nearbyViewModel: NearbyViewModel = hiltViewModel(),
 ) {
@@ -123,6 +128,60 @@ fun SavedStationsScreen(
     val offline by rememberIsOffline()
     LaunchedEffect(now) {
         viewModel.onClockTick(now)
+    }
+
+    if (mapHome != null) {
+        // The sheet starts below the status bar; its foot is still the screen's.
+        val sheetPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding())
+        val slidesWithPage = railSlidesWithPage()
+        val around by nearbyViewModel.around.collectAsStateWithLifecycle()
+        mapHome.Content(
+            innerPadding = innerPadding,
+            feed = { openStation ->
+                SavedStationsContent(
+                    state = state,
+                    now = now,
+                    innerPadding = sheetPadding,
+                    offline = offline,
+                    onRetry = viewModel::retry,
+                    onRefresh = viewModel::refresh,
+                    onRefreshNoticeShown = viewModel::onRefreshNoticeShown,
+                    onStationClick = openStation,
+                    onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
+                    onEditClick = { navigator.goTo(Route.SettingsSavedStations) },
+                    savedRouteCard = savedRouteCard,
+                    cardTap = cardTap,
+                    nearby = nearby,
+                    raised = raised,
+                    onNearbyPermission = nearbyViewModel::onPermissionResult,
+                    onDismissNearby = nearbyViewModel::dismissPrompt,
+                    embedded = true,
+                )
+            },
+            nearby = { stationIds, openStation ->
+                MapNearbyList(
+                    stationIds = stationIds,
+                    lines = (state as? UIState.Success)?.data?.lines.orEmpty(),
+                    now = now,
+                    onStationClick = openStation,
+                    bottomInset = innerPadding.calculateBottomPadding(),
+                )
+            },
+            rail = {
+                HomeNavRail(
+                    onSearchClick = { navigator.goTo(Route.Search) },
+                    onSettingsClick = { navigator.goTo(Route.Settings) },
+                    onMapClick = null,
+                    bottomInset = innerPadding.calculateBottomPadding(),
+                    slidesWithPage = slidesWithPage,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    cardTap = cardTap,
+                )
+            },
+            riderNear = around?.map { NearStation(it.station.id, it.distanceM) },
+            modifier = Modifier,
+        )
+        return
     }
 
     SavedStationsContent(
@@ -170,6 +229,8 @@ private fun SavedStationsContent(
     raised: List<String> = emptyList(),
     onNearbyPermission: (Boolean) -> Unit = {},
     onDismissNearby: () -> Unit = {},
+    /** In home's sheet on the map: no rail (the map draws it) and no pull, which the sheet's drag takes. */
+    embedded: Boolean = false,
 ) {
     val coveredByPage = railSlidesWithPage()
 
@@ -223,6 +284,7 @@ private fun SavedStationsContent(
                     onNearbyPermission = onNearbyPermission,
                     onDismissNearby = onDismissNearby,
                     coveredByPage = coveredByPage,
+                    pullToRefresh = !embedded,
                 )
             }
 
@@ -240,7 +302,7 @@ private fun SavedStationsContent(
             }
         }
 
-        HomeNavRail(
+        if (!embedded) HomeNavRail(
             onSearchClick = onSearchClick,
             onMapClick = onMapClick,
             onSettingsClick = onSettingsClick,
@@ -318,6 +380,7 @@ private fun StationFeed(
     onNearbyPermission: (Boolean) -> Unit,
     onDismissNearby: () -> Unit,
     coveredByPage: Boolean,
+    pullToRefresh: Boolean = true,
 ) {
     val listDescription = stringResource(R.string.saved_station_list_description)
     // The station whose page was last opened from here: its name is the one that flies home. Only
@@ -449,22 +512,10 @@ private fun StationFeed(
             .filter { armed -> armed && !refreshing }
             .collect { haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
     }
-    PullToRefreshBox(
-        isRefreshing = feed.isRefreshing,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize(),
-        state = pullState,
-        // Drawn over the feed, but drawing in from under the bar's bottom edge rather than over its
-        // title.
-        indicator = {
-            ChevronPullIndicator(
-                state = pullState,
-                isRefreshing = feed.isRefreshing,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = barHeight),
-            )
-        },
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pullToRefresh(isRefreshing = feed.isRefreshing, state = pullState, enabled = pullToRefresh, onRefresh = onRefresh),
     ) {
         LazyColumn(
             state = listState,
@@ -664,6 +715,18 @@ private fun StationFeed(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = innerPadding.calculateBottomPadding() + NavRailClearance),
         )
+
+        // Drawn over the feed, but drawing in from under the bar's bottom edge rather than over its
+        // title.
+        if (pullToRefresh) {
+            ChevronPullIndicator(
+                state = pullState,
+                isRefreshing = feed.isRefreshing,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = barHeight),
+            )
+        }
     }
 }
 

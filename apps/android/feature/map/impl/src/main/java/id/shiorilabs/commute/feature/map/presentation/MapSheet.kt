@@ -37,8 +37,11 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Where the map's sheet rests: up to the status bar, at its peek, or away below the screen. */
-internal enum class SheetStop { Full, Peek, Hidden }
+/**
+ * Where the map's sheet rests: up to the status bar, part way up with home's feed (home on the map
+ * only), at its peek, or away below the screen.
+ */
+internal enum class SheetStop { Full, Rest, Peek, Hidden }
 
 /**
  * The map's sheet, in pixels from the top of the screen.
@@ -55,11 +58,13 @@ internal class MapSheetState(
     private val scope: CoroutineScope,
     /** As the rider sends the sheet away, so what it showed can go with it. */
     private val onHiding: () -> Unit,
+    /** Where it stands before it's first moved. */
+    initial: SheetStop = SheetStop.Hidden,
 ) {
-    val anchored = AnchoredDraggableState(SheetStop.Hidden)
+    val anchored = AnchoredDraggableState(initial)
 
     /** The stop it rests at or is settling to: where a drag started from. */
-    var stop by mutableStateOf(SheetStop.Hidden)
+    var stop by mutableStateOf(initial)
         private set
 
     private var settling: Job? = null
@@ -68,15 +73,13 @@ internal class MapSheetState(
     val offset: Float
         get() = anchored.offset.takeUnless { it.isNaN() } ?: anchored.anchors.positionOf(SheetStop.Hidden)
 
-    fun updateAnchors(full: Float, peek: Float, hidden: Float) {
-        anchored.updateAnchors(
-            DraggableAnchors {
-                SheetStop.Full at full
-                SheetStop.Peek at peek
-                SheetStop.Hidden at hidden
-            },
-            newTarget = stop,
-        )
+    /** The stops the sheet has now, by where each puts its top. One it's at and loses, it leaves for the nearest kept. */
+    fun updateAnchors(positions: Map<SheetStop, Float>) {
+        if (positions.isEmpty()) return
+        val anchors = DraggableAnchors { positions.forEach { (stop, at) -> stop at at } }
+        val at = anchored.offset.takeUnless { it.isNaN() } ?: positions[stop]
+        if (stop !in positions) stop = positions.minBy { (_, position) -> kotlin.math.abs(position - (at ?: position)) }.key
+        anchored.updateAnchors(anchors, newTarget = stop)
     }
 
     /**
@@ -85,6 +88,11 @@ internal class MapSheetState(
      * already gone, and one from before a selection came would close it.
      */
     fun moveTo(target: SheetStop, velocity: Float = 0f) {
+        // A stop the sheet doesn't have yet: its anchors, when they come, take it there.
+        if (anchored.anchors.size > 0 && !anchored.anchors.hasPositionFor(target)) {
+            stop = target
+            return
+        }
         stop = target
         settling?.cancel()
         settling = scope.launch {
@@ -122,22 +130,23 @@ internal class MapSheetState(
         if (anchored.offset.isNaN() || anchors.size == 0) return
         val at = offset
         fun positionOf(stop: SheetStop) = anchors.positionOf(stop)
+        val stops = SheetStop.entries.filter(anchors::hasPositionFor)
         val target = when {
             velocity <= -flickPx ->
-                SheetStop.entries.filter { positionOf(it) < at - AT_STOP_PX }.maxByOrNull(::positionOf) ?: SheetStop.Full
+                stops.filter { positionOf(it) < at - AT_STOP_PX }.maxByOrNull(::positionOf) ?: stops.minBy(::positionOf)
 
             velocity >= flickPx ->
-                SheetStop.entries.filter { positionOf(it) > at + AT_STOP_PX }.minByOrNull(::positionOf) ?: SheetStop.Hidden
+                stops.filter { positionOf(it) > at + AT_STOP_PX }.minByOrNull(::positionOf) ?: stops.maxBy(::positionOf)
 
             else -> {
-                val from = positionOf(stop)
+                val from = if (stop in stops) positionOf(stop) else at
                 if (abs(at - from) < commitPx) {
-                    stop
+                    stops.minBy { abs(positionOf(it) - from) }
                 } else {
                     val down = at > from
-                    SheetStop.entries
+                    stops
                         .filter { if (down) positionOf(it) > from else positionOf(it) < from }
-                        .minByOrNull { abs(positionOf(it) - at) } ?: stop
+                        .minByOrNull { abs(positionOf(it) - at) } ?: stops.minBy { abs(positionOf(it) - at) }
                 }
             }
         }
@@ -152,14 +161,15 @@ internal class MapSheetState(
 }
 
 @Composable
-internal fun rememberMapSheetState(onHiding: () -> Unit): MapSheetState {
+internal fun rememberMapSheetState(onHiding: () -> Unit, initial: SheetStop = SheetStop.Hidden): MapSheetState {
     val scope = rememberCoroutineScope()
-    return remember(scope) { MapSheetState(scope, onHiding) }
+    return remember(scope) { MapSheetState(scope, onHiding, initial) }
 }
 
 /**
- * [state]'s sheet over the screen, [height] tall: [peek] of it shows at its peek, and at full its
- * top stands [fullTop] from the top of the screen, [screenHeight] tall.
+ * [state]'s sheet over the screen, [height] tall: [peek] of it shows at its peek, [rest] at its
+ * rest, and at full its top stands [fullTop] from the top of the screen, [screenHeight] tall. It
+ * stops only at [stops].
  */
 @Composable
 internal fun MapSheet(
@@ -172,6 +182,8 @@ internal fun MapSheet(
     color: Color,
     shadowElevation: Dp,
     modifier: Modifier = Modifier,
+    rest: Dp = peek,
+    stops: Set<SheetStop> = DefaultStops,
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -180,7 +192,13 @@ internal fun MapSheet(
     val hiddenPx = with(density) { screenHeight.toPx() }
     SideEffect {
         with(density) {
-            state.updateAnchors(full = fullTop.toPx(), peek = (screenHeight - peek).toPx(), hidden = hiddenPx)
+            val positions = mapOf(
+                SheetStop.Full to fullTop.toPx(),
+                SheetStop.Rest to (screenHeight - rest).toPx(),
+                SheetStop.Peek to (screenHeight - peek).toPx(),
+                SheetStop.Hidden to hiddenPx,
+            )
+            state.updateAnchors(positions.filterKeys { it in stops })
         }
     }
     val connection = remember(state, flickPx, commitPx) { SheetScrollConnection(state, flickPx, commitPx) }
@@ -229,6 +247,9 @@ private class SheetScrollConnection(
 
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
 }
+
+/** The map's own sheet: no rest, which only home's feed has. */
+internal val DefaultStops: Set<SheetStop> = setOf(SheetStop.Full, SheetStop.Peek, SheetStop.Hidden)
 
 /** The sheet's settle: no overshoot past a stop, and done once within half a pixel of it. */
 private val SettleSpring = spring(dampingRatio = 1f, stiffness = 700f, visibilityThreshold = 0.5f)

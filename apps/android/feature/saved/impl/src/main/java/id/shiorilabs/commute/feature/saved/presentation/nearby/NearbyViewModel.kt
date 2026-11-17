@@ -93,6 +93,18 @@ class NearbyViewModel @Inject constructor(
     }.stateIn(viewModelScope, WhileUiSubscribed, emptyList())
 
     /**
+     * The stations nearest the rider, for home's map to open around: null until the first look has
+     * landed, empty with none in reach or no looking at all.
+     */
+    val around: StateFlow<List<NearbyStation>?> = combine(looking, lookup.settled, lookup.result) { looking, looked, result ->
+        when {
+            !looking -> emptyList()
+            !looked -> null
+            else -> result.around
+        }
+    }.stateIn(viewModelScope, WhileUiSubscribed, null)
+
+    /**
      * Whether [state] and [raised] show what the first look found, its boards loaded, or that there's
      * nothing to look for: home holds the splash until then, so the section is in place as home
      * opens rather than pushing the feed down, or swapping skeletons for boards, once it's up. Read

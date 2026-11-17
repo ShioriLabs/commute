@@ -12,6 +12,8 @@
     <string name="map_pick_destination">Pilih stasiun tujuan</string>
     <string name="map_pick_cancel">Batal memilih</string>
     <string name="map_title">Peta Integrasi</string>
+    <string name="map_home_nearby_title">Sekitar</string>
+    <string name="map_home_nearby_close">Kembali ke beranda</string>
     <string name="map_recenter">Kembali ke tampilan penuh</string>
     <string name="map_attribution_open">Lihat atribusi peta</string>
     <string name="map_attribution_title">Peta Integrasi Jakarta</string>

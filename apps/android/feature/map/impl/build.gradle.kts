@@ -91,6 +91,8 @@ dependencies {
     implementation(project(":core:ui"))
     // DeveloperPreferencesRepository: the debug hitbox overlay's switch.
     implementation(project(":core:datastore"))
+    // MapHome: home on the map, which this module draws.
+    api(project(":feature:map:api"))
     // StationSheet, StationDirectory and LineRepository: the station sheet and its ring's colour.
     implementation(project(":feature:station:api"))
     // HubSheet and HubDirectory: the hub sheet, and the `HUB-…` tap targets' slugs.

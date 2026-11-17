@@ -24,6 +24,8 @@ data class NearbyResult(
     val found: List<NearbyStation> = emptyList(),
     /** Nearest first: the stations home pins, or starts a pinned pair from, that the rider is at. */
     val atPinned: List<String> = emptyList(),
+    /** Nearest first, pinned or not: what home's map opens around. */
+    val around: List<NearbyStation> = emptyList(),
 )
 
 /**
@@ -77,6 +79,7 @@ class NearbyLookup @Inject constructor(
                     radiusM = RAISE_RADIUS_M,
                     limit = Int.MAX_VALUE,
                 ).map { it.station.id },
+                around = nearbyStations(point, stations, limit = AROUND),
             )
             lookedAt = clock.instant()
         } finally {
@@ -88,6 +91,9 @@ class NearbyLookup @Inject constructor(
 
         /** Two: enough to cover "which entrance", few enough that home is still the rider's own. */
         const val SHOWN = 2
+
+        /** Enough to place the rider between stations on the map, not so many it averages to nowhere. */
+        const val AROUND = 3
 
         /** Close enough to be at the station, or on the way into it: nearer than "Di dekat kamu" reaches. */
         const val RAISE_RADIUS_M = 750
