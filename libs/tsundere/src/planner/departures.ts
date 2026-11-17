@@ -26,6 +26,16 @@
 
 import type { RouteLeg } from '../router'
 import type { WalkingPreference } from './criteria'
+import {
+  arrivalAt,
+  boardsOnFarSide,
+  catchableFrom,
+  closureBlocks,
+  crossingForTransfer,
+  cutoffFor,
+  type CrossingCutoff,
+  type LevelCrossing
+} from './crossing'
 import { GATED_TRANSFER_WALK_M, PAID_ZONE_TRANSFER_WALK_M } from './plan'
 import { DAY_S } from './service-hours'
 import { nextTrip, tripsFrom, type IndexedPattern, type Trip, type TripIndex } from './trips'
@@ -186,6 +196,12 @@ export interface LegTiming {
    * produces one, so a caller that only times never sees it.
    */
   estimated?: true
+  /**
+   * Boarded across a level crossing (see crossing.ts), and which way round the
+   * rider makes it: over the tracks, or by the concourse because the crossing
+   * will be shut. Present only on a leg behind one.
+   */
+  crossing?: { via: 'CROSSING' | 'CONCOURSE' }
 }
 
 /** One train that serves a leg's whole run, boarding to alighting. */
@@ -196,6 +212,13 @@ export interface LegDeparture {
   /** The line the trip runs on, which on a shared trunk may not be the leg's. */
   lineCode: string
   headsign?: string
+  /**
+   * The latest the previous timed ride can arrive and still make this train,
+   * on the same scale as `arrivalS`. Present only behind a level crossing,
+   * where a fixed `changeBeforeS` cannot say it: whether the crossing is open
+   * depends on the clock, not just the walk. Arriving earlier always makes it.
+   */
+  connectByS?: number
 }
 
 export interface ResolveDeparturesOptions {
@@ -347,7 +370,8 @@ function upcomingDepartures(
   dayMask: number,
   gatedLines: ReadonlySet<string> | undefined,
   limit: number,
-  untilS: number
+  untilS: number,
+  gate?: CrossingGate
 ): LegDeparture[] {
   const cap = limit * UPCOMING_CAP_FACTOR
   const found: LegDeparture[] = []
@@ -357,7 +381,10 @@ function upcomingDepartures(
     let taken = 0
     let pastUntil = 0
     for (const trip of tripsFrom(pattern, board, afterS, dayMask)) {
-      const departure = departureOn(trip, pattern.lineCode, board, leg.stationIds.length)
+      // Behind a crossing a train leaving after the rider can still be one they cannot reach.
+      const cutoff = gate?.cutoffOf(trip, board)
+      if (cutoff && afterS > cutoff.cutoffS) continue
+      const departure: LegDeparture = withConnectBy(departureOn(trip, pattern.lineCode, board, leg.stationIds.length), cutoff, gate)
       found.push(departure)
       if (departure.departureS >= untilS) pastUntil++
       if (++taken >= cap || (taken >= limit && pastUntil >= limit)) break
@@ -382,6 +409,51 @@ function upcomingDepartures(
   return listed
 }
 
+/*
+ * A leg boarded across a level crossing: each train's cutoff, and how far the
+ * rider's clock at the crossing approach sits after the previous ride's
+ * arrival, to restate a cutoff on that ride's scale for `connectByS`.
+ */
+interface CrossingGate {
+  cutoffOf: (trip: Trip, boardIndex: number) => CrossingCutoff
+  /** Null when no timed ride came before, so there is no arrival to restate it against. */
+  changeS: number | null
+}
+
+function crossingGate(
+  trips: TripIndex,
+  crossing: LevelCrossing,
+  dayMask: number,
+  paceMs: number,
+  changeS: number | null
+): CrossingGate {
+  const blocks = closureBlocks(trips, crossing, dayMask)
+  return {
+    cutoffOf: (trip: Trip, boardIndex: number): CrossingCutoff => cutoffFor(
+      crossing,
+      blocks,
+      arrivalAt(crossing, trip, boardIndex),
+      trip.departuresS[boardIndex]!,
+      distanceM => walkSecondsAt(distanceM, paceMs)
+    ),
+    changeS
+  }
+}
+
+function firstCatchable(
+  pattern: IndexedPattern,
+  boardIndex: number,
+  readyS: number,
+  dayMask: number,
+  gate: CrossingGate
+): { trip: Trip, cutoff: CrossingCutoff } | undefined {
+  for (const found of catchableFrom(pattern, boardIndex, readyS, dayMask, trip => gate.cutoffOf(trip, boardIndex))) return found
+  return undefined
+}
+
+const withConnectBy = (departure: LegDeparture, cutoff: CrossingCutoff | undefined, gate: CrossingGate | undefined): LegDeparture =>
+  cutoff && gate && gate.changeS !== null ? { ...departure, connectByS: cutoff.cutoffS - gate.changeS } : departure
+
 /** How far past `upcomingPerLeg` a later leg's list may run to reach `untilS`, as a multiple of it. */
 const UPCOMING_CAP_FACTOR = 4
 
@@ -396,7 +468,8 @@ function earlierDepartures(
   fromS: number,
   beforeS: number,
   dayMask: number,
-  gatedLines: ReadonlySet<string> | undefined
+  gatedLines: ReadonlySet<string> | undefined,
+  gate?: CrossingGate
 ): LegDeparture[] {
   if (fromS >= beforeS) return []
   const found: LegDeparture[] = []
@@ -404,7 +477,11 @@ function earlierDepartures(
     const board = boardingIndexFor(pattern, leg.stationIds)
     if (board < 0) continue
     for (const trip of tripsFrom(pattern, board, fromS, dayMask)) {
-      const departure = departureOn(trip, pattern.lineCode, board, leg.stationIds.length)
+      const departure = withConnectBy(
+        departureOn(trip, pattern.lineCode, board, leg.stationIds.length),
+        gate?.cutoffOf(trip, board),
+        gate
+      )
       if (departure.departureS >= beforeS) break
       found.push(departure)
     }
@@ -452,9 +529,12 @@ export function resolveDepartures(
   // When the earliest train listed on that ride arrives, earlier ones included,
   // so this leg's `earlier` reaches back far enough to connect from it.
   let earliestListedArrivalS: number | null = null
+  // The level crossing the last transfer landed the rider in front of, for the next ride only.
+  let crossingAhead: LevelCrossing | null = null
 
   for (const leg of legs) {
     if (leg.type === 'TRANSFER') {
+      crossingAhead = crossingForTransfer(leg.fromStationId, leg.toStationId) ?? null
       timings.push(null)
       if (clockS !== null) {
         /*
@@ -474,6 +554,8 @@ export function resolveDepartures(
     const crossesGate = rodePrevious && previousLine !== null
       && (gatedLines?.has(previousLine) ?? false) !== (gatedLines?.has(leg.lineCode) ?? false)
     previousLine = leg.lineCode
+    const crossingBefore = crossingAhead
+    crossingAhead = null
 
     if (clockS === null) {
       timings.push(null)
@@ -489,14 +571,34 @@ export function resolveDepartures(
      * they step off the last one.
      */
     if (rodePrevious) clockS += changeSecondsAt(paceMs, crossesGate)
+    // A plain number for the closures below, which TypeScript cannot narrow the loop's `clockS` into.
+    const readyS: number = clockS
 
-    let best: { trip: Trip, boardIndex: number, departure: LegDeparture } | null = null
+    /*
+     * Boarding across a level crossing: a train is caught when the rider's
+     * clock at the approach is no later than its cutoff, not merely when it
+     * leaves after them. See crossing.ts.
+     */
+    const crossing = crossingBefore && boardsOnFarSide(crossingBefore, leg.stationIds) ? crossingBefore : null
+    const gate: CrossingGate | undefined = crossing
+      ? crossingGate(trips, crossing, dayMask, paceMs, lastArrivalS === null ? null : readyS - lastArrivalS)
+      : undefined
+
+    let best: { trip: Trip, boardIndex: number, departure: LegDeparture, cutoff?: CrossingCutoff } | null = null
     for (const pattern of candidatePatterns(trips, leg, gatedLines)) {
       const board = boardingIndexFor(pattern, leg.stationIds)
       if (board < 0) continue
-      const trip = nextTrip(pattern, board, clockS, dayMask)
+      let trip: Trip | null
+      let cutoff: CrossingCutoff | undefined
+      if (gate) {
+        const first: { trip: Trip, cutoff: CrossingCutoff } | undefined = firstCatchable(pattern, board, readyS, dayMask, gate)
+        trip = first?.trip ?? null
+        cutoff = first?.cutoff
+      } else {
+        trip = nextTrip(pattern, board, readyS, dayMask)
+      }
       if (!trip) continue
-      const departure = departureOn(trip, pattern.lineCode, board, leg.stationIds.length)
+      const departure: LegDeparture = withConnectBy(departureOn(trip, pattern.lineCode, board, leg.stationIds.length), cutoff, gate)
       /*
        * Earliest departure wins across patterns. A stop is often served by a
        * full run and a short-turn of the same line, and the rider takes
@@ -504,7 +606,7 @@ export function resolveDepartures(
        * already established both go far enough.
        */
       if (best === null || departure.departureS < best.departure.departureS) {
-        best = { trip, boardIndex: board, departure }
+        best = { trip, boardIndex: board, departure, ...(cutoff ? { cutoff } : {}) }
       }
     }
 
@@ -537,7 +639,7 @@ export function resolveDepartures(
       continue
     }
 
-    const { trip, boardIndex, departure } = best
+    const { trip, boardIndex, departure, cutoff } = best
     /*
      * The previous leg's last listed train, plus the same change this leg was
      * boarded after. Nothing before the first ride, which has no list to cover.
@@ -546,7 +648,7 @@ export function resolveDepartures(
       ? Number.NEGATIVE_INFINITY
       : lastListedArrivalS + (clockS - lastArrivalS)
     const upcoming: LegDeparture[] | undefined = upcomingPerLeg > 1
-      ? upcomingDepartures(trips, leg, clockS, dayMask, gatedLines, upcomingPerLeg, untilS)
+      ? upcomingDepartures(trips, leg, clockS, dayMask, gatedLines, upcomingPerLeg, untilS, gate)
       : undefined
     /*
      * From the rider's clock less the window on the first ride; on a later one,
@@ -554,12 +656,19 @@ export function resolveDepartures(
      * leg was boarded after, mirroring how `untilS` extends the end. Everything
      * before the clock is earlier than the caught train, which is the first at
      * or after it.
+     *
+     * Behind a level crossing it runs up to the caught train instead: a train
+     * leaving after the rider reaches the crossing, but shut out by it, is still
+     * on the platform, and staff at the crossing do sometimes wave people
+     * through. It is listed as earlier, never caught, and its `connectByS` says
+     * the timetable would not make it.
      */
     const earlierFromS: number = lastArrivalS === null || earliestListedArrivalS === null
       ? clockS - earlierWithinS
       : Math.min(clockS, earliestListedArrivalS + (clockS - lastArrivalS))
+    const earlierBeforeS: number = gate ? departure.departureS : clockS
     const earlier = earlierWithinS > 0
-      ? earlierDepartures(trips, leg, earlierFromS, clockS, dayMask, gatedLines)
+      ? earlierDepartures(trips, leg, earlierFromS, earlierBeforeS, dayMask, gatedLines, gate)
       : []
     timings.push({
       ...departure,
@@ -567,7 +676,8 @@ export function resolveDepartures(
       stopsS: leg.stationIds.map((_, i) => (i === 0 ? departure.departureS : alightTimeOf(trip, boardIndex + i))),
       ...(hasLaterTrip(trips, leg, departure.departureS, dayMask, gatedLines) ? {} : { lastOfDay: true as const }),
       ...(upcoming === undefined ? {} : { upcoming }),
-      ...(earlier.length === 0 ? {} : { earlier })
+      ...(earlier.length === 0 ? {} : { earlier }),
+      ...(cutoff ? { crossing: { via: clockS <= cutoff.crossingCutoffS ? 'CROSSING' as const : 'CONCOURSE' as const } } : {})
     })
     previousLine = departure.lineCode
     clockS = departure.arrivalS

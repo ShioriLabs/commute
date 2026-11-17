@@ -4,6 +4,10 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [tailwindcss()],
+  // Fixed, and strict: apps/web owns 5173, and before this both apps took
+  // whichever of 5173/5174 was free, so which port was which depended on start
+  // order. A collision now fails loudly instead of swapping. docs/dev-ports.md.
+  server: { port: 5174, strictPort: true },
   build: {
     outDir: 'dist',
     rollupOptions: {

@@ -1,5 +1,9 @@
 name = "commute-data-platform"
 compatibility_date = "2025-06-11"
+# `pnpm start` previews the built site under wrangler. Dev ports are fixed per
+# app; see docs/dev-ports.md before changing one.
+dev.port = 3003
+dev.inspector_port = 9233
 
 [assets]
 directory = "./dist"

@@ -81,10 +81,10 @@ export type RateLimitClass = keyof typeof RATE_LIMITS
  * against the same boundaries, rather than redeclaring them.
  */
 export const EXEMPT_ORIGINS = new Set([
+  // Local dev front ends, at their fixed ports (docs/dev-ports.md).
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5174',
-  'http://localhost:5175',
   'https://commute.shiorilabs.id',
   'https://dev.commute.shiorilabs.id',
   'https://data.commute.shiorilabs.id',

@@ -51,6 +51,15 @@ export const LegDepartureSchema = v.pipe(
     headsign: v.pipe(
       v.optional(v.string()),
       v.description('Stasiun akhir yang dituju kendaraan ini, kalau jadwalnya mencantumkan.')
+    ),
+    /*
+     * Behind a level crossing whether a change works depends on the clock, not
+     * just the walk, so `minChangeS` cannot answer it. This can: any arrival on
+     * the previous timed ride at or before it makes this train.
+     */
+    connectBy: v.pipe(
+      v.optional(v.string()),
+      v.description('Paling telat jam berapa kendaraan di tahap naik sebelumnya harus sampai supaya kendaraan ini masih kekejar. Cuma ada di perpindahan yang lewat perlintasan rel di dalam stasiun, yang buka tutupnya tergantung kereta yang lewat. Kalau ada, pakai ini, bukan `minChangeS`.')
     )
   }),
   v.title('FareLegDeparture'),
@@ -146,6 +155,15 @@ export const RideLegSchema = v.pipe(
     minChangeS: v.pipe(
       v.optional(v.number()),
       v.description('Waktu pindah paling singkat dalam detik, dari turun di tahap naik sebelumnya sampai bisa naik di tahap ini, termasuk jalan kaki, sesuai kecepatan jalan penumpang. Tidak ada di tahap naik pertama atau tahap yang tidak punya jadwal.')
+    ),
+    /*
+     * How the rider reaches this leg's platform when a level crossing stands
+     * between (see tsundere's crossing.ts): over it, or round by the concourse
+     * because it will be shut for a train.
+     */
+    crossingVia: v.pipe(
+      v.optional(v.picklist(['CROSSING', 'CONCOURSE'])),
+      v.description('Cara pindah ke peron tahap ini kalau harus menyeberang rel di dalam stasiun. `CROSSING` lewat perlintasan, `CONCOURSE` naik ke concourse lalu turun lagi karena perlintasannya bakal ditutup buat kereta yang lewat.')
     ),
     /*
      * The trains a rider on this platform can take, the caught one first. Per-

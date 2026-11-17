@@ -105,7 +105,22 @@ function minChangeS(legs: readonly FareResultLeg[], from: number, to: number): n
   return Math.max(FALLBACK_MIN_CHANGE_S, Math.ceil(walkM / FALLBACK_WALK_MS))
 }
 
-const isTight = (gapS: number, minS: number) => gapS - minS < TIGHT_SLACK_S
+/*
+ * Spare seconds when the previous ride lands at `arrivalS` and the rider goes
+ * for `next`: negative means it cannot be made.
+ *
+ * Behind a level crossing the engine says outright how late that ride may land
+ * (`connectBy`), because whether the crossing is open depends on the clock and
+ * no fixed change can tell. Everywhere else the change allowance does.
+ */
+function slackS(arrivalS: number, next: FareLegDeparture, changeS: number): number {
+  if (next.connectBy !== undefined) return seconds(next.connectBy) - arrivalS
+  return seconds(next.departureAt) - (arrivalS + changeS)
+}
+
+const connects = (arrivalS: number, next: FareLegDeparture, changeS: number) => slackS(arrivalS, next, changeS) >= 0
+
+const isTight = (slack: number) => slack < TIGHT_SLACK_S
 
 /**
  * Every timed ride leg with its options, resolved against the rider's picks.
@@ -149,7 +164,7 @@ export function resolveTimedLegs(
     const change = minChangeS(legs, index, nextIndex)
     const nextFinishing = upcomingAt(nextIndex).filter(next => finishing.get(nextIndex)!.has(next.tripId))
     finishing.set(index, new Set(upcoming
-      .filter(departure => nextFinishing.some(next => seconds(next.departureAt) >= seconds(departure.arrivalAt) + change))
+      .filter(departure => nextFinishing.some(next => connects(seconds(departure.arrivalAt), next, change)))
       .map(departure => departure.tripId)))
   }
 
@@ -158,11 +173,9 @@ export function resolveTimedLegs(
 
   for (const [position, index] of timedIndexes.entries()) {
     const upcoming = upcomingAt(index)
-    const earliest: number = previous
-      ? previous.arrivalS + minChangeS(legs, previous.index, index)
-      : Number.NEGATIVE_INFINITY
+    const changeIn = previous ? minChangeS(legs, previous.index, index) : 0
     const blockedOf = (departure: FareLegDeparture): Blocked | null => {
-      if (seconds(departure.departureAt) < earliest) return 'MISSED'
+      if (previous && !connects(previous.arrivalS, departure, changeIn)) return 'MISSED'
       return finishing.get(index)!.has(departure.tripId) ? null : 'NO_ONWARD'
     }
 
@@ -179,14 +192,14 @@ export function resolveTimedLegs(
       ? []
       : upcomingAt(nextIndex).filter(next => finishing.get(nextIndex)!.has(next.tripId))
     const options = upcoming.map((departure): LegOption => {
-      const nextTrain = nextUpcoming.find(next => seconds(next.departureAt) >= seconds(departure.arrivalAt) + change)
+      const nextTrain = nextUpcoming.find(next => connects(seconds(departure.arrivalAt), next, change))
       const gapToNextS = nextTrain ? seconds(nextTrain.departureAt) - seconds(departure.arrivalAt) : null
       return {
         departure,
         blocked: blockedOf(departure),
         selected: departure.tripId === chosen.tripId,
         gapToNextS,
-        tight: gapToNextS !== null && isTight(gapToNextS, change)
+        tight: nextTrain !== undefined && isTight(slackS(seconds(departure.arrivalAt), nextTrain, change))
       }
     })
 
@@ -209,8 +222,9 @@ export function changeAt(
   const before = timed.filter(leg => leg.index < index).at(-1)
   const after = timed.find(leg => leg.index >= index)
   if (!before || !after) return null
-  const gapS = seconds(after.chosen.departureAt) - seconds(before.chosen.arrivalAt)
-  return { gapS, tight: isTight(gapS, minChangeS(legs, before.index, after.index)) }
+  const arrivalS = seconds(before.chosen.arrivalAt)
+  const gapS = seconds(after.chosen.departureAt) - arrivalS
+  return { gapS, tight: isTight(slackS(arrivalS, after.chosen, minChangeS(legs, before.index, after.index))) }
 }
 
 /**
@@ -246,6 +260,15 @@ export function retimeJourney(journey: FareJourney, timed: readonly TimedLeg[]):
 
   const byIndex = new Map(timed.map(leg => [leg.index, leg.chosen]))
   const legs = journey.legs.map((leg, index): FareResultLeg => {
+    /*
+     * `crossingVia` answers for the trains the API caught on every leg before
+     * it too: a pick earlier on lands the rider at the crossing at a different
+     * time. Any change makes it unknown, and absent means the UI says nothing.
+     */
+    if (leg.type === 'RIDE' && leg.crossingVia !== undefined) {
+      leg = { ...leg }
+      delete leg.crossingVia
+    }
     const chosen = byIndex.get(index)
     if (leg.type !== 'RIDE' || !chosen || chosen.tripId === leg.tripId) return leg
     const next = {
