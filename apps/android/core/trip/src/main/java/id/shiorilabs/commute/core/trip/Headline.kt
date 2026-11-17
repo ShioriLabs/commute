@@ -16,7 +16,11 @@ sealed interface Headline {
     data class Change(val ride: TripLeg.Ride, val walk: TripLeg.Transfer?, val departsAt: Instant?) : Headline
 
     /** On [ride], [stopsLeft] stops from getting off. */
-    data class RideTo(val ride: TripLeg.Ride, val stopsLeft: Int, val alightsAt: Instant?) : Headline
+    data class RideTo(val ride: TripLeg.Ride, val stopsLeft: Int, val alightsAt: Instant?) : Headline {
+
+        /** The stop the ride reaches next, "berikutnya Tebet": at one stop left, the alighting one. */
+        val nextStop: TripStop? get() = ride.stops.getOrNull(ride.lastIndex - stopsLeft + 1)
+    }
 
     /** At [ride]'s alighting stop; [then] is the next ride, if any. */
     data class AlightNow(val ride: TripLeg.Ride, val then: TripLeg.Ride?) : Headline
