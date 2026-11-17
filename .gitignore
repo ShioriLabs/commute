@@ -178,3 +178,8 @@ scratch/
 
 # Local D1 snapshots taken before a remote apply. Never committed.
 .backups/
+
+# shirase: pinned tool binaries and the extract/glyph/sprite outputs it builds
+# (hundreds of MB, reproducible from apps/shirase/scripts). They go to R2, not git.
+apps/shirase/.tools/
+apps/shirase/data/

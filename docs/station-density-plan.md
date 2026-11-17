@@ -1211,7 +1211,7 @@ Expected: PASS (5 tests).
 
 - [ ] **Step 5: Choose the badge look with the user (scratchpad variants workflow)**
 
-Per memory `scratchpad-variants-workflow.md`, put 2–3 labelled variants of the badge on the temporary `/scratchpad` route: a status pill (green/amber/red dot + label), a three-segment meter + label, and plain text with a coloured dot. Screenshot them in both themes using the xvfb recipe from `map-webgl-testing.md` (web dev server :5174; check for the user's running dev server first). **Stop and let the user pick.** Constraints for every variant:
+Per memory `scratchpad-variants-workflow.md`, put 2–3 labelled variants of the badge on the temporary `/scratchpad` route: a status pill (green/amber/red dot + label), a three-segment meter + label, and plain text with a coloured dot. Screenshot them in both themes using the xvfb recipe from `map-webgl-testing.md` (web dev server :5173; check for the user's running dev server first). **Stop and let the user pick.** Constraints for every variant:
 - status colours (green / amber / red), never line colours, so it never clashes with a `LineRoundel`
 - the label is always visible, so identity never rests on colour alone
 - no "live" wording
@@ -1251,7 +1251,7 @@ Add the imports: `DensityBadge` from `~/components/density-badge`, `currentHourL
 
 - [ ] **Step 8: Verify in the running app**
 
-Start or reuse the web dev server (:5174) against a local API (`pnpm --filter @commute/api dev`). Open `/stations/KCI/MRI`, `/stations/KCI/SUD`, `/stations/KCI/BOO` and one TJ halte. Expected:
+Start or reuse the web dev server (:5173) against a local API (`pnpm --filter @commute/api dev`). Open `/stations/KCI/MRI`, `/stations/KCI/SUD`, `/stations/KCI/BOO` and one TJ halte. Expected:
 - rail pages show a badge whose label matches `DENSITY_LEVELS` for the current hour, or no badge if the hour is null
 - the TJ page shows no badge and makes no `/density` request (check the network tab)
 

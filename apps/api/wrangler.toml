@@ -1,6 +1,8 @@
 name = "commute-api"
 main = "src/app.ts"
+# Dev ports are fixed per app; see docs/dev-ports.md before changing one.
 dev.port = 3000
+dev.inspector_port = 9230
 compatibility_date = "2025-10-18"
 
 # 0.8 rather than 1: near-complete visibility into hottest route / hottest
