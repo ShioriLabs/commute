@@ -378,7 +378,8 @@ private fun RideRow(ride: TripLeg.Ride, lines: Map<String, LineInfo>, copy: Trip
                 color = Slate900,
             )
             val way = listOfNotNull(copy.rideName(ride), rideDirection(ride))
-            Text(text = way.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Slate500)
+            // "Lin Cikarang arah Angke": the line and its way read as one.
+            Text(text = way.joinToString(" "), style = MaterialTheme.typography.bodySmall, color = Slate500)
         }
         val departs = ride.departureAt
         val arrives = ride.arrivalAt

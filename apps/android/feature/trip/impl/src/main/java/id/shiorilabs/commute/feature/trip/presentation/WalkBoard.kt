@@ -214,7 +214,9 @@ private fun boardText(walk: TripLeg.Transfer) = buildAnnotatedString {
 @Composable
 private fun NextRide(ride: TripLeg.Ride, at: Instant?, lines: Map<String, LineInfo>, muted: Color) {
     val platform = ride.platformCode?.let { stringResource(CopyR.string.trip_platform, formatPlatformCode(it)) }
-    val facts = listOfNotNull(platform, at?.let(::formatClock)).joinToString(" · ").takeIf { it.isNotEmpty() }
+    // "Peron 2, berangkat 22.30".
+    val facts = listOfNotNull(platform, at?.let { stringResource(CopyR.string.trip_departs_at, formatClock(it)) })
+        .joinToString(", ").takeIf { it.isNotEmpty() }
     if (ride.otherLines > 0) {
         AnyLine(ride, lines, color = muted)
         facts?.let { Text(text = it, modifier = Modifier.padding(top = 6.dp), style = MaterialTheme.typography.labelLarge, color = muted) }

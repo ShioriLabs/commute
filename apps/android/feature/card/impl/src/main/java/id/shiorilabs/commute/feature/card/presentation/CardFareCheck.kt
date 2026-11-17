@@ -108,11 +108,18 @@ private fun BudgetRow(card: CardSnapshot, budget: CardBudget, modifier: Modifier
             )
         }
         Column {
-            Text(
-                text = listOfNotNull(label, card.lastDigits?.let { "••$it" }).joinToString(" ") + " · $balance",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            // The card, then its balance set apart by space and weight rather than a dot.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = listOfNotNull(label, card.lastDigits?.let { "••$it" }).joinToString(" "),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = balance,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Text(
                 text = detail,
                 style = MaterialTheme.typography.bodySmall,

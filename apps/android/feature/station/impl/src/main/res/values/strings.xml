@@ -28,7 +28,7 @@
     <string name="station_transfer_distance_description">Jarak transit %1$d meter</string>
     <string name="station_transfer_exit_from">Keluar lewat pintu</string>
     <string name="station_transfer_exit_to">Masuk lewat pintu</string>
-    <string name="station_transfer_exit_to_after">· masuk lewat pintu</string>
+    <string name="station_transfer_exit_to_after">lalu masuk lewat pintu</string>
 
     <!-- Exits. %1$s is the signed name of the exit (B, Utara). -->
     <string name="station_exits_title">Pintu Keluar</string>
@@ -41,7 +41,7 @@
     <string name="station_timetable_subtitle">Jadwal Lengkap</string>
     <string name="station_timetable_close_description">Tutup halaman jadwal lengkap</string>
     <string name="station_timetable_filter">Filter Jalur</string>
-    <string name="station_timetable_filter_count">· %1$d/%2$d</string>
+    <string name="station_timetable_filter_count">%1$d/%2$d</string>
     <string name="station_timetable_towards">menuju %1$s</string>
     <string name="station_timetable_platform">Peron %1$s</string>
     <string name="station_timetable_filtered_empty">Tidak ada jadwal untuk jalur yang dipilih</string>

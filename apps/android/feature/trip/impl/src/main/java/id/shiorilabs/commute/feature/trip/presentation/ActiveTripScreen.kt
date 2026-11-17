@@ -108,6 +108,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate100
 import id.shiorilabs.commute.core.ui.theme.Slate300
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate700
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.time.rememberNow
@@ -594,13 +595,26 @@ private fun StopRow(
                 first && !passed -> R.string.trip_live_board_here
                 else -> null
             }
-            // The platform under where to board, as the trip details put it, beside what the board says.
-            val notes = listOfNotNull(
-                platform?.let { stringResource(CopyR.string.trip_platform, formatPlatformCode(it)) },
-                label?.let { stringResource(it) },
-            )
-            if (notes.isNotEmpty()) {
-                Text(text = notes.joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = Slate500)
+            // The platform under where to board, as the trip details put it, beside what the board says:
+            // set apart by space and weight rather than a dot.
+            if (platform != null || label != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    platform?.let {
+                        Text(
+                            text = stringResource(CopyR.string.trip_platform, formatPlatformCode(it)),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Slate500,
+                        )
+                    }
+                    label?.let {
+                        Text(
+                            text = stringResource(it),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Slate700,
+                        )
+                    }
+                }
             }
             if (alighting) {
                 GetOffBadge(

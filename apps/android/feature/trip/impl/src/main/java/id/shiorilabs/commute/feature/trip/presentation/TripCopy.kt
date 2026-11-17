@@ -29,33 +29,44 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
 
     fun title(headline: Headline): String = wording.title(headline)
 
+    /**
+     * The notification's line, as a rider would say it: "Arah Angke, Peron 3·4, berangkat 21.58.
+     * Berikutnya 22.08, 22.14". Facts about one thing share a sentence; the trains after, or the
+     * next stop, have their own.
+     */
     fun detail(trip: ActiveTrip, headline: Headline, now: Instant): String = when (headline) {
-        is Headline.Board -> listOfNotNull(
-            direction(headline.ride),
-            headline.ride.platformCode?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
-            headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) }
-                ?: resources.getString(R.string.trip_from_stop, headline.ride.stops.first().name),
-            nextDepartures(headline, now),
-        ).joinToString(separator)
-        is Headline.Change -> listOfNotNull(
-            walkAndPlatform(headline),
-            headline.ride.platformCode?.takeIf { headline.walk == null }
-                ?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
-            headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
-            nextDepartures(headline, now),
-        ).joinToString(separator)
-        // Aboard, the line and its direction are the rider's own train: only how far is left.
-        is Headline.RideTo -> listOfNotNull(
-            resources.getString(
-                if (headline.ride.isBus) CopyR.string.trip_haltes_left else CopyR.string.trip_stations_left,
-                headline.stopsLeft,
+        is Headline.Board -> sentences(
+            clause(
+                direction(headline.ride),
+                headline.ride.platformCode?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
+                headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) }
+                    ?: resources.getString(R.string.trip_from_stop, headline.ride.stops.first().name),
             ),
+            nextDepartures(headline, now),
+        )
+        is Headline.Change -> sentences(
+            clause(
+                walkAndPlatform(headline),
+                headline.ride.platformCode?.takeIf { headline.walk == null }
+                    ?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
+                headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
+            ),
+            nextDepartures(headline, now),
+        )
+        // Aboard, the line and its direction are the rider's own train: where it stops next and how far is left.
+        is Headline.RideTo -> sentences(
             // At one stop left the next is the alighting one, which the title already names.
             headline.nextStop?.takeIf { headline.stopsLeft > 1 }
                 ?.let { resources.getString(CopyR.string.trip_next_stop, it.name) },
-            headline.alightsAt?.takeIf { trip.state.source != PositionSource.UNKNOWN }
-                ?.let { resources.getString(R.string.trip_alights_around, formatClock(it)) },
-        ).joinToString(separator)
+            clause(
+                resources.getString(
+                    if (headline.ride.isBus) CopyR.string.trip_haltes_left else CopyR.string.trip_stations_left,
+                    headline.stopsLeft,
+                ),
+                headline.alightsAt?.takeIf { trip.state.source != PositionSource.UNKNOWN }
+                    ?.let { resources.getString(R.string.trip_alights_around, formatClock(it)) },
+            ),
+        )
         is Headline.AlightNow -> headline.then?.let { resources.getString(CopyR.string.trip_then_change, rideName(it)) }
             ?: resources.getString(CopyR.string.trip_then_done)
         is Headline.Arrived -> ""
@@ -94,7 +105,12 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
         is Headline.Arrived -> resources.getString(R.string.trip_chip_arrived)
     }
 
-    val separator: String get() = resources.getString(R.string.trip_separator)
+    /** Facts about one thing, in one sentence: "7 stasiun lagi, sampai sekitar 22.25". `null` when there are none. */
+    fun clause(vararg parts: String?): String? = parts.filterNotNull().takeIf { it.isNotEmpty() }?.joinToString(", ")
+
+    /** Sentences, each led by a capital, without the closing full stop the rest of the app's copy leaves off. */
+    fun sentences(vararg parts: String?): String =
+        parts.filterNotNull().filter { it.isNotEmpty() }.joinToString(". ") { part -> part.replaceFirstChar { it.uppercase() } }
 
     private companion object {
 

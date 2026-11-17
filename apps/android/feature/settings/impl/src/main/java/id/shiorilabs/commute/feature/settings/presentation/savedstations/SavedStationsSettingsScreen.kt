@@ -195,7 +195,9 @@ private fun SavedRouteRowItem(
                 text = if (from == null || to == null) {
                     stringResource(R.string.settings_saved_route_missing)
                 } else {
-                    listOf(from.operator, to.operator).distinct().joinToString(" · ") { OPERATOR_NAMES[it] ?: it }
+                    // "KAI Commuter dan MRT Jakarta": one operator, or the two the route crosses.
+                    val operators = listOf(from.operator, to.operator).distinct().map { OPERATOR_NAMES[it] ?: it }
+                    operators.singleOrNull() ?: stringResource(R.string.settings_saved_route_operators, operators[0], operators[1])
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
