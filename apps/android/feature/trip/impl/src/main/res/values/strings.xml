@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The trip's headline: Live Update title, live screen header. -->
-    <string name="trip_ride_to_station">Turun di %1$s · %2$d stasiun lagi</string>
-    <string name="trip_ride_to_halte">Turun di %1$s · %2$d halte lagi</string>
+    <string name="trip_ride_to_station">Turun di %1$s, %2$d stasiun lagi</string>
+    <string name="trip_ride_to_halte">Turun di %1$s, %2$d halte lagi</string>
     <!-- The Live Update's title once aboard: the stops left are in its text. -->
 
     <!-- The line under it. -->
@@ -13,7 +13,6 @@
     <string name="trip_alights_around">sampai sekitar %1$s</string>
     <string name="trip_then_change_at">Lalu transit ke %1$s, berangkat %2$s</string>
     <string name="trip_then_missed">" (yang %1$s gak keburu)"</string>
-    <string name="trip_separator">" · "</string>
 
     <!-- How the position is known. -->
     <string name="trip_source_confirmed">Posisi dari GPS</string>
@@ -157,6 +156,8 @@
     <string name="trip_pids_alight_here">Turun di sini</string>
     <string name="trip_pids_arrived">Udah sampai di</string>
     <string name="trip_pids_get_off">TURUN</string>
+    <!-- %2$s is the platform, already as "Peron 2" -->
+    <string name="trip_change_at_platform">Transit ke %1$s di %2$s</string>
     <string name="trip_pids_change_at">Transit di %1$s</string>
     <string name="trip_pids_change_walk">Lalu jalan %1$d m ke %2$s</string>
     <string name="trip_pids_description">Stasiun berikutnya, paling dekat dulu: %1$s</string>

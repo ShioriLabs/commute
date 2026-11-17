@@ -912,10 +912,9 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
             ) {
                 Roundel(change, lines)
                 Text(
-                    text = listOfNotNull(
-                        stringResource(CopyR.string.trip_change, copy.rideName(change)),
-                        change.platformCode?.let { stringResource(CopyR.string.trip_platform, formatPlatformCode(it)) },
-                    ).joinToString(copy.separator),
+                    text = change.platformCode
+                        ?.let { stringResource(R.string.trip_change_at_platform, copy.rideName(change), stringResource(CopyR.string.trip_platform, formatPlatformCode(it))) }
+                        ?: stringResource(CopyR.string.trip_change, copy.rideName(change)),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,

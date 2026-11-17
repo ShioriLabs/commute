@@ -393,7 +393,6 @@ private fun StationRow(
                     append("  ")
                     withStyle(SpanStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Slate500)) {
                         append(OPERATOR_NAMES[station.operator] ?: station.operator)
-                        distanceM?.let { append(" · " + formatDistance(it)) }
                     }
                 },
                 style = MaterialTheme.typography.titleMedium,
@@ -405,6 +404,15 @@ private fun StationRow(
                     }
                 }
             }
+        }
+        // How far, at the row's end where a list of what's near puts it.
+        distanceM?.let {
+            Text(
+                text = formatDistance(it),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Slate500,
+            )
         }
         if (selected) {
             Icon(

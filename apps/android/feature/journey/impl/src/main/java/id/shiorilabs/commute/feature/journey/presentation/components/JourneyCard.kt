@@ -198,26 +198,36 @@ internal fun JourneyTags(journey: Journey, modifier: Modifier = Modifier, textAl
     val lastTrain = journey.isLastTrain
     val labels = sortJourneyLabels(journey.labels).take(JOURNEY_LABELS_SHOWN)
     if (!lastTrain && labels.isEmpty()) return
-    val lastTrainText = stringResource(R.string.journey_last_train)
-    val labelTexts = labels.map { it.text() }
-    Text(
-        text = buildAnnotatedString {
-            if (lastTrain) {
-                withStyle(SpanStyle(color = Amber700)) { append(lastTrainText) }
-            }
-            if (lastTrain && labelTexts.isNotEmpty()) {
-                withStyle(SpanStyle(color = Slate400)) { append(" · ") }
-            }
-            withStyle(SpanStyle(color = Rose700)) { append(labelTexts.joinToString(" · ")) }
-        },
+    // Each tag its own word, set apart by space and colour rather than a dot between them.
+    val tags = buildList {
+        if (lastTrain) add(stringResource(R.string.journey_last_train) to Amber700)
+        labels.forEach { add(it.text() to Rose700) }
+    }
+    Row(
         modifier = modifier,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        textAlign = textAlign,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
+        horizontalArrangement = Arrangement.spacedBy(
+            TAG_GAP,
+            if (textAlign == TextAlign.End) Alignment.End else Alignment.Start,
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        tags.forEachIndexed { index, (text, color) ->
+            Text(
+                text = text,
+                // The last gives way when the line runs out.
+                modifier = if (index == tags.lastIndex) Modifier.weight(1f, fill = false) else Modifier,
+                color = color,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
+
+/** Between two of [JourneyTags]'s tags: wide enough to read as a break without a dot. */
+private val TAG_GAP = 10.dp
 
 @Composable
 private fun MetaText(text: String, modifier: Modifier = Modifier) {

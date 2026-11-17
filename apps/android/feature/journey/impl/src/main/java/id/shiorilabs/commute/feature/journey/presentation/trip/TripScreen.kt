@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -466,18 +467,27 @@ private fun TripSubtitle(journey: Journey, modifier: Modifier = Modifier) {
     val boardsAt = journey.boardsAt
     val arrivalAt = journey.arrivalAt
     val fare = journey.totalFare?.let(::formatRupiah) ?: stringResource(R.string.journey_fare_unknown)
+    // The times and the fare set apart by space, as the summary row below sets its own.
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (boardsAt != null) {
+            SubtitleText(
+                buildAnnotatedString {
+                    append(formatClock(boardsAt))
+                    if (arrivalAt != null) {
+                        withStyle(SpanStyle(color = Slate400)) { append(" → ") }
+                        append(formatClock(arrivalAt))
+                    }
+                },
+            )
+        }
+        SubtitleText(AnnotatedString(fare), Modifier.weight(1f, fill = false))
+    }
+}
+
+@Composable
+private fun SubtitleText(text: AnnotatedString, modifier: Modifier = Modifier) {
     Text(
-        text = buildAnnotatedString {
-            if (boardsAt != null) {
-                append(formatClock(boardsAt))
-                if (arrivalAt != null) {
-                    withStyle(SpanStyle(color = Slate400)) { append(" → ") }
-                    append(formatClock(arrivalAt))
-                }
-                withStyle(SpanStyle(color = Slate400)) { append(" · ") }
-            }
-            append(fare)
-        },
+        text = text,
         modifier = modifier,
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,

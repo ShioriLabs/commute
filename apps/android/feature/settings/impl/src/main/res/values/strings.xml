@@ -32,6 +32,8 @@
     <string name="settings_saved_empty">Tidak ada stasiun atau rute disimpan</string>
     <string name="settings_saved_route_name">rute %1$s ke %2$s</string>
     <string name="settings_saved_route_missing">Stasiun tidak ditemukan</string>
+    <!-- The two operators a saved route crosses -->
+    <string name="settings_saved_route_operators">%1$s dan %2$s</string>
     <string name="settings_saved_move_up">Naikkan %1$s</string>
     <string name="settings_saved_move_down">Turunkan %1$s</string>
     <string name="settings_saved_pin">Pin %1$s</string>

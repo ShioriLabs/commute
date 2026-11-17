@@ -3,6 +3,8 @@ package id.shiorilabs.commute.core.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,7 +45,8 @@ fun WalkDetail(
             ExitBadge(code = exit)
         }
         if (exit != null && distanceM > 0) {
-            Text(text = "·", style = MaterialTheme.typography.bodyMedium, color = color)
+            // A wider gap than the row's own sets the exit apart from how far, without a dot.
+            Spacer(Modifier.width(6.dp))
         }
         if (distanceM > 0) {
             Text(text = stringResource(R.string.core_ui_walk_distance, distanceM), style = MaterialTheme.typography.bodyMedium, color = color)
