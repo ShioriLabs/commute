@@ -4,6 +4,6 @@ import { defineConfig } from 'vitest/config'
 // ExecutionContext) are faked in src/test-helpers.ts.
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts']
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs']
   }
 })

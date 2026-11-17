@@ -11,6 +11,7 @@
     // "checkJs": true,                             /* Report errors in .js files. */
     "jsx": "react-jsx",                           /* Hono JSX (src/map-page.tsx), not React. */
     "jsxImportSource": "hono/jsx",
+    "resolveJsonModule": true,                      /* src/jp-roads.json */
     "declaration": true,                         /* Generates corresponding '.d.ts' file. */
     // "declarationMap": true,                      /* Generates a sourcemap for each corresponding '.d.ts' file. */
     "sourceMap": true,                           /* Generates corresponding '.map' file. */

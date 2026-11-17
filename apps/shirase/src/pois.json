@@ -1,0 +1,69 @@
+{
+  "$comment": [
+    "Light and dark's place icons: which POI kinds they label, the Maki glyph each gets (@mapbox/maki, CC0), and its category's colours.",
+    "Read by scripts/build-sprites.mjs (which draws the icons: a white glyph on a circle of the category's colour, ringed in the theme's label halo) and src/style.ts (which picks the kinds, icons and label colours), so the two cannot disagree.",
+    "kinds: Protomaps POI kind -> [Maki icon, category]. Only these are labelled in light and dark: places people navigate by, not the long tail of shops. mall uses Maki's shop until a dedicated mall glyph (Temaki's shopping_mall) is tried.",
+    "health is GREEN, never red: a white cross on red sits too close to the protected Red Cross emblem (Geneva Conventions; UU No. 1/2018 tentang Kepalangmerahan). A white plus on green is the standard first-aid sign (ISO 7010 E003). Its green is deeper than nature's so hospitals don't read as parks.",
+    "categories: circle is the icon's fill (the same in both themes, as Apple's; a white glyph on it clears 3:1, tested); text names the flavor.pois key labels of that category are coloured with.",
+    "named: kinds labelled only for the places listed by name. Places of worship are everywhere (6,700 in Jakarta alone, most of them neighbourhood masjid and musholla), so only the city's landmarks are labelled, with one neutral glyph for every faith. Chosen from OSM by size and by a Wikidata/Wikipedia link (notability), plus the ones people know; names exactly as the basemap writes them ('Gereja Reformed Injili Indonesia (GRII)' is the Messiah Cathedral in Kemayoran).",
+    "themes: the sprite each theme is served (versioned by name: bump it whenever the icons change, sprites are cached) and the ring round each icon, the theme's POI label halo."
+  ],
+  "categories": {
+    "transit": { "circle": "#2f6fe4", "text": "lapis" },
+    "nature": { "circle": "#1f9d55", "text": "green" },
+    "water": { "circle": "#1f8fbf", "text": "blue" },
+    "culture": { "circle": "#c43a8f", "text": "pink" },
+    "civic": { "circle": "#6a5f95", "text": "slategray" },
+    "shopping": { "circle": "#c4650c", "text": "tangerine" },
+    "health": { "circle": "#127f66", "text": "green" }
+  },
+  "kinds": {
+    "station": ["rail", "transit"],
+    "ferry_terminal": ["ferry", "transit"],
+    "aerodrome": ["airport", "transit"],
+    "stadium": ["stadium", "civic"],
+    "university": ["college", "civic"],
+    "library": ["library", "civic"],
+    "townhall": ["town-hall", "civic"],
+    "museum": ["museum", "culture"],
+    "attraction": ["attraction", "culture"],
+    "theatre": ["theatre", "culture"],
+    "park": ["park", "nature"],
+    "garden": ["garden", "nature"],
+    "zoo": ["zoo", "nature"],
+    "peak": ["mountain", "nature"],
+    "beach": ["beach", "water"],
+    "marina": ["harbor", "water"],
+    "mall": ["shop", "shopping"],
+    "hospital": ["hospital", "health"],
+    "place_of_worship": ["place-of-worship", "culture"]
+  },
+  "named": {
+    "place_of_worship": [
+      "Masjid Istiqlal",
+      "Masjid Cut Meutia",
+      "Masjid Agung Al Azhar",
+      "Masjid Keramat Luar Batang",
+      "Masjid Jami Al Mansur",
+      "Masjid Lautze Jakarta",
+      "Masjid Raya Jakarta Islamic Centre",
+      "Masjid At-Tin",
+      "Masjid KH. Hasyim Asyari Jakarta",
+      "Katedral Jakarta",
+      "GPIB Immanuel",
+      "Gereja Sion",
+      "Gereja Katolik Santa Maria De Fatima",
+      "Gereja Anglikan Indonesia",
+      "Gereja Reformed Injili Indonesia (GRII)",
+      "Wihara Dharma Bakti",
+      "Vihara Bahtera Bhakti",
+      "Vihara Dhammacakka Jaya",
+      "Pura Aditya Jaya",
+      "Pura Segara"
+    ]
+  },
+  "themes": {
+    "light": { "sprite": "commute-light-v1", "base": "light", "ring": "#f6f3eb" },
+    "dark": { "sprite": "commute-dark-v1", "base": "dark", "ring": "#263044" }
+  }
+}

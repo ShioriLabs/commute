@@ -15,6 +15,11 @@
     "extract": "bash scripts/extract.sh",
     "build:glyphs": "bash scripts/build-glyphs.sh",
     "fetch:sprites": "bash scripts/fetch-sprites.sh",
+    "build:sprites": "node scripts/build-sprites.mjs",
+    "fetch:osm": "bash scripts/fetch-osm.sh",
+    "export:osm-roads": "PYTHONPATH=.tools/pylib python3 scripts/export-osm-roads.py data/osm/jabodetabek.osm.pbf data/osm/roads.sqlite",
+    "export:osm-lanes": "PYTHONPATH=.tools/pylib python3 scripts/export-osm-lanes.py data/osm/jabodetabek.osm.pbf data/osm/lanes.json",
+    "build:jp-roads": "node --max-old-space-size=4096 scripts/build-jp-roads.mjs",
     "seed:local": "node scripts/seed-local.mjs"
   },
   "license": "SEE LICENSE IN LICENSE.md",
@@ -25,7 +30,10 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260714.1",
+    "@mapbox/maki": "^8.2.0",
     "@maplibre/maplibre-gl-style-spec": "^24.10.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "clipper-lib": "6.4.2",
     "typescript": "^5.8.0",
     "vitest": "^4.1.9",
     "wrangler": "^4.110.0"
