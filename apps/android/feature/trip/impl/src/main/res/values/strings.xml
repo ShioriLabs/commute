@@ -45,6 +45,8 @@
     <string name="trip_alert_alight_title">Turun di sini</string>
     <string name="trip_alert_alight_estimated_title">Harusnya udah sampai</string>
     <string name="trip_alert_alight_estimated">%1$s. Cek papan stasiun dulu ya</string>
+    <!-- Under "Turun di sini", after the KRL's own announcement, in the app's own "kamu". -->
+    <string name="trip_alert_alight_check">Periksa kembali tiket serta barang bawaan kamu sebelum turun</string>
     <string name="trip_alert_missed_title">Kamu kelewatan?</string>
     <string name="trip_alert_missed">Kayaknya udah ngelewatin %1$s. Turun di stasiun berikutnya terus balik arah ya</string>
     <string name="trip_alert_no_reminders_title">Pantau sendiri dulu ya</string>

@@ -315,11 +315,13 @@ class TripNotifier @Inject constructor(
                 context.getString(R.string.trip_then_change_at, rideName(then), departs) + missed
             }
         } ?: context.getString(CopyR.string.trip_then_done)
+        // Its own line, under where and what then: the expanded alert shows it, collapsed leads with the rest.
+        val check = "\n" + context.getString(R.string.trip_alert_alight_check)
         return if (estimated) {
             context.getString(R.string.trip_alert_alight_estimated_title) to
-                context.getString(R.string.trip_alert_alight_estimated, alighting) + sep() + next
+                context.getString(R.string.trip_alert_alight_estimated, alighting) + sep() + next + check
         } else {
-            context.getString(R.string.trip_alert_alight_title) to alighting + sep() + next
+            context.getString(R.string.trip_alert_alight_title) to alighting + sep() + next + check
         }
     }
 

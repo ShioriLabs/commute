@@ -50,6 +50,9 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
                 if (headline.ride.isBus) CopyR.string.trip_haltes_left else CopyR.string.trip_stations_left,
                 headline.stopsLeft,
             ),
+            // At one stop left the next is the alighting one, which the title already names.
+            headline.nextStop?.takeIf { headline.stopsLeft > 1 }
+                ?.let { resources.getString(CopyR.string.trip_next_stop, it.name) },
             headline.alightsAt?.takeIf { trip.state.source != PositionSource.UNKNOWN }
                 ?.let { resources.getString(R.string.trip_alights_around, formatClock(it)) },
         ).joinToString(separator)
