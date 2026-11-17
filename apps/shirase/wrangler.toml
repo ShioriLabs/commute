@@ -23,4 +23,4 @@ ALLOWED_ORIGINS = "https://commute.shiorilabs.id,http://localhost:5173"
 # `fonts/<stack>/<range>.pbf`, sprites under `sprites/<name>`.
 [[r2_buckets]]
 binding = "TILES"
-bucket_name = "shirase-tiles"
+bucket_name = "shirase"
