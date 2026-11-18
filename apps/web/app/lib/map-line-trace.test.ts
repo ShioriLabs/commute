@@ -356,16 +356,16 @@ describe('traceLine on the shipped artwork', () => {
   it('traces TJ:14 on the orange it is actually drawn in', () => {
     /*
      * TJ:14's brand `#F5AB6E` matches no stroke on the sheet at all — it is a
-     * pale tint of the `#FA7116` the line is drawn in. Gated on the brand, the
+     * pale tint of the `#F17A28` the line is drawn in. Gated on the brand, the
      * line finds no candidate and rides whatever the fallback reaches; every one
      * of its edges lands on foreign ink.
      */
     const { traced, edges } = edgesOf(TJ14, '#F5AB6E')
-    expect(traced.tracedColour).toBe('#FA7116')
+    expect(traced.tracedColour).toBe('#F17A28')
     expect(traced.matchedPairs).toBeGreaterThanOrEqual(6)
     const foreign = edges.filter((edge) => {
       const ink = inkUnder(edge)
-      return ink !== null && channelDistance(ink, '#FA7116') > CORRIDOR_COLOUR_TOLERANCE
+      return ink !== null && channelDistance(ink, '#F17A28') > CORRIDOR_COLOUR_TOLERANCE
     })
     expect(foreign).toHaveLength(0)
   })
@@ -397,13 +397,13 @@ describe('traceLine on the shipped artwork', () => {
 
   it('does not put TJ:7 on the brown stubs its brand matches', () => {
     /*
-     * TJ:7 is branded brown `#914900` but drawn in crimson `#F71752`, 102 apart.
+     * TJ:7 is branded brown `#914900` but drawn in crimson `#EE1D67`, 102 apart.
      * The stubs it crosses (`#CD4411` at 60, `#89070E` at 66) DO pass the brand
      * gate, so colour alone does not merely fail to help here — it elects the
      * wrong stroke.
      */
     const { traced, edges } = edgesOf(TJ7, '#914900')
-    expect(traced.tracedColour).toBe('#F71752')
+    expect(traced.tracedColour).toBe('#EE1D67')
     /*
      * Asserted against the ELECTED ink, not against the stubs: `#CD4411` sits 65
      * channels from the crimson, inside the tolerance, so "far from the stub"
@@ -413,7 +413,7 @@ describe('traceLine on the shipped artwork', () => {
     expect(traced.matchedPairs).toBe(traced.totalPairs)
     const foreign = edges.filter((edge) => {
       const ink = inkUnder(edge)
-      return ink !== null && channelDistance(ink, '#F71752') > CORRIDOR_COLOUR_TOLERANCE
+      return ink !== null && channelDistance(ink, '#EE1D67') > CORRIDOR_COLOUR_TOLERANCE
     })
     expect(foreign).toHaveLength(0)
   })
@@ -617,7 +617,7 @@ interface ShippedLine {
  * drawn separately, a 92-unit interchange bar with the line's ink broken into a
  * piece at each end. None of those can be posed in six points.
  *
- * So this drives all 42 lines through the tracer and holds the result against
+ * So this drives all 41 lines through the tracer and holds the result against
  * the committed artifact. It is a regression test rather than a behavioural one:
  * it does not say what the tracer SHOULD do, it says the tracer still does what
  * the shipped map was drawn from. A change that moves any line's coverage has to
@@ -662,8 +662,8 @@ describe('traceLine reproduces the shipped artifact', () => {
     points, corridors, undefined, entry.color, sharedTrackFor(entry.key), entry.operator === 'TJ'
   )
 
-  it('covers all 42 lines', () => {
-    expect(shipped).toHaveLength(42)
+  it('covers all 41 lines', () => {
+    expect(shipped).toHaveLength(41)
   })
 
   it.each(shipped.map(entry => [entry.key, entry] as const))(
