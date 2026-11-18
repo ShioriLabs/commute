@@ -8,6 +8,10 @@ dev.port = 3002
 dev.inspector_port = 9232
 compatibility_date = "2025-10-18"
 
+# Served on its own hostname (a Workers custom domain: Cloudflare issues its
+# certificate and DNS record). Kept here so every deploy keeps it attached.
+routes = [{ pattern = "shirase.commute.shiorilabs.id", custom_domain = true }]
+
 # See apps/api/wrangler.toml for the 0.8 rationale. Tile traffic is many small
 # requests per map view, so this is the worker most likely to want it lower.
 [observability]
