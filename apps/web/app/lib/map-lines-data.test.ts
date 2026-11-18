@@ -305,8 +305,13 @@ describe('the shipped map-lines.json', () => {
      * absorbed.
      */
     const EXPECTED_REDRAWN: Record<string, string> = {
-      // Branded a pale tint of the orange it is drawn in.
-      'TJ:14': '#FA7116'
+      /*
+       * TJ:14 used to be here: branded a pale tint (#F5AB6E) of the orange it is
+       * drawn in (#FA7116). The 2026-10 re-export drew it #F17A28, 70 channels from
+       * the brand, one inside CORRIDOR_COLOUR_TOLERANCE (72), so the line no longer
+       * needs re-electing. Fragile by a hair: it is still the line to watch, and
+       * the 'traces TJ:14 on the orange' test in map-line-trace.test.ts pins it.
+       */
       /*
        * TJ:7 and TJ:7F used to be here: the GTFS feed gives them brown #914900
        * while TransJakarta's own roundel and the poster draw them pink, so the

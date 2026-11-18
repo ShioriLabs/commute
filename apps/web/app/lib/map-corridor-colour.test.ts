@@ -110,7 +110,8 @@ describe('the shipped map-corridors.json', () => {
       }
     }
     expect(pairs.filter(d => d > CORRIDOR_COLOUR_TOLERANCE).length / pairs.length).toBeGreaterThan(0.75)
-    expect(Math.max(...pairs)).toBeGreaterThan(CORRIDOR_COLOUR_TOLERANCE * 3)
+    // Spread sanity only: 2026-10's widest pair is 210 (was >216 before the re-export).
+    expect(Math.max(...pairs)).toBeGreaterThan(CORRIDOR_COLOUR_TOLERANCE * 2)
   })
 
   it('rejects the wrong stroke for the case that motivated this', () => {

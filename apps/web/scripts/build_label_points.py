@@ -303,6 +303,9 @@ def match(points, blocks, names):
     return matched, unmatched
 
 
+SPAN_FALLBACKS = []
+
+
 def fit_to_ink(page, entry):
     """Shrink-wrap the shape onto the label's own glyphs.
 
@@ -405,6 +408,16 @@ def fit_to_ink(page, entry):
             if hi_a <= lo_a:
                 lo_a, hi_a = own_lo, own_hi
 
+    # Ink that covers under half of the label's own text run is not this
+    # label's ink. Light-grey labels (2026-10 "Pramuka", LRTJ S08) sit above the
+    # <110 darkness threshold, so the only dark pixels in the search region were
+    # a neighbouring route arrow and the box collapsed onto it. Fall back to the
+    # text spans, which are the label's own by construction.
+    if own_lo is not None and not block['rotated'] and (hi_a - lo_a) < 0.5 * (own_hi - own_lo):
+        lo_a, hi_a = own_lo - PAD, own_hi + PAD
+        lo_p, hi_p = -half_h + PAD, half_h - PAD
+        SPAN_FALLBACKS.append(entry.get('station'))
+
     mid_a = (lo_a + hi_a) / 2
     mid_p = (lo_p + hi_p) / 2
     half_a = (hi_a - lo_a) / 2 + PAD
@@ -503,6 +516,7 @@ def main():
 
     OUT_PATH.write_text(json.dumps({'version': manifest['version'], 'points': out}, indent=1) + '\n')
     log(f'wrote {len(out)} label targets to {OUT_PATH.relative_to(REPO_ROOT)}')
+    log(f'ink-fit span fallbacks: {SPAN_FALLBACKS}')
     if unmatched:
         log(f'{len(unmatched)} points have no drawn name: ' + ', '.join(s for s, _ in unmatched))
 
