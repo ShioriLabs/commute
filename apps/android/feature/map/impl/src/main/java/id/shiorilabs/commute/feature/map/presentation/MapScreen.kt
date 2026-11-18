@@ -50,7 +50,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.movableContentWithReceiverOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -83,6 +86,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -441,10 +445,17 @@ private fun MapWithSheet(
     // Home's feed in a sheet of its own, so it slides away as the map's comes up over it, as
     // Citymapper's does, and keeps its place in the list meanwhile. Up at its rest from the start.
     // Dragged away, it leaves the map to be looked at, as a pan does.
-    val feedState = rememberMapSheetState(onHiding = { mode = HomeMode.Nearby }, initial = SheetStop.Rest)
+    // Home's own, from before the map had loaded, so the feed stays where the rider left it.
+    val feedState = home?.feedState ?: rememberMapSheetState(onHiding = {}, initial = SheetStop.Rest)
+    SideEffect { feedState.onHiding = { mode = HomeMode.Nearby } }
     val feedShown = home != null && selection == null && mode == HomeMode.Feed
     LaunchedEffect(feedShown) {
-        feedState.moveTo(if (feedShown) SheetStop.Rest else SheetStop.Hidden)
+        // Called back only from away: up at full as the map arrives, it stays there.
+        if (!feedShown) {
+            feedState.moveTo(SheetStop.Hidden)
+        } else if (feedState.stop == SheetStop.Hidden) {
+            feedState.moveTo(SheetStop.Rest)
+        }
     }
 
     // Up at its peek for a selection, away without one, and down to it for a line, which is drawn
@@ -501,18 +512,7 @@ private fun MapWithSheet(
             }
         }
         if (home != null) {
-            MapSheet(
-                state = feedState,
-                screenHeight = height,
-                height = height - topInset - SHEET_TOP_GAP,
-                peek = height * Viewport.PEEK_FRACTION.toFloat(),
-                fullTop = topInset + SHEET_TOP_GAP,
-                shape = RoundedCornerShape(topStart = SHEET_CORNER, topEnd = SHEET_CORNER),
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                shadowElevation = 8.dp,
-                rest = height * HOME_REST_FRACTION.toFloat(),
-                stops = HomeFeedStops,
-            ) {
+            HomeFeedSheet(state = feedState, screenHeight = height, topInset = topInset, stops = HomeFeedStops) {
                 home.feed(openStation)
             }
             // Home's rail over the foot of the feed, leaving and coming back with it.
@@ -1038,6 +1038,8 @@ internal class HomeSlots(
     val nearby: @Composable (stationIds: List<String>, openStation: (stationId: String) -> Unit) -> Unit,
     val rail: @Composable BoxScope.() -> Unit,
     val riderNear: List<NearStation>?,
+    /** The feed's sheet, made before the map had loaded and kept as it does. */
+    val feedState: MapSheetState? = null,
 )
 
 /** What home's sheet shows with nothing selected: its feed, or the stations in view once panned. */
@@ -1059,6 +1061,14 @@ internal fun MapHomeScreen(
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val navigator = LocalNavigator.current
+    // The feed and the rail are home's whether the map has loaded or not: up from the first frame,
+    // and moved whole (scroll, boards and all) into the map's layout once it has, rather than made
+    // again there.
+    val latest by rememberUpdatedState(slots)
+    val feed = remember { movableContentOf { open: (String) -> Unit -> latest.feed(open) } }
+    val rail = remember { movableContentWithReceiverOf<BoxScope> { latest.rail(this) } }
+    val feedState = rememberMapSheetState(onHiding = {}, initial = SheetStop.Rest)
     Box(modifier.fillMaxSize().background(Color.White)) {
         when (val current = state) {
             is UIState.Success -> MapWithSheet(
@@ -1070,19 +1080,64 @@ internal fun MapHomeScreen(
                 hubSheet = hubSheet,
                 lineSheet = lineSheet,
                 routeSheet = routeSheet,
-                home = slots,
+                home = HomeSlots(feed = feed, nearby = slots.nearby, rail = rail, riderNear = slots.riderNear, feedState = feedState),
             )
 
-            is UIState.Error -> ProblemPanel(
-                message = stringResource(R.string.map_load_failed),
-                retryLabel = stringResource(R.string.map_retry),
-                onRetry = viewModel::retry,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-            )
-
-            else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+            // The map still coming, or not come: the feed works meanwhile, a station opening as a page.
+            else -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier.fillMaxWidth().height(maxHeight * (1 - HOME_REST_FRACTION).toFloat()),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (current is UIState.Error) {
+                        ProblemPanel(
+                            message = stringResource(R.string.map_load_failed),
+                            retryLabel = stringResource(R.string.map_retry),
+                            onRetry = viewModel::retry,
+                            modifier = Modifier.padding(top = innerPadding.calculateTopPadding()).padding(24.dp),
+                        )
+                    } else {
+                        CircularProgressIndicator(Modifier.padding(top = innerPadding.calculateTopPadding()))
+                    }
+                }
+                MapChrome(innerPadding, onBack = null)
+                HomeFeedSheet(
+                    state = feedState,
+                    screenHeight = maxHeight,
+                    topInset = innerPadding.calculateTopPadding(),
+                    // Nothing under it to send it away for yet.
+                    stops = HomeFeedLoadingStops,
+                ) {
+                    feed { stationId -> navigator.goTo(Route.Station(stationId)) }
+                }
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) { rail() }
+            }
         }
     }
+}
+
+/** Home's feed in its sheet, the map's own sheet's shape, resting over [HOME_REST_FRACTION] of the screen. */
+@Composable
+private fun HomeFeedSheet(
+    state: MapSheetState,
+    screenHeight: Dp,
+    topInset: Dp,
+    stops: Set<SheetStop>,
+    content: @Composable () -> Unit,
+) {
+    MapSheet(
+        state = state,
+        screenHeight = screenHeight,
+        height = screenHeight - topInset - SHEET_TOP_GAP,
+        peek = screenHeight * Viewport.PEEK_FRACTION.toFloat(),
+        fullTop = topInset + SHEET_TOP_GAP,
+        shape = RoundedCornerShape(topStart = SHEET_CORNER, topEnd = SHEET_CORNER),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shadowElevation = 8.dp,
+        rest = screenHeight * HOME_REST_FRACTION.toFloat(),
+        stops = stops,
+        content = content,
+    )
 }
 
 /** "Sekitar": over the stations in view, with the way back to home's feed. */
@@ -1116,6 +1171,9 @@ private const val HOME_REST_FRACTION = 0.55
 
 /** Home's feed rests, goes full, or goes away below the screen for the map's sheet. */
 private val HomeFeedStops = setOf(SheetStop.Full, SheetStop.Rest, SheetStop.Hidden)
+
+/** Home's feed before the map has loaded: nothing under it to go away for. */
+private val HomeFeedLoadingStops = setOf(SheetStop.Full, SheetStop.Rest)
 
 /** The rail's slide off the foot of the screen with the feed, and back. */
 private const val RAIL_SLIDE_MILLIS = 250
