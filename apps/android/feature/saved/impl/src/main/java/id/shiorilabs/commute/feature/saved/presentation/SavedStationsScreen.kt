@@ -151,7 +151,9 @@ fun SavedStationsScreen(
                     onEditClick = { navigator.goTo(Route.SettingsSavedStations) },
                     savedRouteCard = savedRouteCard,
                     cardTap = cardTap,
-                    nearby = nearby,
+                    // The stations near the rider are the map's "Sekitar" here; only the card asking
+                    // for location stays, which the map opens around too.
+                    nearby = nearby.takeIf { it is NearbyUiState.Prompt } ?: NearbyUiState.Hidden,
                     raised = raised,
                     onNearbyPermission = nearbyViewModel::onPermissionResult,
                     onDismissNearby = nearbyViewModel::dismissPrompt,

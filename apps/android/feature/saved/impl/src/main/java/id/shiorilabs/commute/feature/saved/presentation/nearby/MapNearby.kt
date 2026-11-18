@@ -73,11 +73,12 @@ internal fun MapNearbyList(
 ) {
     LaunchedEffect(stationIds) { viewModel.show(stationIds) }
     val boards by viewModel.boards.collectAsStateWithLifecycle()
-    // Back to the top for each new set of stations, so the one nearest the middle of the map is the
-    // one in view: the list keeps its place by key otherwise, and would stay down among the last set.
+    // Back to the top for each new set of stations, and as each one's name lands and its rows join
+    // the list, so the one nearest the middle of the map is the one in view: the list keeps its place
+    // by key otherwise, and would stay down among the rows that were there first.
     val listState = rememberLazyListState()
-    val shownIds = boards.map { it.stationId }
-    LaunchedEffect(shownIds) { listState.scrollToItem(0) }
+    val shownIds = boards.mapNotNull { (it.station as? UIState.Success)?.data?.id }
+    LaunchedEffect(stationIds, shownIds) { listState.scrollToItem(0) }
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),

@@ -57,7 +57,7 @@ internal enum class SheetStop { Full, Rest, Peek, Hidden }
 internal class MapSheetState(
     private val scope: CoroutineScope,
     /** As the rider sends the sheet away, so what it showed can go with it. */
-    private val onHiding: () -> Unit,
+    var onHiding: () -> Unit,
     /** Where it stands before it's first moved. */
     initial: SheetStop = SheetStop.Hidden,
 ) {
