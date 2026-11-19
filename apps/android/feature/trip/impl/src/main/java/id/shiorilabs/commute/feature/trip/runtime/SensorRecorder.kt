@@ -11,6 +11,7 @@ import androidx.core.content.FileProvider
 import com.github.luben.zstd.ZstdOutputStream
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.config.Environment
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
@@ -100,7 +101,7 @@ class SensorRecorder @Inject constructor(
 
     /** What [MotionTracker] registers: the phone's own linear acceleration too, to set the estimator's gravity against. */
     private fun motionSensors(): List<Sensor> {
-        val sensors = context.getSystemService(SensorManager::class.java) ?: return emptyList()
+        val sensors = context.getSystemService(SensorManager::class.sunda) ?: return emptyList()
         return listOf(Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_GAME_ROTATION_VECTOR, Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE)
             .mapNotNull(sensors::getDefaultSensor)
     }

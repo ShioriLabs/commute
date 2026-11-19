@@ -17,6 +17,7 @@ import androidx.core.location.LocationManagerCompat
 import androidx.core.location.LocationRequestCompat
 import androidx.core.os.ExecutorCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.ext.sunda
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -52,7 +53,7 @@ class RawGnssRecorder @Inject constructor(
     @SuppressLint("MissingPermission") // A trip that tracks has the permission; a SecurityException is caught.
     fun start() {
         if (!recorder.enabled || thread != null) return
-        val manager = context.getSystemService(LocationManager::class.java)
+        val manager = context.getSystemService(LocationManager::class.sunda)
         if (manager == null || !manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             unavailable("provider")
             return
@@ -91,13 +92,13 @@ class RawGnssRecorder @Inject constructor(
             unavailable("permission")
             return
         }
-        wakeLock = context.getSystemService(PowerManager::class.java)
+        wakeLock = context.getSystemService(PowerManager::class.sunda)
             ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             ?.apply { acquire(MAX_WAKE_MILLIS) }
     }
 
     fun stop() {
-        val manager = context.getSystemService(LocationManager::class.java)
+        val manager = context.getSystemService(LocationManager::class.sunda)
         if (manager != null) {
             locationListener?.let { LocationManagerCompat.removeUpdates(manager, it) }
             measurements?.let(manager::unregisterGnssMeasurementsCallback)

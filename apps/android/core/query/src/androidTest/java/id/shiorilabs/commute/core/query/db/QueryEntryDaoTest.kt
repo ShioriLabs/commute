@@ -3,6 +3,7 @@ package id.shiorilabs.commute.core.query.db
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import id.shiorilabs.commute.core.ext.sunda
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -19,7 +20,7 @@ class QueryEntryDaoTest {
 
     @Before
     fun setUp() {
-        database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), QueryDatabase::class.java).build()
+        database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), QueryDatabase::class.sunda).build()
         dao = database.entries()
     }
 

@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import id.shiorilabs.commute.core.ext.sunda
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,7 +31,7 @@ class OpenStationReceiver : BroadcastReceiver() {
         fun tap(context: Context, stationId: String): PendingIntent = PendingIntent.getBroadcast(
             context,
             stationId.hashCode(),
-            Intent(context, OpenStationReceiver::class.java).putExtra(EXTRA_STATION, stationId),
+            Intent(context, OpenStationReceiver::class.sunda).putExtra(EXTRA_STATION, stationId),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
     }

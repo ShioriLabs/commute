@@ -10,6 +10,7 @@ import android.os.HandlerThread
 import android.os.PowerManager
 import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.DepartureDetector
@@ -90,7 +91,7 @@ class MotionTracker @Inject constructor(
     /** Starts reading, into the leg's recording if one is open, unless it's running already. */
     fun start() {
         if (estimator != null || _live.value?.unavailable == true) return
-        val sensors = context.getSystemService(SensorManager::class.java)
+        val sensors = context.getSystemService(SensorManager::class.sunda)
         val accel = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val gyro = sensors?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         val rotation = sensors?.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
@@ -143,7 +144,7 @@ class MotionTracker @Inject constructor(
         listOfNotNull(rotation, gyro, accel, linear).forEach { sensors.registerListener(events, it, SAMPLING_US, handler) }
         listener = events
 
-        wakeLock = context.getSystemService(PowerManager::class.java)
+        wakeLock = context.getSystemService(PowerManager::class.sunda)
             ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             ?.apply { acquire(MAX_WAKE_MILLIS) }
 
@@ -162,7 +163,7 @@ class MotionTracker @Inject constructor(
     fun stop() {
         ticker?.cancel()
         ticker = null
-        listener?.let { context.getSystemService(SensorManager::class.java)?.unregisterListener(it) }
+        listener?.let { context.getSystemService(SensorManager::class.sunda)?.unregisterListener(it) }
         listener = null
         thread?.quitSafely()
         thread = null

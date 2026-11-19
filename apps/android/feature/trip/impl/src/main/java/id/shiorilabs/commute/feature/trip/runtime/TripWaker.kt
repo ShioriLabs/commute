@@ -14,6 +14,7 @@ import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.datastore.OtwPreferencesRepository
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.notification.NotificationChannels
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
@@ -74,10 +75,10 @@ class TripWaker @Inject constructor(
 
     private val vibrator: Vibrator by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            context.getSystemService(VibratorManager::class.java).defaultVibrator
+            context.getSystemService(VibratorManager::class.sunda).defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            context.getSystemService(Vibrator::class.java)
+            context.getSystemService(Vibrator::class.sunda)
         }
     }
 

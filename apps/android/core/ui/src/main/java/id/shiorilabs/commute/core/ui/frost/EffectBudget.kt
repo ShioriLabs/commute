@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import id.shiorilabs.commute.core.ext.sunda
 
 /**
  * RAM below which the frost draws its tint alone. `totalMem` is what the kernel can hand out, well
@@ -21,7 +22,7 @@ private const val MIN_TOTAL_RAM_BYTES = 4L * 1024 * 1024 * 1024
 fun rememberFrostBlurEnabled(): Boolean {
     val context = LocalContext.current
     return remember(context) {
-        val manager = context.getSystemService(ActivityManager::class.java) ?: return@remember false
+        val manager = context.getSystemService(ActivityManager::class.sunda) ?: return@remember false
         if (manager.isLowRamDevice) {
             return@remember false
         }

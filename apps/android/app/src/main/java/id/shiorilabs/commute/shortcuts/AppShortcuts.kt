@@ -12,6 +12,7 @@ import id.shiorilabs.commute.MainActivity
 import id.shiorilabs.commute.R
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import kotlinx.coroutines.CancellationException
@@ -98,7 +99,7 @@ class AppShortcuts @Inject constructor(
             .setRank(rank)
             .setIntent(
                 Intent(Intent.ACTION_VIEW, link.toUri())
-                    .setComponent(ComponentName(context, MainActivity::class.java)),
+                    .setComponent(ComponentName(context, MainActivity::class.sunda)),
             )
             .build()
     }

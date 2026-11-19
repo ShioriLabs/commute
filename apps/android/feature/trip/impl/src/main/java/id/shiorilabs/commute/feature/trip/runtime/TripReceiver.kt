@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import dagger.hilt.android.AndroidEntryPoint
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.RiderAction
 import kotlinx.coroutines.CoroutineScope
@@ -65,7 +66,7 @@ class TripReceiver : BroadcastReceiver() {
         fun pendingIntent(context: Context, action: String): PendingIntent = PendingIntent.getBroadcast(
             context,
             action.hashCode(),
-            Intent(context, TripReceiver::class.java).setAction(action),
+            Intent(context, TripReceiver::class.sunda).setAction(action),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
     }

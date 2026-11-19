@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.core.navigation
 
+import id.shiorilabs.commute.core.ext.sunda
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 import org.junit.Assert.assertEquals
@@ -68,7 +69,7 @@ class RouteTest {
 
         // Route itself isn't polymorphic-serializable; each key goes through its own serializer.
         routes.forEach { route ->
-            val serializer = serializer(route::class.java)
+            val serializer = serializer(route::class.sunda)
             assertEquals(route, Json.decodeFromString(serializer, Json.encodeToString(serializer, route)))
         }
     }

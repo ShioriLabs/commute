@@ -9,6 +9,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import id.shiorilabs.commute.core.connectivity.NetworkMonitor
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.query.connectivity.AndroidNetworkMonitor
 import id.shiorilabs.commute.core.query.db.QueryDatabase
 import id.shiorilabs.commute.core.query.db.QueryEntryDao
@@ -35,7 +36,7 @@ internal abstract class QueryModule {
         @Provides
         @Singleton
         fun provideDatabase(@ApplicationContext context: Context): QueryDatabase =
-            Room.databaseBuilder(context, QueryDatabase::class.java, QueryDatabase.NAME)
+            Room.databaseBuilder(context, QueryDatabase::class.sunda, QueryDatabase.NAME)
                 // A cache: a schema change costs a refetch, never anything the rider made.
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
