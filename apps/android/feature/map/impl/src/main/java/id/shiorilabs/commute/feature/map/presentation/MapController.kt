@@ -67,6 +67,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -107,6 +108,17 @@ class MapController(
 
     /** Where to open once the surface is up, asked for before it was. */
     private var startSpot: Pair<Double, Double>? = null
+
+    /**
+     * Whether the camera keeps the running trip's rider in the middle of what shows, zoomed in on
+     * them: from the trip's start until the rider pans or pinches the map.
+     */
+    val isFollowingRider: StateFlow<Boolean> get() = followingRider
+    private val followingRider = MutableStateFlow(false)
+
+    /** Where the rider was last drawn, and whether the camera has zoomed in on them yet. */
+    private var riderAt: WorldPoint? = null
+    private var followZoomed = false
 
     /**
      * While an end of OTW's pair is being picked on the map: a station tapped, by its id, instead
@@ -415,6 +427,13 @@ class MapController(
             }
         }
         if (model != null && selected.value is MapSelection.Line) clearSelection()
+        riderAt = if (model != null && progress != null) riderSpot(model, progress)?.at else null
+        val rider = riderAt
+        if (followingRider.value && rider != null) {
+            // On the rider rather than the whole route.
+            pendingFit = null
+            follow(rider)
+        }
         invalidate()
     }
 
@@ -450,6 +469,7 @@ class MapController(
         spotlight?.exit(now)
         isolate?.exit(now)
         viewport?.let { setSheetInset(it.height * restFraction) }
+        riderAt?.let(::follow)
         invalidate()
     }
 
@@ -582,6 +602,35 @@ class MapController(
             return
         }
         fly(from, view.focus(from, x, y), Flight.TO_POINT_MS)
+    }
+
+    /** Keeps the rider in view from here on, zoomed in on them, until the map is panned or pinched. */
+    fun followRider() {
+        followingRider.value = true
+        followZoomed = false
+        riderAt?.let { at ->
+            // The route's framing, asked for as it was drawn a moment ago, would land after this and
+            // pull the camera back out to the whole route.
+            pendingFit = null
+            follow(at)
+        }
+    }
+
+    /** The camera onto [at], the rider: flown in close the first time, then kept on them. */
+    private fun follow(at: WorldPoint) {
+        // A station or line opened over the trip has the camera until its sheet goes.
+        if (!followingRider.value || selected.value != null || grabbed) return
+        val view = viewport ?: return
+        val from = rendered ?: return
+        val scale = if (followZoomed) (target ?: from).scale else max(FOLLOW_SCALE, view.minScale)
+        val to = view.focus(Transform(from.tx, from.ty, scale), at.x, at.y)
+        if (!followZoomed) {
+            followZoomed = true
+            fly(from, to, Flight.TO_ROUTE_MS)
+        } else if (flight == null) {
+            target = to
+        }
+        invalidate()
     }
 
     /** Back to the whole map, as the web's "Kembali ke tampilan penuh". */
@@ -782,6 +831,7 @@ class MapController(
                 is MapGestures.Event.Pan -> {
                     target = view.clamp(Transform(t.tx + event.dx, t.ty + event.dy, t.scale))
                     chromeVisible.value = false
+                    followingRider.value = false
                     onUserMove()
                 }
 
@@ -790,6 +840,7 @@ class MapController(
                 is MapGestures.Event.Pinch -> {
                     target = view.zoomAt(t, event.anchorX, event.anchorY, pinchStartScale * event.factor / t.scale)
                     chromeVisible.value = false
+                    followingRider.value = false
                     onUserMove()
                 }
 
@@ -902,6 +953,9 @@ class MapController(
 
         /** The web's ripples: four at once at most. */
         const val MAX_RIPPLES = 4
+
+        /** How close the camera comes in on a followed rider: stations and their names easy to read. */
+        const val FOLLOW_SCALE = 0.7
 
         /** How many stations "Sekitar" lists for a panned map. */
         const val STATIONS_IN_VIEW = 6
