@@ -13,6 +13,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.ContinuationInterceptor
+import kotlin.time.toKotlinDuration
 
 /**
  * The app's response cache, after TanStack Query (and the web app's SWR): answers are held in
@@ -48,6 +51,10 @@ import kotlin.coroutines.ContinuationInterceptor
  * - **Deduplicated.** Any number of observers of one key share one fetch.
  * - **Offline.** Nothing is asked while the device is offline; a due fetch is reported as
  *   [Failure.Network.NoConnection] next to the data held, and runs once it is back online.
+ * - **Retry.** A fetch that fails for the network or the server (a timeout, a 5xx) is asked again
+ *   while the key is still observed, [RETRY_BACKOFF] apart, and then not until something else
+ *   asks: a new observer, reconnecting, an [invalidate]. A refusal (a 404, a body that won't
+ *   decode) isn't asked again on its own.
  * - **Not tied to a screen.** Fetches run in the app's scope, so leaving a screen mid-request still
  *   keeps the answer for the next visit.
  *
@@ -226,7 +233,7 @@ class QueryClient @Inject constructor(
     }
 
     /** Starts [cell]'s fetch if its answer is due one, or joins the one running. */
-    private fun <T> revalidate(cell: Cell, spec: QuerySpec<T>): Deferred<Outcome>? {
+    private fun <T> revalidate(cell: Cell, spec: QuerySpec<T>, retrying: Boolean = false): Deferred<Outcome>? {
         if (!cell.state.value.needsFetch(spec, clock.instant())) {
             return synchronized(cell) { cell.inFlight?.takeIf { it.isActive } }
         }
@@ -236,8 +243,33 @@ class QueryClient @Inject constructor(
         }
         return synchronized(cell) {
             cell.inFlight?.takeIf { it.isActive } ?: run {
+                // Asked for afresh rather than by a retry: the backoff starts over.
+                if (!retrying) cell.retries = 0
                 cell.state.update { it.copy(isFetching = true) }
-                scope.async { runFetch(cell, spec) }.also { cell.inFlight = it }
+                scope.async { runFetch(cell, spec).also { afterFetch(cell, it) } }.also { cell.inFlight = it }
+            }
+        }
+    }
+
+    /**
+     * A fetch over: a failure worth asking again about is asked again after the next wait of
+     * [RETRY_BACKOFF], if the key is still observed then; anything else ends the retries.
+     */
+    private fun afterFetch(cell: Cell, outcome: Outcome) {
+        synchronized(cell) {
+            cell.retry?.cancel()
+            cell.retry = null
+            if (outcome != Outcome.FAILED || !cell.state.value.failure.isRetryable()) {
+                cell.retries = 0
+                return
+            }
+            val wait = RETRY_BACKOFF.getOrNull(cell.retries) ?: return
+            cell.retries++
+            cell.retry = scope.launch {
+                delay(wait.toKotlinDuration())
+                @Suppress("UNCHECKED_CAST")
+                val spec = cell.spec as QuerySpec<Any?>? ?: return@launch
+                if (cell.observers.get() > 0) revalidate(cell, spec, retrying = true)
             }
         }
     }
@@ -306,6 +338,10 @@ class QueryClient @Inject constructor(
         /** Guarded by the cell itself. */
         var inFlight: Deferred<Outcome>? = null
 
+        /** The retries run since the last fetch asked for afresh, and the next one waiting. Guarded by the cell. */
+        var retries = 0
+        var retry: Job? = null
+
         fun isIdle(): Boolean = observers.get() == 0 && synchronized(this) { inFlight?.isActive != true }
     }
 
@@ -341,6 +377,19 @@ class QueryClient @Inject constructor(
 
         /** A station's week of timetables is tens of kilobytes; this holds hundreds of them. */
         const val MAX_SIZE = 25L * 1024 * 1024
+
+        /**
+         * The waits before asking again after a fetch failed for the network or the server: soon
+         * for a blip (a tunnel, coming back from the background before the radio has), then wider.
+         */
+        val RETRY_BACKOFF: List<Duration> = listOf(Duration.ofSeconds(5), Duration.ofSeconds(15), Duration.ofSeconds(60))
+
+        /** A failure the network or the server may get over: not a refusal, nor a body that won't read. */
+        fun Failure?.isRetryable(): Boolean = when (this) {
+            is Failure.Network -> true
+            is Failure.Remote -> code >= 500 || code == 429 || code == 408
+            else -> false
+        }
 
         /** The failure a due fetch reports while offline, shaped like a real one for the copy. */
         fun offline(): Failure = Failure.Network.NoConnection(cause = IOException("Offline"))

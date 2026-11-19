@@ -3,6 +3,7 @@ package id.shiorilabs.commute.core.query
 import id.shiorilabs.commute.core.query.store.StoredEntry
 import id.shiorilabs.commute.core.query.testing.FakeNetworkMonitor
 import id.shiorilabs.commute.core.query.testing.FakeQueryStore
+import id.shiorilabs.commute.core.type.ApiException
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.Fetched
 import id.shiorilabs.commute.core.type.UIState
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -29,6 +31,8 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class QueryClientTest {
@@ -156,6 +160,83 @@ class QueryClientTest {
         assertTrue(last.failure is Failure.Network.NoConnection)
         assertTrue(last.isOutdated)
         assertEquals(UIState.Success(Thing("stored")), last.toUIState())
+    }
+
+    @Test
+    fun `a failed refresh is asked again after a while, while it is still watched`() = runTest {
+        stored(age = Duration.ofHours(2))
+        var failing = true
+        answer = { if (failing) throw IOException("tunnel") else Fetched.Body(Thing("fresh"), "W/\"2\"") }
+
+        val emissions = collect(client().observe(spec()))
+        runCurrent()
+        assertTrue(emissions.last().isOutdated)
+
+        failing = false
+        advanceTimeBy(5.seconds)
+        runCurrent()
+
+        assertEquals(2, calls)
+        assertEquals(Query(Thing("fresh"), start), emissions.last())
+    }
+
+    @Test
+    fun `retries back off, and stop after the last until something asks again`() = runTest {
+        stored(age = Duration.ofHours(2))
+        answer = { throw IOException("tunnel") }
+
+        collect(client().observe(spec()))
+        runCurrent()
+        assertEquals(1, calls)
+
+        advanceTimeBy(5.seconds); runCurrent()
+        assertEquals(2, calls)
+        advanceTimeBy(14.seconds); runCurrent()
+        assertEquals(2, calls)
+        advanceTimeBy(1.seconds); runCurrent()
+        assertEquals(3, calls)
+        advanceTimeBy(60.seconds); runCurrent()
+        assertEquals(4, calls)
+        advanceTimeBy(30.minutes); runCurrent()
+        assertEquals(4, calls)
+    }
+
+    @Test
+    fun `an answer the server refused isn't asked again on its own`() = runTest {
+        stored(age = Duration.ofHours(2))
+        answer = { throw ApiException(status = 404) }
+
+        collect(client().observe(spec()))
+        runCurrent()
+        advanceTimeBy(5.minutes); runCurrent()
+
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun `a server error is asked again`() = runTest {
+        stored(age = Duration.ofHours(2))
+        answer = { throw ApiException(status = 503) }
+
+        collect(client().observe(spec()))
+        runCurrent()
+        advanceTimeBy(5.seconds); runCurrent()
+
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun `nothing is asked again for a key nobody watches any more`() = runTest {
+        stored(age = Duration.ofHours(2))
+        answer = { throw IOException("tunnel") }
+        val client = client()
+
+        val watching = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { client.observe(spec()).collect {} }
+        runCurrent()
+        watching.cancel()
+        advanceTimeBy(5.minutes); runCurrent()
+
+        assertEquals(1, calls)
     }
 
     @Test
