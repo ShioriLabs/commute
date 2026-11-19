@@ -1175,7 +1175,9 @@ private fun NearbyHeader(onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, top = 16.dp, end = 12.dp, bottom = 4.dp),
+            // On the station names' edge and the cards', the ✕'s glyph as far in from the right
+            // (its 48dp target leaves 13dp round the 22dp glyph).
+            .padding(start = 16.dp, top = 16.dp, end = 3.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
