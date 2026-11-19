@@ -195,7 +195,7 @@ describe('groupDirections', () => {
   })
 
   it('walks the full spine to the airport terminus', () => {
-    // BST is a real A06 stop, so this is an ordinary in-topology walk: the label
+    // BST is a real A08 stop, so this is an ordinary in-topology walk: the label
     // names every station out to the terminus, not a proxied stand-in.
     const groups = group({
       lineCode: 'A',
