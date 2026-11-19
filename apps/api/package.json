@@ -15,6 +15,7 @@
     "generate:lrtjbdbtimetable": "tsx ./src/operators/lrtjbdb/generateTimetableSQL.ts",
     "generate:basoetta-timetable": "tsx ./src/operators/kci/generateBasoettaTimetableSQL.ts",
     "generate:kci-timetable": "tsx ./src/operators/kci/generateTimetableFromDumpSQL.ts",
+    "generate:gapeka-timetable": "tsx ./src/operators/kci/gapeka/generateGapekaTimetableSQL.ts",
     "generate:apcgk-timetable": "tsx ./src/operators/apcgk/generateTimetableSQL.ts",
     "fetch:lrtj-timetable": "tsx ./src/operators/lrtj/fetchTimetable.ts",
     "generate:lrtj-timetable": "tsx ./src/operators/lrtj/generateTimetableSQL.ts",
