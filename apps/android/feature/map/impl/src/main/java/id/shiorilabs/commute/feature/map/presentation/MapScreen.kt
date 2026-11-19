@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.map.presentation
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.Animatable
@@ -68,6 +69,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -181,7 +184,13 @@ fun MapScreen(
  * is false.
  */
 @Composable
-private fun BoxScope.MapChrome(innerPadding: PaddingValues, onBack: (() -> Unit)?, title: Boolean = false, titleVisible: Boolean = true) {
+private fun BoxScope.MapChrome(
+    innerPadding: PaddingValues,
+    onBack: (() -> Unit)?,
+    title: Boolean = false,
+    titleVisible: Boolean = true,
+    @StringRes titleRes: Int = R.string.map_title,
+) {
     // Light icons over a navy scrim that fades out below the status bar, as KitKat's translucent
     // bar did, whatever the theme: the artwork's busy top edge would otherwise run under the
     // clock, and a solid bar would cut it off.
@@ -213,7 +222,7 @@ private fun BoxScope.MapChrome(innerPadding: PaddingValues, onBack: (() -> Unit)
     if (title) {
         val shown by animateFloatAsState(if (titleVisible) 1f else 0f, tween(TITLE_FADE_MILLIS), label = "title")
         Text(
-            text = stringResource(R.string.map_title),
+            text = stringResource(titleRes),
             modifier = Modifier
                 .padding(top = innerPadding.calculateTopPadding() + 8.dp, start = 16.dp, end = 64.dp)
                 .chromeEnter(1)
@@ -401,6 +410,24 @@ private fun MapWithSheet(
     }
     // Opened from "Cek rute dan tarif": up at full, as the web's, rather than its peek.
     var routeSheetFull by remember { mutableStateOf(false) }
+    // The streets layer, Experimental "Peta Jalan", picked from the layers button as Google Maps'
+    // satellite is, on home's map as on this one. Not while a pair is planned or an end picked:
+    // routes are drawn on the artwork.
+    val streetsEnabled by viewModel.streetsEnabled.collectAsStateWithLifecycle()
+    val streetsPicked by viewModel.streetsPicked.collectAsStateWithLifecycle()
+    val busMap by viewModel.busMap.collectAsStateWithLifecycle()
+    val layersOffered = streetsEnabled && !mapRoute.isSet && picking == null
+    val streets = layersOffered && streetsPicked
+    LaunchedEffect(streets) {
+        if (streets) viewModel.loadBusMap()
+    }
+    val streetsState = rememberStreetsMapState(viewModel.session)
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    var layersOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(selection, layersOffered) {
+        if (selection != null || !layersOffered) layersOpen = false
+    }
+
     // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
     // sheet does rather than once it has gone.
     // Home on the map: its feed in the sheet until the map is panned, then the stations in view.
@@ -427,22 +454,29 @@ private fun MapWithSheet(
         val at = spot ?: data.initialPoint?.let { it.centerX to it.centerY } ?: return@LaunchedEffect
         controller.centreOn(at.first, at.second)
     }
-    // The stations in view once the map has stopped under the finger, and again once a fling has.
-    LaunchedEffect(moves, mode) {
+    // The stations in view once the map has stopped under the finger, and again once a fling has:
+    // on the streets, Peta Bus's dots above the sheet.
+    val stationsInView = {
+        if (streets) {
+            busMap?.let { streetsState.stationsInView(it.stops, STREETS_IN_VIEW) }.orEmpty()
+        } else {
+            controller.stationsInView()
+        }
+    }
+    LaunchedEffect(moves, mode, streets) {
         if (home == null || mode != HomeMode.Nearby) return@LaunchedEffect
         delay(NEARBY_SETTLE_MS)
-        nearbyIds = controller.stationsInView()
+        nearbyIds = stationsInView()
         delay(NEARBY_FLING_MS)
-        nearbyIds = controller.stationsInView()
+        nearbyIds = stationsInView()
     }
-    LaunchedEffect(home != null, mode) {
-        controller.setRestInset(
-            when {
-                home == null -> 0.0
-                mode == HomeMode.Feed -> HOME_REST_FRACTION
-                else -> Viewport.PEEK_FRACTION
-            },
-        )
+    val restFraction = when {
+        home == null -> 0.0
+        mode == HomeMode.Feed -> HOME_REST_FRACTION
+        else -> Viewport.PEEK_FRACTION
+    }
+    LaunchedEffect(restFraction) {
+        controller.setRestInset(restFraction)
     }
     val sheetState = rememberMapSheetState(
         onHiding = {
@@ -504,18 +538,62 @@ private fun MapWithSheet(
         }
     }
 
+    BackHandler(enabled = layersOpen) { layersOpen = false }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val topInset = innerPadding.calculateTopPadding()
         val height = maxHeight
+        // The feed resting over the foot of the streets too: the camera centres on what shows above it.
+        val streetsHeightPx = with(LocalDensity.current) { height.toPx() }.toDouble()
+        LaunchedEffect(restFraction, streetsHeightPx) {
+            streetsState.setBottomInset(streetsHeightPx * restFraction)
+        }
         Box(Modifier.fillMaxSize()) {
-            MapSurface(controller, viewModel)
-            TapRipples(controller)
-            val lost by controller.isLost.collectAsStateWithLifecycle()
-            if (lost) MapLost(onRetry = controller::retryRenderer)
+            if (streets) {
+                StreetsLayer(
+                    state = streetsState,
+                    styleUrl = viewModel.streetsStyleUrl(dark),
+                    busMap = busMap,
+                    dark = dark,
+                    onStationTap = openStation,
+                    onTap = {
+                        attributionOpen = false
+                        layersOpen = false
+                    },
+                    onUserMove = { controller.onUserMove() },
+                )
+            } else {
+                MapSurface(controller, viewModel)
+                TapRipples(controller)
+                val lost by controller.isLost.collectAsStateWithLifecycle()
+                if (lost) MapLost(onRetry = controller::retryRenderer)
+            }
             if (home == null) {
-                MapChrome(innerPadding, onBack = { navigator.pop() }, title = true, titleVisible = chromeVisible)
+                MapChrome(
+                    innerPadding,
+                    onBack = { navigator.pop() },
+                    title = true,
+                    titleVisible = streets || chromeVisible,
+                    titleRes = if (streets) R.string.map_streets_title else R.string.map_title,
+                )
             } else {
                 MapChrome(innerPadding, onBack = null)
+            }
+            if (layersOffered) {
+                MapButton(
+                    icon = CommuteIcons.MapLayers,
+                    description = stringResource(R.string.map_layers_open),
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        attributionOpen = false
+                        layersOpen = !layersOpen
+                    },
+                    // Under the close, centred on it; at the top right on home, which has none.
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = topInset + if (home == null) LAYERS_BUTTON_TOP else LAYERS_BUTTON_TOP_HOME, end = 10.dp)
+                        .chromeEnter(2),
+                )
             }
         }
         if (home != null) {
@@ -638,7 +716,7 @@ private fun MapWithSheet(
                     .align(Alignment.BottomEnd)
                     .padding(start = 16.dp, end = 16.dp, bottom = bottom + 56.dp),
             ) {
-                Attribution(version = data.manifest.version)
+                if (streets) StreetsAttribution(busMap?.attribution) else Attribution(version = data.manifest.version)
             }
             Row(
                 modifier = Modifier
@@ -678,13 +756,13 @@ private fun MapWithSheet(
                     }
                 }
                 // Faded in place rather than gone, so the credit beside it never jumps.
-                val recenterShown by animateFloatAsState(if (zoomedIn) 1f else 0f, tween(TITLE_FADE_MILLIS), label = "recenter")
+                val recenterShown by animateFloatAsState(if (zoomedIn || streets) 1f else 0f, tween(TITLE_FADE_MILLIS), label = "recenter")
                 MapButton(
-                    icon = CommuteIcons.MapRecenter,
-                    description = stringResource(R.string.map_recenter),
+                    icon = if (streets) CommuteIcons.NavigationArrow else CommuteIcons.MapRecenter,
+                    description = stringResource(if (streets) R.string.map_streets_recenter else R.string.map_recenter),
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        controller.recenter()
+                        if (streets) streetsState.recenter() else controller.recenter()
                     },
                     modifier = Modifier
                         .chromeEnter(3)
@@ -696,14 +774,17 @@ private fun MapWithSheet(
                 MapButton(
                     icon = CommuteIcons.MapInfo,
                     description = stringResource(R.string.map_attribution_open),
-                    onClick = { attributionOpen = !attributionOpen },
+                    onClick = {
+                        layersOpen = false
+                        attributionOpen = !attributionOpen
+                    },
                     modifier = Modifier.chromeEnter(4),
                 )
             }
         }
 
         // Back onto the rider once the map has been moved away from them.
-        if (tripShown && !following && selection == null && picking == null) {
+        if (tripShown && !following && selection == null && picking == null && !streets) {
             // Above the row of buttons where it shows, else just above the sheet.
             val rowBottom = if (home != null) 12.dp else WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             val lift = if (homeRow) rowBottom + 56.dp else 12.dp
@@ -744,6 +825,84 @@ private fun MapWithSheet(
                 .padding(horizontal = 16.dp),
         ) {
             LineChooser(lines = heldChoices.ifEmpty { lineChoices }, onChoose = controller::chooseLine)
+        }
+
+        // The layers card, under its button, over the sheet.
+        AnimatedVisibility(
+            visible = layersOpen,
+            enter = fadeIn(tween(CHOOSER_FADE_MILLIS)) + scaleIn(tween(CHOOSER_FADE_MILLIS), initialScale = 0.92f, transformOrigin = TransformOrigin(1f, 0f)),
+            exit = fadeOut(tween(CHOOSER_FADE_MILLIS)),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = topInset + if (home == null) LAYERS_CARD_TOP else LAYERS_CARD_TOP_HOME, end = 16.dp),
+        ) {
+            LayerPicker(
+                streets = streetsPicked,
+                onPick = { picked ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.pickStreets(picked)
+                    if (!picked) layersOpen = false
+                },
+            )
+        }
+    }
+}
+
+/**
+ * [StreetsMap] where a surface can be: not while a shared transition runs (the morph out of home's
+ * card, a page over the map coming or going), which a SurfaceView can't be faded or clipped with,
+ * as the artwork's surface isn't. The basemap's land colour stands in meanwhile.
+ */
+@Composable
+private fun StreetsLayer(
+    state: StreetsMapState,
+    styleUrl: String,
+    busMap: BusMapLayer?,
+    dark: Boolean,
+    onStationTap: (String) -> Unit,
+    onTap: () -> Unit,
+    onUserMove: () -> Unit,
+) {
+    val description = stringResource(R.string.map_streets_description)
+    val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(if (dark) StreetsStandInDark else StreetsStandIn)
+            .semantics { contentDescription = description },
+    ) {
+        if (!transitioning) {
+            StreetsMap(
+                state = state,
+                styleUrl = styleUrl,
+                busMap = busMap,
+                dark = dark,
+                onStationTap = onStationTap,
+                onTap = onTap,
+                onUserMove = onUserMove,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/** The streets layer's credit: the basemap's data and Peta Bus's. */
+@Composable
+private fun StreetsAttribution(busMapCredit: String?, modifier: Modifier = Modifier) {
+    val title = stringResource(R.string.map_streets_attribution_title)
+    Surface(
+        modifier = modifier
+            .widthIn(max = 320.dp)
+            .semantics { paneTitle = title },
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, Slate200),
+        shadowElevation = 12.dp,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(text = stringResource(R.string.map_streets_attribution_credit), style = MaterialTheme.typography.bodySmall, color = Slate600)
+            if (busMapCredit != null) Text(text = busMapCredit, style = MaterialTheme.typography.bodySmall, color = Slate500)
         }
     }
 }
@@ -1060,6 +1219,21 @@ private const val STAND_IN_MAX_WAIT_MS = 800L
 
 /** How long the map waits in the background before letting its tiles go: the web's 3 s. */
 private const val BACKGROUND_RELEASE_MS = 3_000L
+
+/** The layers button under the close (8 dp down, 40 dp tall, a 12 dp gap), and its card under that. */
+private val LAYERS_BUTTON_TOP = 60.dp
+private val LAYERS_CARD_TOP = 112.dp
+
+/** On home, with no close: the layers button where the close would be, its card under it. */
+private val LAYERS_BUTTON_TOP_HOME = 8.dp
+private val LAYERS_CARD_TOP_HOME = 60.dp
+
+/** How many stations "Sekitar" lists for the panned streets, as many as for the artwork. */
+private const val STREETS_IN_VIEW = 6
+
+/** shirase's land colours, light and dark: what the streets layer shows before its first frame. */
+private val StreetsStandIn = Color(0xFFE2DFDA)
+private val StreetsStandInDark = Color(0xFF34373D)
 
 /** What home on the map hands in: its feed, its list of stations in view, and its rail. */
 internal class HomeSlots(

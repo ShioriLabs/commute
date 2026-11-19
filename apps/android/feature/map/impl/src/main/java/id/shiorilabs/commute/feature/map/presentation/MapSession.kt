@@ -18,4 +18,10 @@ class MapSession @Inject constructor() {
 
     /** The map as it looked then. */
     var snapshot: Bitmap? = null
+
+    /** Where the streets layer's camera was when it last left the screen. */
+    var streetsCamera: StreetsCamera? = null
 }
+
+/** The streets layer's camera, in MapLibre's terms but free of its types. */
+data class StreetsCamera(val latitude: Double, val longitude: Double, val zoom: Double, val bearing: Double = 0.0)

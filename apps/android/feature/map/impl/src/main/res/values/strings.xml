@@ -24,4 +24,13 @@
     <string name="map_lost_title">Peta terputus</string>
     <string name="map_lost_body">Perangkat kehabisan memori grafis. Tutup aplikasi lain, lalu coba lagi</string>
     <string name="map_lost_retry">Muat ulang peta</string>
+    <string name="map_layers_open">Pilih jenis peta</string>
+    <string name="map_layers_title">Jenis peta</string>
+    <string name="map_layer_schematic">Integrasi</string>
+    <string name="map_layer_streets">Jalan</string>
+    <string name="map_streets_title">Peta Jalan</string>
+    <string name="map_streets_description">Peta jalan Jakarta dengan rute dan halte TransJakarta</string>
+    <string name="map_streets_recenter">Ke lokasi sekarang</string>
+    <string name="map_streets_attribution_title">Peta Jalan</string>
+    <string name="map_streets_attribution_credit">© Kontributor OpenStreetMap · Protomaps</string>
 </resources>

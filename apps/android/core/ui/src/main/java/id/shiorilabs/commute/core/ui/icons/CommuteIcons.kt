@@ -23,6 +23,7 @@ import com.adamglin.phosphoricons.bold.Clock
 import com.adamglin.phosphoricons.bold.CornersIn
 import com.adamglin.phosphoricons.bold.CreditCard
 import com.adamglin.phosphoricons.bold.Info
+import com.adamglin.phosphoricons.bold.Stack
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.adamglin.phosphoricons.bold.NavigationArrow
 import com.adamglin.phosphoricons.bold.PencilSimple
@@ -85,6 +86,9 @@ object CommuteIcons {
     /** On the map: back to the whole of it, its attribution, and OTW's way in, as the web's. */
     val MapRecenter: ImageVector = PhosphorIcons.Bold.CornersIn
     val MapInfo: ImageVector = PhosphorIcons.Bold.Info
+
+    /** The map's layer picker: the FDTJ artwork or the streets, as Google Maps' layers button. */
+    val MapLayers: ImageVector = PhosphorIcons.Bold.Stack
     val Fare: ImageVector = PhosphorIcons.Bold.Receipt
     val Close: ImageVector = PhosphorIcons.Bold.X
 

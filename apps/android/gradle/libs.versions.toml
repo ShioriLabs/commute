@@ -29,6 +29,8 @@ navigation3 = "1.1.6"
 hilt = "2.60.1"
 # Blur — backdrop blur for sticky headers
 haze = "2.0.0"
+# MapLibre Native: the map's streets layer, drawing shirase's styles as served
+maplibre = "13.7.1"
 # Ktor
 ktor = "3.5.2"
 # OpenAPI model generator. 26.1.0 is published without a jar, so this stays on the last release
@@ -95,6 +97,8 @@ hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", ve
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 # Haze 2 split the blur effect (`hazeBlur`, `HazeBlurStyle`) out of the core artifact.
 haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
+# The map's streets layer
+maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 # Ktor
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
