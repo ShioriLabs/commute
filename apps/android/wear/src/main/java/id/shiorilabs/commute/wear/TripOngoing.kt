@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.trip.headline
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
@@ -45,7 +46,7 @@ object TripOngoing {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
         if (!granted) return
-        val manager = context.getSystemService(NotificationManager::class.java)
+        val manager = context.getSystemService(NotificationManager::class.sunda)
         if (manager.getNotificationChannel(START_CHANNEL) == null) {
             manager.createNotificationChannel(
                 NotificationChannel(START_CHANNEL, context.getString(R.string.trip_start_channel), NotificationManager.IMPORTANCE_HIGH),
@@ -100,7 +101,7 @@ object TripOngoing {
     fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
         context,
         0,
-        Intent(context, MainActivity::class.java),
+        Intent(context, MainActivity::class.sunda),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
@@ -130,7 +131,7 @@ object TripOngoing {
     }
 
     private fun ensureChannel(context: Context) {
-        val manager = context.getSystemService(NotificationManager::class.java)
+        val manager = context.getSystemService(NotificationManager::class.sunda)
         if (manager.getNotificationChannel(CHANNEL) != null) return
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL, context.getString(R.string.trip_channel), NotificationManager.IMPORTANCE_LOW),

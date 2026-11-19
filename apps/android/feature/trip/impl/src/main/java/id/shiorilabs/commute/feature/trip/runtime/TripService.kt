@@ -8,6 +8,7 @@ import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.location.LocationMode
@@ -196,7 +197,7 @@ class TripService : Service() {
 
     private fun holdWake() {
         if (wakeLock?.isHeld == true) return
-        wakeLock = getSystemService(PowerManager::class.java)
+        wakeLock = getSystemService(PowerManager::class.sunda)
             ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             ?.apply { acquire(MAX_WAKE_MILLIS) }
     }

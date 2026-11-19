@@ -14,6 +14,7 @@ import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.wearable.WearPaths
 
@@ -38,7 +39,7 @@ object WatchAlarm {
 
     @SuppressLint("MissingPermission") // Checked just below; without it the buzz still comes.
     fun ring(context: Context, stop: String) {
-        val vibrator = context.getSystemService(VibratorManager::class.java).defaultVibrator
+        val vibrator = context.getSystemService(VibratorManager::class.sunda).defaultVibrator
         val buzz = WearPaths.wakeBuzz(stop)
         val round = buzz.drop(1)
         val rounds = (RING_MS / buzz.sum()).toInt()
@@ -51,7 +52,7 @@ object WatchAlarm {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
         if (!granted) return
-        val manager = context.getSystemService(NotificationManager::class.java)
+        val manager = context.getSystemService(NotificationManager::class.sunda)
         if (manager.getNotificationChannel(CHANNEL) == null) {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, context.getString(R.string.trip_wake_channel), NotificationManager.IMPORTANCE_HIGH)
@@ -64,14 +65,14 @@ object WatchAlarm {
         val awake = PendingIntent.getBroadcast(
             context,
             0,
-            Intent(context, AwakeReceiver::class.java),
+            Intent(context, AwakeReceiver::class.sunda),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         // A tap on the card opens the trip, and is as good as "Udah bangun": whoever tapped is up.
         val open = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java).setAction(ACTION_AWAKE),
+            Intent(context, MainActivity::class.sunda).setAction(ACTION_AWAKE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
@@ -89,14 +90,14 @@ object WatchAlarm {
 
     /** "Ingatkan Aku": three knocks, as an alarm's, so they come through silent mode. */
     fun ping(context: Context, stop: String) {
-        context.getSystemService(VibratorManager::class.java).defaultVibrator.vibrate(
+        context.getSystemService(VibratorManager::class.sunda).defaultVibrator.vibrate(
             VibrationEffect.createWaveform(WearPaths.pingBuzz(stop), -1),
             VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),
         )
     }
 
     fun silence(context: Context) {
-        context.getSystemService(VibratorManager::class.java).defaultVibrator.cancel()
+        context.getSystemService(VibratorManager::class.sunda).defaultVibrator.cancel()
         NotificationManagerCompat.from(context).cancel(ID)
     }
 }

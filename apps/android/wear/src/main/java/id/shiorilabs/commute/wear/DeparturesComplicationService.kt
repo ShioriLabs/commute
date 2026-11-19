@@ -15,6 +15,7 @@ import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingTimelineComplicationDataSourceService
 import androidx.wear.watchface.complications.datasource.TimeInterval
 import androidx.wear.watchface.complications.datasource.TimelineEntry
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.wearable.WearDirection
 import id.shiorilabs.commute.core.wearable.WearStation
@@ -111,7 +112,7 @@ class DeparturesComplicationService : SuspendingTimelineComplicationDataSourceSe
         val tap = PendingIntent.getActivity(
             this,
             complicationId,
-            Intent(this, DeparturesConfigActivity::class.java)
+            Intent(this, DeparturesConfigActivity::class.sunda)
                 .putExtra(ComplicationDataSourceService.EXTRA_CONFIG_COMPLICATION_ID, complicationId),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -140,6 +141,6 @@ class DeparturesComplicationService : SuspendingTimelineComplicationDataSourceSe
         }
 
         private fun requester(context: Context) =
-            ComplicationDataSourceUpdateRequester.create(context, ComponentName(context, DeparturesComplicationService::class.java))
+            ComplicationDataSourceUpdateRequester.create(context, ComponentName(context, DeparturesComplicationService::class.sunda))
     }
 }

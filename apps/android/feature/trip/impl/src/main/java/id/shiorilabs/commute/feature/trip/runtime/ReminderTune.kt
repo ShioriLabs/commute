@@ -10,6 +10,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.annotation.RawRes
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.feature.trip.R
 import java.time.Duration
 import javax.inject.Inject
@@ -44,7 +45,7 @@ class ReminderTune @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
 
-    private val audio: AudioManager by lazy { context.getSystemService(AudioManager::class.java) }
+    private val audio: AudioManager by lazy { context.getSystemService(AudioManager::class.sunda) }
 
     private var player: MediaPlayer? = null
     private var focus: AudioFocusRequest? = null

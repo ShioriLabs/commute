@@ -17,6 +17,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.navigation3.ui.NavDisplay
 import dagger.hilt.android.EntryPointAccessors
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.navigation.CommuteNavigator
 import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
@@ -39,7 +40,7 @@ fun CommuteNavDisplay(
     val contributions = remember(context) {
         EntryPointAccessors.fromApplication(
             context.applicationContext,
-            NavGraphEntryPoint::class.java,
+            NavGraphEntryPoint::class.sunda,
         ).navContributions()
     }
 

@@ -18,6 +18,7 @@ import androidx.wear.watchface.complications.data.TimeDifferenceStyle
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
@@ -131,7 +132,7 @@ class TripComplicationService : SuspendingComplicationDataSourceService() {
         /** Asks every "OTW" slot to show the trip again: called as the phone's trip changes. */
         fun update(context: Context) {
             ComplicationDataSourceUpdateRequester
-                .create(context, ComponentName(context, TripComplicationService::class.java))
+                .create(context, ComponentName(context, TripComplicationService::class.sunda))
                 .requestUpdateAll()
         }
 

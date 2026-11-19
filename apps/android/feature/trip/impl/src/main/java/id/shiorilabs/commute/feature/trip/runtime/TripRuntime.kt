@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import java.time.Clock
@@ -178,7 +179,7 @@ class AndroidTripRuntime @Inject constructor(
     override fun cancelWake() = alarms.cancel()
 
     override fun startTracking(): Boolean = try {
-        ContextCompat.startForegroundService(context, Intent(context, TripService::class.java))
+        ContextCompat.startForegroundService(context, Intent(context, TripService::class.sunda))
         true
     } catch (_: IllegalStateException) {
         // ForegroundServiceStartNotAllowedException: started from the background.
@@ -189,6 +190,6 @@ class AndroidTripRuntime @Inject constructor(
 
     override fun stopTracking(tripOver: Boolean) {
         if (tripOver && recorder.detailedOpen) return
-        context.stopService(Intent(context, TripService::class.java))
+        context.stopService(Intent(context, TripService::class.sunda))
     }
 }

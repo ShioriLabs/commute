@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.trip.runtime
 import android.app.AlarmManager
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.ext.sunda
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,7 +21,7 @@ class TripAlarms @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
 
-    private val alarms = context.getSystemService(AlarmManager::class.java)
+    private val alarms = context.getSystemService(AlarmManager::class.sunda)
 
     /** The moment the alarm is set for, `null` with none set: every step asks again, most for the same one. */
     private var setFor: Instant? = null

@@ -9,6 +9,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.shiorilabs.commute.core.ext.sunda
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -25,7 +26,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun rememberIsOffline(): State<Boolean> {
     val context = LocalContext.current
-    val connectivity = remember(context) { context.getSystemService(ConnectivityManager::class.java) }
+    val connectivity = remember(context) { context.getSystemService(ConnectivityManager::class.sunda) }
     val offline = remember(connectivity) { connectivity.offlineChanges() }
     return offline.collectAsStateWithLifecycle(initialValue = connectivity.isOffline())
 }

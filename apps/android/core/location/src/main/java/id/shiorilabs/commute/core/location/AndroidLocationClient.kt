@@ -12,6 +12,7 @@ import androidx.core.location.LocationListenerCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.core.location.LocationRequestCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.ext.sunda
 import id.shiorilabs.commute.core.geo.GeoPoint
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +38,7 @@ class AndroidLocationClient @Inject constructor(
     private val clock: Clock,
 ) : LocationClient {
 
-    private val manager: LocationManager? = context.getSystemService(LocationManager::class.java)
+    private val manager: LocationManager? = context.getSystemService(LocationManager::class.sunda)
 
     override fun hasPermission(): Boolean =
         granted(Manifest.permission.ACCESS_FINE_LOCATION) || granted(Manifest.permission.ACCESS_COARSE_LOCATION)

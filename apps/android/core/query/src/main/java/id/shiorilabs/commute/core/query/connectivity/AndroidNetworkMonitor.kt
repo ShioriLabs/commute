@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.connectivity.NetworkMonitor
+import id.shiorilabs.commute.core.ext.sunda
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -20,7 +21,7 @@ internal class AndroidNetworkMonitor @Inject constructor(
     @ApplicationContext context: Context,
 ) : NetworkMonitor {
 
-    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private val connectivity = context.getSystemService(ConnectivityManager::class.sunda)
 
     override val isOnline: Flow<Boolean> = callbackFlow {
         val callback = object : ConnectivityManager.NetworkCallback() {
