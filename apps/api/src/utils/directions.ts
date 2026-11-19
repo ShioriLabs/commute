@@ -4,7 +4,7 @@ import {
   OFF_TOPOLOGY_TERMINUS_PROXIES,
   Operator
 } from '@commute/constants'
-import { TOPOLOGY, LineTopology } from 'db/data/topology'
+import { NON_INTERCHANGE_MEMBERSHIPS, TOPOLOGY, LineTopology } from 'db/data/topology'
 import { GroupingSchedule } from 'db/schemas/schedules'
 import { memoize } from 'utils/memo'
 import { lineKey } from 'utils/ids'
@@ -158,6 +158,7 @@ export function buildLineMembershipCount(operator: Operator): Map<string, number
       ...(topology.branches ?? []).flatMap(branch => branch.path)
     ]
     for (const stop of stops) {
+      if (NON_INTERCHANGE_MEMBERSHIPS.some(m => m.operator === operator && m.station === stop.station && m.lineCode === topology.lineCode)) continue
       const lineCodes = lineCodesByStation.get(stop.station) ?? new Set()
       lineCodes.add(topology.lineCode)
       lineCodesByStation.set(stop.station, lineCodes)

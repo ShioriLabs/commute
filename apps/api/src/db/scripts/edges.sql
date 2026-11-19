@@ -167,6 +167,10 @@ INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('TP:KCI-JIS->KCI-AC', 'TP', 'KCI-JIS', 'KCI-AC', 1978, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('TP:KCI-JIS->KCI-TPK', 'TP', 'KCI-JIS', 'KCI-TPK', 2518, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('TP:KCI-TPK->KCI-JIS', 'TP', 'KCI-TPK', 'KCI-JIS', 2518, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-BOO->KCI-DPB', 'A', 'KCI-BOO', 'KCI-DPB', 22988, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-DPB->KCI-BOO', 'A', 'KCI-DPB', 'KCI-BOO', 22988, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-DPB->KCI-MRI', 'A', 'KCI-DPB', 'KCI-MRI', 20388, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-MRI->KCI-DPB', 'A', 'KCI-MRI', 'KCI-DPB', 20388, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-MRI->KCI-SUDB', 'A', 'KCI-MRI', 'KCI-SUDB', 3639, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-SUDB->KCI-MRI', 'A', 'KCI-SUDB', 'KCI-MRI', 3639, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-SUDB->KCI-DU', 'A', 'KCI-SUDB', 'KCI-DU', 6087, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
