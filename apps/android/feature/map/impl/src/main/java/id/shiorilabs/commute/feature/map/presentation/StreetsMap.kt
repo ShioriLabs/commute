@@ -104,6 +104,8 @@ fun StreetsMap(
                 isLogoEnabled = false
                 // Credited in the map's own attribution, behind its info button.
                 isAttributionEnabled = false
+                // MapLibre's sat under the status bar and the layers button; recentring turns north up.
+                isCompassEnabled = false
                 isRotateGesturesEnabled = true
                 isTiltGesturesEnabled = false
             }
