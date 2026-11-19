@@ -384,6 +384,13 @@ private fun MapWithSheet(
             else -> controller.clearRoute()
         }
     }
+    // A trip starting: the camera goes in close on the rider and stays with them until the map is
+    // moved. Not while a pair is being planned over it, whose route is the one drawn.
+    val following by controller.isFollowingRider.collectAsStateWithLifecycle()
+    val tripShown = activeTrip != null && !mapRoute.isSet
+    LaunchedEffect(controller, tripShown) {
+        if (tripShown) controller.followRider()
+    }
     // An end armed: the next station tapped fills it, and the sheet comes back with the pair.
     SideEffect {
         controller.pickStation = if (picking != null) {
@@ -693,6 +700,28 @@ private fun MapWithSheet(
                     modifier = Modifier.chromeEnter(4),
                 )
             }
+        }
+
+        // Back onto the rider once the map has been moved away from them.
+        if (tripShown && !following && selection == null && picking == null) {
+            // Above the row of buttons where it shows, else just above the sheet.
+            val rowBottom = if (home != null) 12.dp else WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+            val lift = if (homeRow) rowBottom + 56.dp else 12.dp
+            MapButton(
+                icon = CommuteIcons.NavigationArrow,
+                description = stringResource(R.string.map_follow_rider),
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    controller.followRider()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset {
+                        val top = if (home != null) minOf(sheetState.offset, feedState.offset) else sheetHeightPx
+                        IntOffset(0, -(sheetHeightPx - top).coerceAtLeast(0f).toInt())
+                    }
+                    .padding(end = 16.dp, bottom = lift),
+            )
         }
 
         // Held through its exit, which has no choices left to show.
