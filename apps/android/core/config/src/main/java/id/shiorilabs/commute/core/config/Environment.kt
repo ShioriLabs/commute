@@ -13,10 +13,13 @@ package id.shiorilabs.commute.core.config
  * @property debug A debug build: settings show the switches for trying the app out.
  * @property webBaseUrl Root of the web app, without a trailing slash: where the map's tiles and tap
  *   targets are served from. Production unless a debug build was pointed at a local web server.
+ * @property shiraseBaseUrl Root of shirase, the basemap worker, without a trailing slash: the map's
+ *   streets layer loads its finished MapLibre styles (`/styles/{theme}.json`) from here.
  */
 data class Environment(
     val apiBaseUrl: String,
     val appVersion: String,
     val debug: Boolean = false,
     val webBaseUrl: String = "https://commute.shiorilabs.id",
+    val shiraseBaseUrl: String = "https://shirase.commute.shiorilabs.id",
 )

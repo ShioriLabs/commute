@@ -58,6 +58,12 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Peta di Beranda": home opens on the map, the saved stations in its sheet. A prototype. */
     val mapHome: Flow<Boolean> = dataStore.data.map { it[MAP_HOME] == true }
 
+    /** "Peta Jalan": the map gains a layer picker, its streets drawn from shirase with Peta Bus over them. */
+    val mapStreets: Flow<Boolean> = dataStore.data.map { it[MAP_STREETS] == true }
+
+    /** The layer the map was left on: the streets (true) or the FDTJ artwork. The map reopens on it. */
+    val mapStreetsShown: Flow<Boolean> = dataStore.data.map { it[MAP_STREETS_SHOWN] == true }
+
     suspend fun setExperimentalUnlocked(unlocked: Boolean) = set(EXPERIMENTAL_UNLOCKED, unlocked)
 
     suspend fun setForceTripStart(enabled: Boolean) = set(FORCE_TRIP_START, enabled)
@@ -82,6 +88,10 @@ class DeveloperPreferencesRepository @Inject constructor(
 
     suspend fun setMapHome(enabled: Boolean) = set(MAP_HOME, enabled)
 
+    suspend fun setMapStreets(enabled: Boolean) = set(MAP_STREETS, enabled)
+
+    suspend fun setMapStreetsShown(shown: Boolean) = set(MAP_STREETS_SHOWN, shown)
+
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         dataStore.edit { it[key] = value }
     }
@@ -100,5 +110,7 @@ class DeveloperPreferencesRepository @Inject constructor(
         val WATCH_AUTO_OPEN = booleanPreferencesKey("watch_auto_open")
         val MAP_HITBOXES = booleanPreferencesKey("map_hitboxes")
         val MAP_HOME = booleanPreferencesKey("map_home")
+        val MAP_STREETS = booleanPreferencesKey("map_streets")
+        val MAP_STREETS_SHOWN = booleanPreferencesKey("map_streets_shown")
     }
 }

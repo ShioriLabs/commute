@@ -68,6 +68,8 @@ val bundleMapData = tasks.register<BundleMapData>("bundleMapData") {
         webApp.file("app/data/label-points.json"),
         webApp.file("app/data/map-lines.json"),
         webApp.file("app/data/map-corridors.json"),
+        // Peta Bus: every TransJakarta line on its streets, for the streets layer.
+        webApp.file("app/data/bus-map.json"),
     )
 }
 
@@ -103,6 +105,8 @@ dependencies {
     implementation(project(":feature:journey:api"))
     // TripController: the running trip, drawn with the rider on it.
     implementation(project(":feature:trip:api"))
+    // The streets layer: shirase's styles, drawn as served, with Peta Bus over them.
+    implementation(libs.maplibre.android)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)

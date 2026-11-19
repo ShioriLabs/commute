@@ -12,8 +12,18 @@ import id.shiorilabs.commute.feature.hub.data.HubSummary
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
 import id.shiorilabs.commute.feature.journey.domain.StationPair
 import id.shiorilabs.commute.feature.journey.presentation.MapRouteShown
+import id.shiorilabs.commute.core.config.Environment
 import id.shiorilabs.commute.feature.map.data.MapRepository
+import id.shiorilabs.commute.feature.map.data.MapStorage
+import id.shiorilabs.commute.feature.map.domain.BusMap
+import id.shiorilabs.commute.feature.map.domain.BusMapGeoJson
+import id.shiorilabs.commute.feature.map.domain.GeoStop
 import id.shiorilabs.commute.feature.map.domain.MapData
+import id.shiorilabs.commute.feature.map.domain.stops
+import id.shiorilabs.commute.feature.map.domain.toGeoJson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import id.shiorilabs.commute.feature.map.domain.Rgb
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
@@ -32,7 +42,9 @@ class MapViewModel @Inject constructor(
     val repository: MapRepository,
     /** Where the map was left: under a station's page, or closed earlier. */
     val session: MapSession,
-    developerPreferences: DeveloperPreferencesRepository,
+    private val developerPreferences: DeveloperPreferencesRepository,
+    private val storage: MapStorage,
+    private val environment: Environment,
     private val hubDirectory: HubDirectory,
     private val stationDirectory: StationDirectory,
     private val lineRepository: LineRepository,
@@ -207,7 +219,61 @@ class MapViewModel @Inject constructor(
             )
         }
     }
+
+    /** Experimental "Peta Jalan": the layer picker shows, the streets layer one of its choices. */
+    val streetsEnabled: StateFlow<Boolean> =
+        developerPreferences.mapStreets.stateIn(viewModelScope, WhileUiSubscribed, false)
+
+    /** The streets layer picked over the FDTJ artwork, as the map was last left. */
+    val streetsPicked: StateFlow<Boolean> =
+        developerPreferences.mapStreetsShown.stateIn(viewModelScope, WhileUiSubscribed, false)
+
+    fun pickStreets(shown: Boolean) {
+        viewModelScope.launch { developerPreferences.setMapStreetsShown(shown) }
+    }
+
+    /** shirase's finished style for the streets layer, by the theme. */
+    fun streetsStyleUrl(dark: Boolean): String =
+        "${environment.shiraseBaseUrl.trimEnd('/')}/styles/${if (dark) "dark" else "light"}.json"
+
+    /** Peta Bus as the streets layer draws it; null until [loadBusMap] has read it. */
+    val busMap: StateFlow<BusMapLayer?> get() = busMapLayer
+    private val busMapLayer = MutableStateFlow<BusMapLayer?>(null)
+    private var busMapLoading = false
+
+    /**
+     * Reads the bundled Peta Bus once, off the main thread, its haltes kept to those with a page:
+     * some are routing-only stops the station directory leaves out.
+     */
+    fun loadBusMap() {
+        if (busMapLoading) return
+        busMapLoading = true
+        viewModelScope.launch {
+            val layer = runCatching {
+                withContext(Dispatchers.Default) {
+                    val map = busMapJson.decodeFromString(BusMap.serializer(), storage.bundled(BUS_MAP_FILE))
+                    val known = stationDirectory.stored()?.mapTo(HashSet()) { it.id }
+                    val tappable: ((String) -> Boolean)? = known?.let { ids -> { id -> id in ids } }
+                    BusMapLayer(
+                        geoJson = map.toGeoJson(tappable),
+                        attribution = map.attribution,
+                        stops = map.stops(tappable),
+                    )
+                }
+            }.getOrNull()
+            if (layer == null) busMapLoading = false
+            busMapLayer.value = layer
+        }
+    }
+
+    private companion object {
+        const val BUS_MAP_FILE = "bus-map.json"
+        val busMapJson = Json { ignoreUnknownKeys = true }
+    }
 }
+
+/** Peta Bus ready for the streets layer: its sources, whose data it is, and its dots for "Sekitar". */
+data class BusMapLayer(val geoJson: BusMapGeoJson, val attribution: String, val stops: List<GeoStop>)
 
 /**
  * The route over the map: OTW's [pair], the [journey] open in its sheet (null on the options), and
