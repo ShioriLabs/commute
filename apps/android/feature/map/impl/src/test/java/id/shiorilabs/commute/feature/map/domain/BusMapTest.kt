@@ -111,6 +111,31 @@ class BusMapTest {
     }
 
     @Test
+    fun `the trunk koridors are the plain-number BRTs and L13E`() {
+        assertTrue(listOf("1", "9", "13", "14", "L13E").all(::isTrunk))
+        assertTrue(listOf("1A", "6B", "13E", "4D", "L13", "").none(::isTrunk))
+        assertTrue(busMap.lines.filter { isTrunk(it.code) }.all { it.kind == "BRT" })
+    }
+
+    @Test
+    fun `zoomed out, trunks close up among themselves on each street`() {
+        val lines = features(busMap.toGeoJson().lines)
+        val withTrunkSlot = lines.filter { it["properties"]!!.jsonObject.containsKey(BusMapProps.TRUNK_SLOT) }
+        assertTrue(withTrunkSlot.isNotEmpty())
+        assertTrue(withTrunkSlot.all { isTrunk(it.prop(BusMapProps.CODE)) })
+        assertTrue(lines.filter { isTrunk(it.prop(BusMapProps.CODE)) }.size == withTrunkSlot.size)
+        // Closed up: no trunk sits further out than its street's trunks alone reach.
+        val widest = busMap.edges.maxOf { edge -> edge.lines.count(::isTrunk) }
+        val reach = (widest - 1) / 2.0
+        assertTrue(withTrunkSlot.all { kotlin.math.abs(it.prop(BusMapProps.TRUNK_SLOT).toDouble()) <= reach })
+        // On a street koridor 1 runs alone among branches (1, 6A, 6B, 1P, 9D on Thamrin), it is centred.
+        val thamrin = busMap.edges.first { it.lines.containsAll(listOf("1", "6A", "6B")) && it.lines.count(::isTrunk) == 1 }
+        val trunkIndex = thamrin.lines.filter(::isTrunk).indexOf("1")
+        assertEquals(0.0, edgeSlot(trunkIndex, 1), 0.0)
+        assertTrue(edgeSlot(thamrin.lines.indexOf("1"), thamrin.lines.size) != 0.0)
+    }
+
+    @Test
     fun `rail stations keep their API ids`() {
         val rail = features(busMap.toGeoJson().rail)
         assertEquals(busMap.rail.size, rail.size)

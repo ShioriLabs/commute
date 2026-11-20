@@ -281,7 +281,7 @@ private fun hasLocation(context: Context): Boolean =
  * change.
  */
 private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
-    for (id in listOf(RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER, BRT_LAYER, AUI_LAYER)) style.removeLayer(id)
+    for (id in listOf(RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)) style.removeLayer(id)
     for (id in listOf(LINES_SOURCE, HALTES_SOURCE, RAIL_SOURCE)) style.removeSource(id)
 
     style.addSource(GeoJsonSource(LINES_SOURCE, busMap.geoJson.lines))
@@ -291,29 +291,38 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
     val color = Expression.get(BusMapProps.COLOR)
     val zoom = Expression.zoom()
     // One width for every line, and each stretch that many widths across from where it runs, so lines
-    // sharing a street lie side by side as Transit draws them: koridors over the other lines where the
-    // bundling misses.
-    val width = Expression.interpolate(
+    // sharing a street lie side by side as Transit draws them. [scale] widens the lot.
+    fun width(scale: Float) = Expression.interpolate(
         Expression.linear(), zoom,
-        Expression.stop(10, LINE_W_10), Expression.stop(13, LINE_W_13), Expression.stop(15, LINE_W_15), Expression.stop(18, LINE_W_18),
+        Expression.stop(10, LINE_W_10 * scale), Expression.stop(13, LINE_W_13 * scale),
+        Expression.stop(15, LINE_W_15 * scale), Expression.stop(18, LINE_W_18 * scale),
     )
-    val slot = Expression.get(BusMapProps.SLOT)
-    val offset = Expression.interpolate(
-        Expression.linear(), zoom,
-        Expression.stop(10, Expression.product(slot, Expression.literal(LINE_W_10))),
-        Expression.stop(13, Expression.product(slot, Expression.literal(LINE_W_13))),
-        Expression.stop(15, Expression.product(slot, Expression.literal(LINE_W_15))),
-        Expression.stop(18, Expression.product(slot, Expression.literal(LINE_W_18))),
-    )
-    fun lines(id: String, kind: String) = LineLayer(id, LINES_SOURCE).withProperties(
+    fun offset(property: String, scale: Float): Expression {
+        val slot = Expression.get(property)
+        return Expression.interpolate(
+            Expression.linear(), zoom,
+            Expression.stop(10, Expression.product(slot, Expression.literal(LINE_W_10 * scale))),
+            Expression.stop(13, Expression.product(slot, Expression.literal(LINE_W_13 * scale))),
+            Expression.stop(15, Expression.product(slot, Expression.literal(LINE_W_15 * scale))),
+            Expression.stop(18, Expression.product(slot, Expression.literal(LINE_W_18 * scale))),
+        )
+    }
+    fun lines(id: String, slot: String, filter: Expression, scale: Float = 1f) = LineLayer(id, LINES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
-        PropertyFactory.lineWidth(width),
-        PropertyFactory.lineOffset(offset),
+        PropertyFactory.lineWidth(width(scale)),
+        PropertyFactory.lineOffset(offset(slot, scale)),
         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-    ).withFilter(Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal(kind)))
-    val aui = lines(AUI_LAYER, "AUI")
-    val brt = lines(BRT_LAYER, "BRT")
+    ).withFilter(filter)
+    // Zoomed out, the trunk koridors alone (plain-number BRTs and L13E), closed up among themselves and
+    // drawn bolder, there being fewer: the city's network rather than every branch and feeder. Closer
+    // in, every line at its own place.
+    val trunks = lines(TRUNK_LAYER, BusMapProps.TRUNK_SLOT, Expression.has(BusMapProps.TRUNK_SLOT), TRUNK_SCALE)
+        .apply { maxZoom = ALL_LINES_MIN_ZOOM }
+    val aui = lines(AUI_LAYER, BusMapProps.SLOT, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("AUI")))
+        .apply { minZoom = ALL_LINES_MIN_ZOOM }
+    val brt = lines(BRT_LAYER, BusMapProps.SLOT, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("BRT")))
+        .apply { minZoom = ALL_LINES_MIN_ZOOM }
     val haltes = CircleLayer(HALTE_LAYER, HALTES_SOURCE).withProperties(
         PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(13, 2f), Expression.stop(16, 5f), Expression.stop(18, 7f))),
         PropertyFactory.circleColor(if (dark) HALTE_FILL_DARK else HALTE_FILL),
@@ -337,7 +346,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
         PropertyFactory.circleStrokeColor(if (dark) RAIL_STROKE_DARK else RAIL_STROKE),
         PropertyFactory.circleStrokeWidth(2f),
     )
-    for (layer: Layer in listOf(aui, brt, haltes, rail)) {
+    for (layer: Layer in listOf(trunks, aui, brt, haltes, rail)) {
         if (style.getLayer(OVERLAY_SLOT) != null) style.addLayerBelow(layer, OVERLAY_SLOT) else style.addLayer(layer)
     }
     // Halte names over the whole style: under the basemap's labels they lost every collision to a
@@ -353,6 +362,7 @@ private const val HALTES_SOURCE = "peta-bus-haltes"
 private const val RAIL_SOURCE = "peta-bus-rail"
 private const val AUI_LAYER = "peta-bus-aui"
 private const val BRT_LAYER = "peta-bus-brt"
+private const val TRUNK_LAYER = "peta-bus-trunks"
 private const val HALTE_LAYER = "peta-bus-haltes"
 private const val HALTE_NAME_LAYER = "peta-bus-halte-names"
 private const val RAIL_LAYER = "peta-bus-rail"
@@ -361,6 +371,12 @@ private const val RAIL_LAYER = "peta-bus-rail"
 private const val LABEL_FONT = "PT Sans Regular"
 
 private const val HALTE_MIN_ZOOM = 12.5f
+
+/** Where every line comes in; further out, the trunk koridors alone. */
+private const val ALL_LINES_MIN_ZOOM = 13f
+
+/** How much bolder the trunks are drawn, zoomed out, than every line closer in. */
+private const val TRUNK_SCALE = 1.5f
 
 /** Every line's width, in px by zoom; a stretch's offset is its slot times this. */
 private const val LINE_W_10 = 1.0f
