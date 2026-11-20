@@ -84,6 +84,33 @@ class BusMapTest {
     }
 
     @Test
+    fun `the shipped network draws every line, on edges that name only known lines`() {
+        val codes = busMap.lines.map { it.code }.toSet()
+        assertTrue(busMap.edges.size > 500)
+        assertTrue(busMap.edges.all { edge -> edge.lines.isNotEmpty() && edge.lines.all { it in codes } && edge.lines.distinct() == edge.lines })
+        assertEquals(codes, busMap.edges.flatMap { it.lines }.toSet())
+    }
+
+    @Test
+    fun `a line on an edge sits at its own slot, centred on the street`() {
+        assertEquals(0.0, edgeSlot(0, 1), 0.0)
+        assertEquals(listOf(-1.0, 0.0, 1.0), (0 until 3).map { edgeSlot(it, 3) })
+        assertEquals(listOf(-0.5, 0.5), (0 until 2).map { edgeSlot(it, 2) })
+    }
+
+    @Test
+    fun `on Thamrin, koridor 1 shares its street with 6A and 6B side by side`() {
+        // Mid Thamrin, between Bundaran HI and Sarinah.
+        val thamrin = busMap.edges.filter { edge ->
+            id.shiorilabs.commute.core.geo.decodePolyline(edge.shape).any { it.latitude in -6.1885..-6.1865 && it.longitude in 106.8225..106.8245 }
+        }
+        assertTrue(thamrin.any { edge -> edge.lines.containsAll(listOf("1", "6A", "6B")) })
+        val lines = features(busMap.toGeoJson().lines)
+        val drawn = lines.count { it.prop(BusMapProps.CODE) == "1" }
+        assertTrue(drawn >= busMap.edges.count { "1" in it.lines })
+    }
+
+    @Test
     fun `rail stations keep their API ids`() {
         val rail = features(busMap.toGeoJson().rail)
         assertEquals(busMap.rail.size, rail.size)
