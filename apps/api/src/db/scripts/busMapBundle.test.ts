@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, encodePolyline, type LngLat } from '../../utils/polyline'
-import { bundle, bundleOrder, dropBypasses, placeStops, roundCorners, type BundleLine } from './busMapBundle'
+import { bundle, bundleOrder, dropBypasses, placeStops, roundCorners, uncurl, type BundleLine } from './busMapBundle'
 import { networkStats } from './busMapStats'
 
 /*
@@ -243,5 +243,50 @@ describe('dropBypasses', () => {
     const main = run([0, 0], [0, 2000])
     const branch = run([0, 1000], [800, 1000], [800, 1800])
     expect(dropBypasses([main, branch])).toEqual([main, branch])
+  })
+})
+
+describe('uncurl', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  const metres = ([lng, lat]: LngLat): [number, number] => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT]
+  /** North up to a ring of radius [r] centred at (0, r + 0), clockwise 270° round it, then east. */
+  const rightTurnRound = (r: number): LngLat[] => {
+    const pts: LngLat[] = Array.from({ length: 11 }, (_, k) => at(0, -500 + k * 50))
+    // Enter at the ring's south point, go clockwise (west, north, east), leave at its east point.
+    for (let k = 1; k <= 18; k++) {
+      const a = ((-90 - (k * 270) / 18) * Math.PI) / 180
+      pts.push(at(r * Math.cos(a), r + r * Math.sin(a)))
+    }
+    for (let k = 1; k <= 10; k++) pts.push(at(r + k * 50, r))
+    return pts
+  }
+
+  it('turns a tight pirouette round a small roundabout into a corner', () => {
+    const out = uncurl(rightTurnRound(20)).map(metres)
+    // Never out on the ring's west side or round its north (y 40).
+    expect(Math.min(...out.map(([x]) => x))).toBeGreaterThan(-5)
+    expect(Math.max(...out.map(([, y]) => y))).toBeLessThan(35)
+    // Both ends kept.
+    expect(out[0]![1]).toBeCloseTo(-500, 0)
+    expect(out[out.length - 1]![0]).toBeCloseTo(520, 0)
+  })
+
+  it('keeps a turn round a big roundabout, as Transit keeps Bundaran HI', () => {
+    // 235 m round: within a loop's reach, but three-quarters round is no loop.
+    const piece = rightTurnRound(50)
+    expect(uncurl(piece)).toEqual(piece)
+  })
+
+  it('straightens a longer loop that all but comes back on itself', () => {
+    // Koridor 2 at Gambir: north past the junction, 70 m out and round, back south-east, then east.
+    const piece = [at(0, -500), at(0, 0), at(-45, 40), at(-50, 55), at(-45, 68), at(-30, 70), at(40, 8), at(500, 8)]
+    const out = uncurl(piece).map(metres)
+    expect(Math.min(...out.map(([x]) => x))).toBeGreaterThan(-5)
+    expect(out).toHaveLength(4)
+  })
+
+  it('leaves a plain corner as it is', () => {
+    const corner = [at(0, 0), at(0, 500), at(500, 500)]
+    expect(uncurl(corner)).toEqual(corner)
   })
 })
