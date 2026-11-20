@@ -25,6 +25,13 @@ const NEAR_M = 50
 const DETOUR_FACTOR = 2
 const DETOUR_SLACK_M = 400
 
+/**
+ * A track passing a halte twice within this, along it, turns round a hairpin at
+ * it; further apart (6 round Latuharhari back past Flyover Kuningan) is a loop
+ * the next leg takes.
+ */
+const HAIRPIN_M = 400
+
 /** A halte set back from every shape (a temporary halte, a B-code) is looked for this far out. */
 const FAR_M = 150
 
@@ -178,7 +185,15 @@ function stretch(
       }
     }
   }
-  return best ? { path: slice(best.track, best.from, best.to), track: best.track, at: best.to } : null
+  if (!best) return null
+  // A track passing [b] again soon after is turning round a hairpin at it (Koridor 2 at Gambir 2,
+  // up one road and back down the next): the leg goes round, to the last such pass.
+  if (best.forward) {
+    const to = best.to
+    const again = passes(best.track, b, near).filter(m => m > to && m - to <= HAIRPIN_M)
+    if (again.length > 0) best = { ...best, to: Math.max(...again) }
+  }
+  return { path: slice(best.track, best.from, best.to), track: best.track, at: best.to }
 }
 
 /** Points along the street graph's tracks at most this far apart, so crossing lines find each other. */
@@ -432,7 +447,11 @@ export function alignToTopology(
             piece = [a, b]
           }
           const last = path[path.length - 1]
-          path.push(...(last && last[0] === piece[0]![0] && last[1] === piece[0]![1] ? piece.slice(1) : piece))
+          // A way found from the halte itself (a graph route, a straight line) starts at its
+          // coordinate, off the street; the leg before already reached it, so join on from there.
+          const fromHalte = last && piece.length > 1 && piece[0]![0] === a[0] && piece[0]![1] === a[1]
+          const same = last && last[0] === piece[0]![0] && last[1] === piece[0]![1]
+          path.push(...(same || fromHalte ? piece.slice(1) : piece))
         }
       }
       const clean = despike(path)

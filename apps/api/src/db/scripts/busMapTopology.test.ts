@@ -123,6 +123,16 @@ describe('alignToTopology', () => {
     expect(passesBy(six, ...at(0, 1200))).toBe(false)
   })
 
+  it('goes round a hairpin at a halte, even when the next leg starts on another piece', () => {
+    // Koridor 2 at Gambir 2 (H): up one road, round at the halte, back down the road 40 m
+    // beside it, where the feed's piece ends; another piece carries on east to E.
+    const hHaltes = { A: halte('A', 0, 0), H: halte('H', 30, 1100), E: halte('E', 600, 1000) }
+    const into = run([0, 0], [0, 1200], [40, 1200], [40, 1100])
+    const on = run([40, 1100], [40, 1000], [600, 1000])
+    const aligned = alignToTopology([{ code: '2', pieces: [into, on] }], hHaltes, [{ code: '2', runs: [['A', 'H', 'E']] }])
+    expect(passesBy(aligned.pieces.get('2')!, ...at(20, 1200))).toBe(true)
+  })
+
   it('draws straight only when no street at all runs between two haltes', () => {
     const aligned = alignToTopology([{ code: '1', pieces: [run([0, 0], [0, 300])] }], haltes, [{ code: '1', runs: [['A', 'C']] }])
     expect(aligned.straight).toEqual(['1 A->C'])
