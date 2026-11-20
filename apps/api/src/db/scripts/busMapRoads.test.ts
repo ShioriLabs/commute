@@ -57,6 +57,16 @@ describe('snapToRoads', () => {
     expect(Math.max(...snapped.map(north))).toBeLessThan(1050)
   })
 
+  it('hands over between roads where the line is, not at a far end of a long straight', () => {
+    // A street drawn as one 1.6 km straight, and a short side road the line wanders onto halfway.
+    const roads = new Roads([road([[0, -500], [0, 1100]]), road([[20, 280], [20, 320]])])
+    const snapped = snapToRoads([at(0, 0), at(0, 270), at(18, 290), at(18, 310), at(0, 330), at(0, 600)], roads)
+    const north = (p: LngLat): number => p[1] * KY - Y0
+    // Going north all the way, a few metres' wobble aside: never out to the straight's far end and back.
+    for (let i = 1; i < snapped.length; i++) expect(north(snapped[i]!)).toBeGreaterThanOrEqual(north(snapped[i - 1]!) - 5)
+    expect(Math.max(...snapped.map(north))).toBeLessThan(650)
+  })
+
   it('leaves a point with no road near it where the feed put it', () => {
     const roads = new Roads([road([[0, 0], [0, 100]])])
     const far = [at(500, 0), at(500, 200)]
