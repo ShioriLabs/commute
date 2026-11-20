@@ -56,6 +56,16 @@ const OWN_TAIL = Math.ceil(OWN_REACH_M / SAMPLE_M)
 /** A piece within SNAP_M of what's drawn for less than this, and off it either side, is beside it, not on it. */
 const SHARED_MIN_M = 100
 
+/*
+ * A piece coming back onto what's drawn after a stretch of its own, at a link
+ * doubling back on its way (sharper than OVERSHOOT_TURN), ran past the corner it
+ * turns at: koridor 1 west along Trunojoyo past Sisingamangaraja at CSW, 20 m on,
+ * then back to it, a V off the junction. Its last points, up to OVERSHOOT_M of
+ * them, are taken back until it joins from where the turn is a turn.
+ */
+const OVERSHOOT_M = 30
+const OVERSHOOT_TURN_COS = Math.cos((110 * Math.PI) / 180)
+
 /** Two snapped points not yet joined are bridged along the network when it has a path this short. */
 const BRIDGE_HOPS = 6
 const BRIDGE_STRETCH = 2.5
@@ -176,6 +186,18 @@ export function buildNetwork(lines: readonly BundleLine[]): Network {
     return id
   }
 
+  /** Takes back a point a piece has just made: its links, and its place for later pieces to snap onto. */
+  const unmake = (id: number): void => {
+    for (const n of adjacency.get(id) ?? []) {
+      edges.delete(edgeKey(id, n))
+      adjacency.get(n)?.delete(id)
+    }
+    adjacency.delete(id)
+    const p = points[id]!
+    const key = cell(p.x, p.y)
+    grid.set(key, (grid.get(key) ?? []).filter(k => k !== id))
+  }
+
   const link = (a: number, b: number, code: string): void => {
     const key = edgeKey(a, b)
     const set = edges.get(key)
@@ -281,12 +303,35 @@ export function buildNetwork(lines: readonly BundleLine[]): Network {
       }
 
       let previous = -1
+      // The points this piece has made since it was last on what's drawn, in order.
+      let own: number[] = []
       for (let i = 0; i < samples.length; i++) {
         const [x, y] = samples[i]!
         const [ux, uy] = heading(i)
         let best = nearest(i, false)
         if (apart[i] && best >= 0 && points[best]!.piece !== pieceId) best = -1
         const at = best >= 0 ? best : addPoint({ x, y, ux, uy, piece: pieceId, index: i })
+        if (best < 0) own.push(at)
+        else {
+          // Back onto the network: past the corner first? Then from where it turns.
+          let taken = 0
+          while (own.length >= 2 && own[own.length - 1] === previous && taken < OVERSHOOT_M) {
+            const tip = points[own[own.length - 1]!]!
+            const before = points[own[own.length - 2]!]!
+            const target = points[at]!
+            const ix = tip.x - before.x
+            const iy = tip.y - before.y
+            const jx = target.x - tip.x
+            const jy = target.y - tip.y
+            const il = Math.hypot(ix, iy)
+            const jl = Math.hypot(jx, jy)
+            if (il === 0 || jl === 0 || (ix * jx + iy * jy) / (il * jl) >= OVERSHOOT_TURN_COS) break
+            unmake(own.pop()!)
+            previous = own[own.length - 1]!
+            taken += il
+          }
+          own = []
+        }
         if (previous >= 0 && at !== previous) {
           const known = adjacency.get(previous)?.has(at)
           const path = known ? null : bridge(previous, at)
