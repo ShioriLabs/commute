@@ -223,7 +223,11 @@ function along(road: Road): number[] {
 }
 
 /** [piece] laid onto [roads] (see the file comment); [brt] prefers a busway. */
-export function snapToRoads(piece: readonly LngLat[], roads: Roads, { brt = false }: { brt?: boolean } = {}): LngLat[] {
+export function snapToRoads(
+  piece: readonly LngLat[],
+  roads: Roads,
+  { brt = false, anyWay = false }: { brt?: boolean, anyWay?: boolean } = {}
+): LngLat[] {
   if (piece.length < 2) return [...piece]
   const points = sample(piece.map(toXY))
   const matches: (Match | null)[] = []
@@ -246,7 +250,8 @@ export function snapToRoads(piece: readonly LngLat[], roads: Roads, { brt = fals
       const l = Math.hypot(dx, dy)
       if (l === 0) continue
       const dot = (dx * hx + dy * hy) / l
-      if (road.oneway ? dot < HEADING_COS : Math.abs(dot) < HEADING_COS) continue
+      // A one-way only with the bus, unless [anyWay]: a bundle carries both ways and runs either.
+      if (road.oneway && !anyWay ? dot < HEADING_COS : Math.abs(dot) < HEADING_COS) continue
       const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (l * l)))
       const qx = ax + t * dx
       const qy = ay + t * dy

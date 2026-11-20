@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, encodePolyline, type LngLat } from '../../utils/polyline'
-import { bundle, bundleOrder, placeStops, roundCorners, type BundleLine } from './busMapBundle'
+import { bundle, bundleOrder, dropBypasses, placeStops, roundCorners, type BundleLine } from './busMapBundle'
 import { networkStats } from './busMapStats'
 
 /*
@@ -196,5 +196,30 @@ describe('roundCorners on a hairpin', () => {
     const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
     const hairpin = [at(0, 0), at(0, 500), at(20, 0)]
     expect(roundCorners(hairpin, 6)).toHaveLength(3)
+  })
+})
+
+describe('dropBypasses', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  const run = (...pts: [number, number][]): LngLat[] => pts.map(([x, y]) => at(x, y))
+
+  it('keeps one way round a loop: the other side is a bypass', () => {
+    // Main path north through a roundabout's west side; the other direction round its east side.
+    const main = run([0, 0], [0, 950], [-50, 1000], [0, 1050], [0, 2000])
+    const east = run([0, 950], [50, 1000], [0, 1050])
+    expect(dropBypasses([main, east])).toEqual([main])
+  })
+
+  it('keeps a branch that goes somewhere else', () => {
+    const main = run([0, 0], [0, 2000])
+    const branch = run([0, 1000], [800, 1000], [800, 1800])
+    expect(dropBypasses([main, branch])).toHaveLength(2)
+  })
+
+  it('keeps a long detour the main path does not run alongside', () => {
+    // Leaves and rejoins 100 m apart, but goes 2 km round: not the same way, a loop of its own.
+    const main = run([0, 0], [0, 2000])
+    const loop = run([0, 1000], [900, 1000], [900, 1100], [0, 1100])
+    expect(dropBypasses([main, loop])).toHaveLength(2)
   })
 })

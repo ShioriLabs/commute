@@ -774,3 +774,65 @@ export function roundCorners(path: readonly LngLat[], lines: number): LngLat[] {
   out.push(xy[xy.length - 1]!)
   return out.map(([x, y]) => [x / KX, y / KY] as LngLat)
 }
+
+/*
+ * One way per line through a loop, as Transit's overview draws one: a line whose
+ * two directions part round a roundabout or a block (Bundaran HI, Plaza de la
+ * República) is drawn on one side of it, the other side being its bypass. A
+ * piece of a line is a bypass when both its ends meet the line's main path
+ * (within BYPASS_JOIN_M) and the main path between those two points is not much
+ * longer than it, nor much shorter (BYPASS_STRETCH, BYPASS_SLACK_M): it runs
+ * alongside. Up to BYPASS_MAX_M long: a direction split for kilometres along two
+ * carriageways too far apart to share a bundle is still one line in the overview.
+ * The line's own streets, both ways, are still drawn at street zoom and alone.
+ */
+const BYPASS_JOIN_M = 30
+const BYPASS_MAX_M = 6000
+const BYPASS_STRETCH = 3
+const BYPASS_SLACK_M = 300
+
+/** [pieces] (one line's, deduped, longest first) without the short pieces that bypass the rest. */
+export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
+  const xy = pieces.map(p => p.map(([lng, lat]) => [lng * KX, lat * KY] as [number, number]))
+  const lengthOf = (p: [number, number][]): number => {
+    let m = 0
+    for (let i = 1; i < p.length; i++) m += Math.hypot(p[i]![0] - p[i - 1]![0], p[i]![1] - p[i - 1]![1])
+    return m
+  }
+  /** Where along [p] it passes nearest [q], and how near: metres along, distance. */
+  const nearest = (p: [number, number][], [qx, qy]: [number, number]): [number, number] => {
+    let bestD = Infinity
+    let bestAt = 0
+    let at = 0
+    for (let i = 1; i < p.length; i++) {
+      const [ax, ay] = p[i - 1]!
+      const [bx, by] = p[i]!
+      const dx = bx - ax
+      const dy = by - ay
+      const l = Math.hypot(dx, dy)
+      if (l > 0) {
+        const t = Math.max(0, Math.min(1, ((qx - ax) * dx + (qy - ay) * dy) / (l * l)))
+        const d = Math.hypot(qx - (ax + t * dx), qy - (ay + t * dy))
+        if (d < bestD) {
+          bestD = d
+          bestAt = at + t * l
+        }
+      }
+      at += l
+    }
+    return [bestAt, bestD]
+  }
+  const kept: number[] = []
+  xy.forEach((piece, i) => {
+    const length = lengthOf(piece)
+    const bypass = length <= BYPASS_MAX_M && kept.some((k) => {
+      const [fromAt, fromD] = nearest(xy[k]!, piece[0]!)
+      const [toAt, toD] = nearest(xy[k]!, piece[piece.length - 1]!)
+      if (fromD > BYPASS_JOIN_M || toD > BYPASS_JOIN_M) return false
+      const around = Math.abs(toAt - fromAt)
+      return around > 0 && around <= length * BYPASS_STRETCH + BYPASS_SLACK_M && around * BYPASS_STRETCH + BYPASS_SLACK_M >= length
+    })
+    if (!bypass) kept.push(i)
+  })
+  return kept.map(i => [...pieces[i]!])
+}
