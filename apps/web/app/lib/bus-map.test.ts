@@ -88,6 +88,33 @@ describe('bus-map.json', () => {
     expect(new Set(busMap.edges.flatMap(e => e.lines))).toEqual(codes)
   })
 
+  // The feed's reroutes aren't drawn: koridor 1 runs its poster route, Harmoni ->
+  // Monas -> Kebon Sirih, not the feed's diversion via Petojo (generateBusMap's
+  // alongTopology).
+  it('draws koridor 1 past Monas, not via Petojo', () => {
+    const kx = Math.cos((-6.2 * Math.PI) / 180) * 111_320
+    const ky = 110_574
+    const distanceTo = (code: string, halte: string): number => {
+      const [, x, y] = busMap.haltes[halte]!
+      let best = Infinity
+      for (const shape of busMap.lines.find(l => l.code === code)!.shapes) {
+        const pts = decodePolyline(shape).map(([lng, lat]) => [lng * kx, lat * ky] as const)
+        for (let i = 1; i < pts.length; i++) {
+          const [ax, ay] = pts[i - 1]!
+          const [bx, by] = pts[i]!
+          const dx = bx - ax
+          const dy = by - ay
+          const t = Math.max(0, Math.min(1, ((x * kx - ax) * dx + (y * ky - ay) * dy) / (dx * dx + dy * dy || 1)))
+          best = Math.min(best, Math.hypot(x * kx - (ax + t * dx), y * ky - (ay + t * dy)))
+        }
+      }
+      return best
+    }
+    expect(distanceTo('1', 'H00131P')).toBeLessThan(60) // Monumen Nasional
+    expect(distanceTo('1', 'H00170P')).toBeGreaterThan(300) // Petojo
+    expect(busMap.lines.find(l => l.code === '1')!.stops).not.toContain('H00170P')
+  })
+
   it('has rail stations for bearings and no TJ among them', () => {
     expect(busMap.rail.length).toBeGreaterThan(100)
     expect(busMap.rail.some(([id]) => id.startsWith('TJ-'))).toBe(false)
