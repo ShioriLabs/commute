@@ -79,7 +79,7 @@ describe('bundle', () => {
     expect(edges.every(e => e.lines.length === 1)).toBe(true)
   })
 
-  it('meets lines at a roundabout in one node, not round its ring', () => {
+  it('takes lines round a roundabout on its ring, as Transit draws one, never through its middle', () => {
     // A roundabout, schematically: a ring 80 m across, one line north to
     // south round its east side, one east to west round its north side.
     const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
@@ -97,19 +97,13 @@ describe('bundle', () => {
     const westward = [...straight(1000, 0, 40, 0), ...arc(0, 180).slice(1), ...straight(-40, 0, -1000, 0).slice(1)]
     const edges = bundle([line('1', 'BRT', southward), line('2', 'BRT', westward)])
 
-    const ends = edges.flatMap((e) => {
-      const pts = decodePolyline(e.shape)
-      return [pts[0]!, pts[pts.length - 1]!]
-    })
-    const nearMiddle = ends.filter(([lng, lat]) => Math.hypot((lng - LNG) * M_LNG, (lat - LAT) * M_LAT) < 100)
-    // Every street ending at the roundabout ends at the same point.
-    expect(nearMiddle.length).toBeGreaterThanOrEqual(4)
-    expect(new Set(nearMiddle.map(p => p.join(','))).size).toBe(1)
-    // Nothing left going round: no edge has both ends at the roundabout.
-    expect(edges.filter((e) => {
-      const pts = decodePolyline(e.shape)
-      return [pts[0]!, pts[pts.length - 1]!].every(([lng, lat]) => Math.hypot((lng - LNG) * M_LNG, (lat - LAT) * M_LAT) < 100)
-    })).toHaveLength(0)
+    const fromMiddle = ([lng, lat]: LngLat): number => Math.hypot((lng - LNG) * M_LNG, (lat - LAT) * M_LAT)
+    const points = edges.flatMap(e => decodePolyline(e.shape))
+    // Nothing cuts across the fountain: every point stays out on the ring or the streets.
+    expect(Math.min(...points.map(fromMiddle))).toBeGreaterThan(25)
+    // And the ring is drawn: points all the way round it, near its 40 m radius.
+    const onRing = points.filter(p => Math.abs(fromMiddle(p) - 40) < 8)
+    expect(onRing.length).toBeGreaterThan(6)
   })
 
   it('puts the line turning left on the left before the turn, whatever the bundle order', () => {
