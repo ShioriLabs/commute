@@ -24,6 +24,7 @@ describe('linesByHalte', () => {
   it('lists every line calling at a halte, in line order', () => {
     const map: BusMap = {
       attribution: '',
+      edges: [],
       haltes: {},
       rail: [],
       lines: [
@@ -66,12 +67,25 @@ describe('bus-map.json', () => {
         expect(decodePolyline(shape).every(inside), `line ${line.code}`).toBe(true)
       }
     }
+    for (const edge of busMap.edges) {
+      expect(decodePolyline(edge.shape).every(inside), `edge ${edge.lines.join(' ')}`).toBe(true)
+    }
     for (const [code, [, lng, lat]] of Object.entries(busMap.haltes)) {
       expect(inside([lng, lat]), code).toBe(true)
     }
     for (const [id, lng, lat] of busMap.rail) {
       expect(inside([lng, lat]), id).toBe(true)
     }
+  })
+
+  it('draws every line on the network, each once per edge', () => {
+    const codes = new Set(busMap.lines.map(l => l.code))
+    for (const edge of busMap.edges) {
+      expect(edge.lines.length, edge.shape).toBeGreaterThan(0)
+      expect(new Set(edge.lines).size, edge.lines.join(' ')).toBe(edge.lines.length)
+      for (const code of edge.lines) expect(codes.has(code), code).toBe(true)
+    }
+    expect(new Set(busMap.edges.flatMap(e => e.lines))).toEqual(codes)
   })
 
   it('has rail stations for bearings and no TJ among them', () => {

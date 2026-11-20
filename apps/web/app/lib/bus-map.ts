@@ -24,9 +24,24 @@ export interface BusMapLine {
   stops: string[]
 }
 
+/**
+ * One street of the network (apps/api/src/db/scripts/busMapBundle.ts): the lines
+ * sharing it, drawn side by side as Transit draws them. Line i of n goes at
+ * MapLibre `line-offset` (i - (n - 1) / 2) line widths, right of the shape's
+ * direction, which keeps every line in its place street to street.
+ */
+export interface BusMapEdge {
+  /** Encoded polyline (Google, precision 5). */
+  shape: string
+  /** Line codes, left to right along the shape. */
+  lines: string[]
+}
+
 export interface BusMap {
   attribution: string
   lines: BusMapLine[]
+  /** The lines as one network: each street once, its lines left to right along it. What's drawn. */
+  edges: BusMapEdge[]
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
   /** Rail stations, as dots for bearings: [station id, lng, lat]. */
