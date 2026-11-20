@@ -77,6 +77,34 @@ describe('alignToTopology', () => {
     expect(routed.straight).toEqual([])
   })
 
+  it('keeps a koridor\'s own loop to turn, split across its pieces, through every pass', () => {
+    // 6 from Flyover Kuningan (F): on up, round a block (Latuharhari, Cokroaminoto), back down
+    // the other carriageway past F, and off along a branch piece to Galunggung (G).
+    const loopHaltes = { A: halte('A', 0, 0), F: halte('F', 0, 1000), G: halte('G', -600, 800) }
+    const trunk = run([0, 0], [0, 1000], [0, 1200], [300, 1200], [300, 1500], [40, 1500], [40, 0])
+    const branch = run([40, 800], [-600, 800])
+    const topology = [{ code: '6', runs: [['A', 'F', 'G']] }]
+    const once = alignToTopology([{ code: '6', pieces: [trunk, branch] }], loopHaltes, topology)
+    const six = once.pieces.get('6')!
+    expect(passesBy(six, ...at(300, 1350))).toBe(true)
+    // Again, from what it drew: the run passes F twice, and must not skip from the second.
+    const twice = alignToTopology([{ code: '6', pieces: six }], loopHaltes, topology)
+    expect(passesBy(twice.pieces.get('6')!, ...at(300, 1350))).toBe(true)
+  })
+
+  it('still leaves out a long way round that calls at a halte the posters dropped', () => {
+    // As above, but the block it goes round has a halte (P) the koridor no longer serves.
+    const loopHaltes = { A: halte('A', 0, 0), F: halte('F', 0, 1000), G: halte('G', -600, 800), P: halte('Petojo', 300, 1350) }
+    const trunk = run([0, 0], [0, 1000], [0, 1200], [300, 1200], [300, 1500], [40, 1500], [40, 0])
+    const branch = run([40, 800], [-600, 800])
+    const aligned = alignToTopology(
+      [{ code: '6', pieces: [trunk, branch], stops: ['A', 'F', 'P', 'G'] }, { code: '9', pieces: [run([40, 1000], [40, 800], [-600, 800])] }],
+      loopHaltes,
+      [{ code: '6', runs: [['A', 'F', 'G']] }]
+    )
+    expect(passesBy(aligned.pieces.get('6')!, ...at(300, 1350))).toBe(false)
+  })
+
   it('draws straight only when no street at all runs between two haltes', () => {
     const aligned = alignToTopology([{ code: '1', pieces: [run([0, 0], [0, 300])] }], haltes, [{ code: '1', runs: [['A', 'C']] }])
     expect(aligned.straight).toEqual(['1 A->C'])

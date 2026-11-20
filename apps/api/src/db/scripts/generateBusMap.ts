@@ -391,10 +391,12 @@ export function alongTopology(
   haltes: BusMap['haltes'],
   topology: readonly TopologyLine[] = tjTopology()
 ): { lines: BusMapLine[], haltes: BusMap['haltes'] } {
+  // The feed's stops, before any redraw: the ones a koridor's topology drops mark its reroutes.
+  const feedStops = new Map(lines.map(l => [l.code, l.stops]))
   let out: BusMapLine[] = [...lines]
   for (let pass = 0; pass < ALIGN_PASSES; pass++) {
     const aligned = alignToTopology(
-      out.map(l => ({ code: l.code, pieces: l.shapes.map(s => decodePolyline(s)) })),
+      out.map(l => ({ code: l.code, pieces: l.shapes.map(s => decodePolyline(s)), stops: feedStops.get(l.code) })),
       haltes,
       topology
     )
@@ -413,7 +415,6 @@ export function alongTopology(
   // A koridor also keeps the feed's stops it still drives past: temporary haltes the posters leave
   // out (4's Simpang Pramuka B-codes) are real service. A reroute's haltes are off its way now.
   const managed = new Set(topology.map(t => t.code))
-  const feedStops = new Map(lines.map(l => [l.code, l.stops]))
   out = out.map((l) => {
     if (!managed.has(l.code)) return l
     const pieces = l.shapes.map(s => decodePolyline(s))
