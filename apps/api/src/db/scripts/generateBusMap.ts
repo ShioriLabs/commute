@@ -358,8 +358,22 @@ function tjTopology(): TopologyLine[] {
     .filter(t => t.operator === 'TJ')
     .map(t => ({
       code: t.lineCode,
-      runs: [t.path, ...(t.pathReverse ? [t.pathReverse] : [])].map(run => run.map(s => s.station))
+      runs: [t.path, ...(t.pathReverse ? [t.pathReverse] : [])].map(run => run.map(s => s.station)),
+      via: VIA[t.lineCode]
     }))
+}
+
+/*
+ * Waypoints for koridor stretches no shape in the feed runs, where the way the
+ * street search would take isn't the bus's. Keyed by koridor, then `from->to`
+ * halte codes. Checked on the ground; add one only when you know the street.
+ *
+ *   6  Galunggung -> Setiabudi Integritas: since 6 stopped going via Halimun the
+ *      feed has no shape for it, and the search took the Kuningan flyover over
+ *      the junction. The only way from Galunggung onto Rasuna Said is Jl. Gembira.
+ */
+const VIA: Record<string, Record<string, LngLat[]>> = {
+  6: { 'H00283P->H00215P': [[106.82972, -6.2062]] }
 }
 
 /**
