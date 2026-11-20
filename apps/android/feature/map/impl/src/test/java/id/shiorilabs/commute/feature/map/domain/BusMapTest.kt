@@ -20,6 +20,12 @@ class BusMapTest {
 
     private fun JsonObject.prop(name: String): String = this["properties"]!!.jsonObject[name]!!.jsonPrimitive.content
 
+    /** Whether [edge] crosses Thamrin between Bundaran HI and Sarinah (-6.1875), on the avenue. */
+    private fun crossesMidThamrin(edge: BusMapEdge): Boolean =
+        id.shiorilabs.commute.core.geo.decodePolyline(edge.shape).zipWithNext().any { (a, b) ->
+            (a.latitude - -6.1875) * (b.latitude - -6.1875) <= 0.0 && a.longitude in 106.8215..106.8255
+        }
+
     @Test
     fun `the shipped Peta Bus reads whole`() {
         assertTrue(busMap.lines.size > 50)
@@ -84,11 +90,11 @@ class BusMapTest {
     }
 
     @Test
-    fun `the shipped network draws every line, on edges that name only known lines`() {
+    fun `the shipped network draws every trunk koridor and nothing else`() {
         val codes = busMap.lines.map { it.code }.toSet()
-        assertTrue(busMap.edges.size > 500)
+        assertTrue(busMap.edges.size > 100)
         assertTrue(busMap.edges.all { edge -> edge.lines.isNotEmpty() && edge.lines.all { it in codes } && edge.lines.distinct() == edge.lines })
-        assertEquals(codes, busMap.edges.flatMap { it.lines }.toSet())
+        assertEquals(codes.filter(::isTrunk).toSet(), busMap.edges.flatMap { it.lines }.toSet())
     }
 
     @Test
@@ -99,12 +105,11 @@ class BusMapTest {
     }
 
     @Test
-    fun `on Thamrin, koridor 1 shares its street with 6A and 6B side by side`() {
+    fun `on Thamrin, koridor 1 is drawn, without the branches sharing its street`() {
         // Mid Thamrin, between Bundaran HI and Sarinah.
-        val thamrin = busMap.edges.filter { edge ->
-            id.shiorilabs.commute.core.geo.decodePolyline(edge.shape).any { it.latitude in -6.1885..-6.1865 && it.longitude in 106.8225..106.8245 }
-        }
-        assertTrue(thamrin.any { edge -> edge.lines.containsAll(listOf("1", "6A", "6B")) })
+        val thamrin = busMap.edges.filter { crossesMidThamrin(it) }
+        assertTrue(busMap.edges.any { edge -> "1" in edge.lines && crossesMidThamrin(edge) })
+        assertTrue(thamrin.none { edge -> edge.lines.any { it == "6A" || it == "6B" } })
         val lines = features(busMap.toGeoJson().lines)
         val drawn = lines.count { it.prop(BusMapProps.CODE) == "1" }
         assertTrue(drawn >= busMap.edges.count { "1" in it.lines })
@@ -112,8 +117,8 @@ class BusMapTest {
 
     @Test
     fun `the trunk koridors are the plain-number BRTs and L13E`() {
-        assertTrue(listOf("1", "9", "13", "14", "L13E").all(::isTrunk))
-        assertTrue(listOf("1A", "6B", "13E", "4D", "L13", "").none(::isTrunk))
+        assertTrue(listOf("1", "9", "13", "14", "13E", "L13E").all(::isTrunk))
+        assertTrue(listOf("1A", "6B", "4D", "L13", "13B", "").none(::isTrunk))
         assertTrue(busMap.lines.filter { isTrunk(it.code) }.all { it.kind == "BRT" })
     }
 
@@ -128,16 +133,15 @@ class BusMapTest {
         val widest = busMap.edges.maxOf { edge -> edge.lines.count(::isTrunk) }
         val reach = (widest - 1) / 2.0
         assertTrue(withTrunkSlot.all { kotlin.math.abs(it.prop(BusMapProps.TRUNK_SLOT).toDouble()) <= reach })
-        // On a street koridor 1 runs alone among branches (1, 6A, 6B, 1P, 9D on Thamrin), it is centred.
-        val thamrin = busMap.edges.first { it.lines.containsAll(listOf("1", "6A", "6B")) && it.lines.count(::isTrunk) == 1 }
-        val trunkIndex = thamrin.lines.filter(::isTrunk).indexOf("1")
-        assertEquals(0.0, edgeSlot(trunkIndex, 1), 0.0)
-        assertTrue(edgeSlot(thamrin.lines.indexOf("1"), thamrin.lines.size) != 0.0)
+        // With only trunks on the network, a line's trunk slot is its slot.
+        assertTrue(withTrunkSlot.all { it.prop(BusMapProps.TRUNK_SLOT) == it.prop(BusMapProps.SLOT) })
     }
 
     @Test
     fun `every halte placed on the network gets a mark, a bar for several lines and a coloured dot for one`() {
-        assertTrue(busMap.stopMarks.size > busMap.haltes.size * 9 / 10)
+        // Only haltes on a drawn koridor have a line on the network to sit on.
+        val onTrunks = busMap.lines.filter { isTrunk(it.code) }.flatMap { it.stops }.toSet()
+        assertTrue(busMap.stopMarks.size > onTrunks.size * 9 / 10)
         val marks = features(busMap.toGeoJson().marks)
         assertEquals(busMap.stopMarks.size, marks.size)
         assertTrue(marks.all { it.prop(BusMapProps.STATION_ID).startsWith("TJ-") })

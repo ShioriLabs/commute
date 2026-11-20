@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 import { TOPOLOGY } from '../data/topology'
-import { bundle, dropBypasses, placeStops, roundCorners, type BusMapEdge, type StopMark } from './busMapBundle'
+import { bundle, dropBypasses, isDrawn, placeStops, roundCorners, type BusMapEdge, type StopMark } from './busMapBundle'
 import { loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
@@ -373,7 +373,8 @@ async function main(): Promise<void> {
  * line on the map, two only where its ways part (a loop to turn).
  */
 function bundleShapes(lines: readonly BusMapLine[], roads: Roads): BusMapEdge[] {
-  const edges = bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })))
+  const drawn = lines.filter(l => isDrawn(l.code))
+  const edges = bundle(drawn.map(l => ({ code: l.code, kind: l.kind, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })))
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
   return laidOnRoads(edges, roads, brt)
 }

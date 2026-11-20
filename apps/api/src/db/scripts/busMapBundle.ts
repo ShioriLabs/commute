@@ -836,3 +836,12 @@ export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
   })
   return kept.map(i => [...pieces[i]!])
 }
+
+/**
+ * The koridors Peta Bus draws, for now: the plain-number BRTs and 13E/L13E. The
+ * other lines (branches, Angkutan Umum Integrasi) keep their data but aren't on
+ * the map until the drawing holds up with them.
+ */
+export function isDrawn(code: string): boolean {
+  return /^\d+$/.test(code) || code === '13E' || code === 'L13E'
+}
