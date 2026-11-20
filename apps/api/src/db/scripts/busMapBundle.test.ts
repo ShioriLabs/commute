@@ -78,6 +78,39 @@ describe('bundle', () => {
     expect(edges.every(e => e.lines.length === 1)).toBe(true)
   })
 
+  it('meets lines at a roundabout in one node, not round its ring', () => {
+    // A roundabout, schematically: a ring 80 m across, one line north to
+    // south round its east side, one east to west round its north side.
+    const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+    const arc = (from: number, to: number): LngLat[] => {
+      const pts: LngLat[] = []
+      for (let k = 0; k <= 8; k++) {
+        const a = ((from + ((to - from) * k) / 8) * Math.PI) / 180
+        pts.push(at(40 * Math.cos(a), 40 * Math.sin(a)))
+      }
+      return pts
+    }
+    const straight = (x0: number, y0: number, x1: number, y1: number): LngLat[] =>
+      Array.from({ length: 21 }, (_, k) => at(x0 + ((x1 - x0) * k) / 20, y0 + ((y1 - y0) * k) / 20))
+    const southward = [...straight(0, 1000, 0, 40), ...arc(90, -90).slice(1), ...straight(0, -40, 0, -1000).slice(1)]
+    const westward = [...straight(1000, 0, 40, 0), ...arc(0, 180).slice(1), ...straight(-40, 0, -1000, 0).slice(1)]
+    const edges = bundle([line('1', 'BRT', southward), line('2', 'BRT', westward)])
+
+    const ends = edges.flatMap((e) => {
+      const pts = decodePolyline(e.shape)
+      return [pts[0]!, pts[pts.length - 1]!]
+    })
+    const nearMiddle = ends.filter(([lng, lat]) => Math.hypot((lng - LNG) * M_LNG, (lat - LAT) * M_LAT) < 100)
+    // Every street ending at the roundabout ends at the same point.
+    expect(nearMiddle.length).toBeGreaterThanOrEqual(4)
+    expect(new Set(nearMiddle.map(p => p.join(','))).size).toBe(1)
+    // Nothing left going round: no edge has both ends at the roundabout.
+    expect(edges.filter((e) => {
+      const pts = decodePolyline(e.shape)
+      return [pts[0]!, pts[pts.length - 1]!].every(([lng, lat]) => Math.hypot((lng - LNG) * M_LNG, (lat - LAT) * M_LAT) < 100)
+    })).toHaveLength(0)
+  })
+
   it('keeps every line on its side of the street where a line joins', () => {
     // 1 and 6A run the whole street; 9D joins from the east halfway up.
     const joining: LngLat[] = [[LNG + 800 / M_LNG, LAT + 1000 / M_LAT], ...north(1000, 2000, 8)]
