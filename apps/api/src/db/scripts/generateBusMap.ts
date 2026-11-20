@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 import { TOPOLOGY } from '../data/topology'
-import { bundle, type BusMapEdge } from './busMapBundle'
+import { bundle, placeStops, roundCorners, type BusMapEdge, type StopMark } from './busMapBundle'
 import { loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
@@ -119,6 +119,8 @@ export interface BusMap {
   lines: BusMapLine[]
   /** The lines as one network: each street once, its lines left to right along it. What clients draw. */
   edges: BusMapEdge[]
+  /** Each halte placed on the network, for its mark across the bundle there (busMapBundle.ts, placeStops). */
+  stopMarks: StopMark[]
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
   /** Rail stations for bearings: [station id, lng, lat]. */
@@ -344,7 +346,8 @@ async function main(): Promise<void> {
 
   const onRoads = await alongRoads(normal.lines)
   const edges = bundleShapes(onRoads.lines, onRoads.roads)
-  const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, haltes: sortedHaltes, rail }
+  const stopMarks = marksFor(edges, onRoads.lines, sortedHaltes)
+  const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, stopMarks, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
 
   const brt = lines.filter(l => l.kind === 'BRT').length
@@ -396,8 +399,18 @@ function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySe
     if (pts.length < 2) return edge
     const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)) })
     const laid = [node(pts[0]!), ...inner.slice(1, -1), node(pts[pts.length - 1]!)]
-    return { ...edge, shape: encodePolyline(simplify(laid, SIMPLIFY_M)) }
+    // Corners rounded last, on the simplified line, so a corner is a real turn and not a wobble.
+    return { ...edge, shape: encodePolyline(roundCorners(simplify(laid, SIMPLIFY_M), edge.lines.length)) }
   })
+}
+
+/** Every halte's mark on the network, from the lines calling at it (placeStops). */
+function marksFor(edges: readonly BusMapEdge[], lines: readonly BusMapLine[], haltes: BusMap['haltes']): StopMark[] {
+  const calling = new Map<string, string[]>()
+  for (const line of lines) {
+    for (const code of line.stops) calling.set(code, [...(calling.get(code) ?? []), line.code])
+  }
+  return placeStops(edges, Object.entries(haltes).map(([code, [, lng, lat]]) => ({ code, lng, lat, lines: calling.get(code) ?? [] })))
 }
 
 /**
@@ -500,7 +513,8 @@ async function rebundle(): Promise<void> {
   const normal = alongTopology(map.lines, map.haltes)
   const onRoads = await alongRoads(normal.lines)
   const edges = bundleShapes(onRoads.lines, onRoads.roads)
-  const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, haltes: normal.haltes, rail: map.rail }
+  const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)
+  const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: map.rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
   console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
   console.log(`  haltes:   ${Object.keys(normal.haltes).length} (was ${Object.keys(map.haltes).length})`)

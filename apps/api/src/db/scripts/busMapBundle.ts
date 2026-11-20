@@ -1,4 +1,4 @@
-import { encodePolyline, simplify, type LngLat } from '../../utils/polyline'
+import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 
 /*
  * Peta Bus's lines laid side by side where they share a street, as Transit
@@ -757,4 +757,117 @@ export function bundle(lines: readonly BundleLine[]): BusMapEdge[] {
     })
     // Stable output: a regenerated file diffs only where the network changed.
     .sort((a, b) => a.lines.join(' ').localeCompare(b.lines.join(' ')) || a.shape.localeCompare(b.shape))
+}
+
+/*
+ * Where a halte's mark goes on the network: on the nearest edge carrying one of
+ * its lines, within STOP_MARK_M, centred across the edge's bundle and turned to
+ * its way, so a client draws Transit's bar across all the lines there (one
+ * line: a dot in its colour). A halte with no such edge near has no mark.
+ */
+const STOP_MARK_M = 60
+
+/** A halte's mark: code, [lng, lat] on the edge, the edge's bearing (degrees from north), its line count, and its one line's code. */
+export type StopMark = [string, number, number, number, number, string]
+
+export interface StopIn {
+  code: string
+  lng: number
+  lat: number
+  lines: readonly string[]
+}
+
+export function placeStops(edges: readonly BusMapEdge[], stops: readonly StopIn[]): StopMark[] {
+  const shapes = edges.map(e => decodePolyline(e.shape).map(([lng, lat]) => [lng * KX, lat * KY] as [number, number]))
+  const out: StopMark[] = []
+  for (const stop of stops) {
+    const px = stop.lng * KX
+    const py = stop.lat * KY
+    const wanted = new Set(stop.lines)
+    let best: { d: number, x: number, y: number, bearing: number, edge: number } | null = null
+    for (let e = 0; e < edges.length; e++) {
+      const edge = edges[e]!
+      if (!edge.lines.some(l => wanted.has(l))) continue
+      const pts = shapes[e]!
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1]!
+        const [bx, by] = pts[i]!
+        const dx = bx - ax
+        const dy = by - ay
+        const l2 = dx * dx + dy * dy
+        if (l2 === 0) continue
+        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2))
+        const x = ax + t * dx
+        const y = ay + t * dy
+        const d = Math.hypot(px - x, py - y)
+        if (d <= STOP_MARK_M && (!best || d < best.d)) {
+          best = { d, x, y, bearing: ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360, edge: e }
+        }
+      }
+    }
+    if (!best) continue
+    const { x, y, bearing, edge } = best
+    const lines = edges[edge]!.lines
+    out.push([stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), lines.length, lines.length === 1 ? lines[0]! : ''])
+  }
+  return out.sort((a, b) => a[0].localeCompare(b[0]))
+}
+
+/*
+ * Corners as circular arcs, as Transit draws them: a line offset beside an arc
+ * is an arc too, so every line of a bundle turns cleanly round the same centre.
+ * The radius grows with the bundle (ARC_BASE_M, then ARC_PER_LINE_M a line, the
+ * width a line takes around z14, where bundles are drawn), so the inner lines
+ * of a wide one don't fold over themselves on a turn. Where the legs either side
+ * of a corner are too short for it, it is as wide as they allow.
+ */
+const ARC_BASE_M = 15
+const ARC_PER_LINE_M = 14
+const ARC_MIN_TURN = (20 * Math.PI) / 180
+/** Sharper than this is a hairpin (a U-turn, a spike where a line doubles back): rounded, it would loop. */
+const ARC_MAX_TURN = (120 * Math.PI) / 180
+const ARC_STEP = (15 * Math.PI) / 180
+
+/** [path] with each corner turning more than ARC_MIN_TURN rounded off for a bundle of [lines]; its ends stay put. */
+export function roundCorners(path: readonly LngLat[], lines: number): LngLat[] {
+  if (path.length < 3) return [...path]
+  const radius = ARC_BASE_M + ARC_PER_LINE_M * lines
+  const xy = path.map(([lng, lat]) => [lng * KX, lat * KY] as [number, number])
+  const out: [number, number][] = [xy[0]!]
+  // How much of each leg the corners at its two ends may take: half, or all of it at the path's ends.
+  const leg = (i: number): number => Math.hypot(xy[i + 1]![0] - xy[i]![0], xy[i + 1]![1] - xy[i]![1])
+  for (let i = 1; i < xy.length - 1; i++) {
+    const [ax, ay] = xy[i - 1]!
+    const [px, py] = xy[i]!
+    const [bx, by] = xy[i + 1]!
+    const inLen = leg(i - 1)
+    const outLen = leg(i)
+    if (inLen === 0 || outLen === 0) continue
+    const ux = (px - ax) / inLen
+    const uy = (py - ay) / inLen
+    const vx = (bx - px) / outLen
+    const vy = (by - py) / outLen
+    const turn = Math.acos(Math.max(-1, Math.min(1, ux * vx + uy * vy)))
+    if (turn < ARC_MIN_TURN || turn > ARC_MAX_TURN) {
+      out.push([px, py])
+      continue
+    }
+    const room = Math.min(i === 1 ? inLen : inLen / 2, i === xy.length - 2 ? outLen : outLen / 2)
+    const tangent = Math.min(radius * Math.tan(turn / 2), room)
+    const r = tangent / Math.tan(turn / 2)
+    // The arc from where it leaves the incoming leg to where it meets the outgoing one.
+    const sx = px - ux * tangent
+    const sy = py - uy * tangent
+    const left = ux * vy - uy * vx > 0 ? 1 : -1
+    const cx = sx - uy * r * left
+    const cy = sy + ux * r * left
+    const start = Math.atan2(sy - cy, sx - cx)
+    const steps = Math.max(1, Math.ceil(turn / ARC_STEP))
+    for (let k = 0; k <= steps; k++) {
+      const a = start + left * turn * (k / steps)
+      out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)])
+    }
+  }
+  out.push(xy[xy.length - 1]!)
+  return out.map(([x, y]) => [x / KX, y / KY] as LngLat)
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { decodePolyline, type LngLat } from '../../utils/polyline'
-import { bundle, bundleOrder, type BundleLine } from './busMapBundle'
+import { decodePolyline, encodePolyline, type LngLat } from '../../utils/polyline'
+import { bundle, bundleOrder, placeStops, roundCorners, type BundleLine } from './busMapBundle'
 import { networkStats } from './busMapStats'
 
 /*
@@ -138,5 +138,69 @@ describe('bundle', () => {
     // 1 stays west of 6A on every shared edge, before and after 9D joins.
     for (let i = 0; i < Math.min(one.length, sixA.length); i++) expect(one[i]).toBeLessThan(sixA[i]!)
     expect(edges.some(e => e.lines.length === 3)).toBe(true)
+  })
+})
+
+describe('roundCorners', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  const metres = ([lng, lat]: LngLat): [number, number] => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT]
+
+  it('turns a corner on one circle, wider for a wider bundle', () => {
+    const corner = [at(0, 0), at(0, 500), at(500, 500)]
+    const narrow = roundCorners(corner, 1).map(metres)
+    const wide = roundCorners(corner, 8).map(metres)
+    // Ends stay put.
+    expect(narrow[0]![0]).toBeCloseTo(0, 1)
+    expect(narrow[narrow.length - 1]![0]).toBeCloseTo(500, 1)
+    // A right turn round a centre east of the corner: every arc point the same distance from it.
+    const radiusOf = (pts: [number, number][]): number => {
+      const arc = pts.slice(1, -1)
+      const r = 500 - arc[0]![1]
+      const cx = r
+      const cy = 500 - r
+      for (const [x, y] of arc) expect(Math.hypot(x - cx, y - cy)).toBeCloseTo(r, 0)
+      return r
+    }
+    expect(radiusOf(wide)).toBeGreaterThan(radiusOf(narrow))
+  })
+
+  it('keeps a corner as wide as its legs allow', () => {
+    const tight = roundCorners([at(0, 0), at(0, 30), at(30, 30)], 10).map(metres)
+    for (const [x, y] of tight) {
+      expect(x).toBeGreaterThan(-0.5)
+      expect(y).toBeLessThan(30.5)
+    }
+  })
+
+  it('leaves a gentle bend as it is', () => {
+    const gentle = [at(0, 0), at(0, 500), at(50, 1000)]
+    expect(roundCorners(gentle, 3)).toHaveLength(3)
+  })
+})
+
+describe('placeStops', () => {
+  it('puts a halte on the bundle carrying its lines, turned to the street', () => {
+    const north = { shape: encodePolyline([[LNG, LAT], [LNG, LAT + 1000 / M_LAT]]), lines: ['1', '6A'] }
+    const other = { shape: encodePolyline([[LNG + 30 / M_LNG, LAT], [LNG + 30 / M_LNG, LAT + 1000 / M_LAT]]), lines: ['9'] }
+    const marks = placeStops([north, other], [{ code: 'H1', lng: LNG + 20 / M_LNG, lat: LAT + 500 / M_LAT, lines: ['1'] }])
+    expect(marks).toHaveLength(1)
+    const [code, lng, , bearing, count] = marks[0]!
+    expect(code).toBe('H1')
+    expect(Math.abs((lng - LNG) * M_LNG)).toBeLessThan(1)
+    expect(bearing).toBe(0)
+    expect(count).toBe(2)
+  })
+
+  it('leaves out a halte with none of its lines near', () => {
+    const edge = { shape: encodePolyline([[LNG, LAT], [LNG, LAT + 1000 / M_LAT]]), lines: ['1'] }
+    expect(placeStops([edge], [{ code: 'H2', lng: LNG + 500 / M_LNG, lat: LAT, lines: ['1'] }])).toEqual([])
+  })
+})
+
+describe('roundCorners on a hairpin', () => {
+  it('leaves a U-turn sharp rather than looping it', () => {
+    const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+    const hairpin = [at(0, 0), at(0, 500), at(20, 0)]
+    expect(roundCorners(hairpin, 6)).toHaveLength(3)
   })
 })

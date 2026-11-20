@@ -136,6 +136,16 @@ class BusMapTest {
     }
 
     @Test
+    fun `every halte placed on the network gets a mark, a bar for several lines and a coloured dot for one`() {
+        assertTrue(busMap.stopMarks.size > busMap.haltes.size * 9 / 10)
+        val marks = features(busMap.toGeoJson().marks)
+        assertEquals(busMap.stopMarks.size, marks.size)
+        assertTrue(marks.all { it.prop(BusMapProps.STATION_ID).startsWith("TJ-") })
+        val single = marks.filter { it.prop(BusMapProps.COUNT) == "1" }
+        assertTrue(single.isNotEmpty() && single.all { it.prop(BusMapProps.COLOR).matches(Regex("#[0-9A-Fa-f]{6}")) })
+    }
+
+    @Test
     fun `rail stations keep their API ids`() {
         val rail = features(busMap.toGeoJson().rail)
         assertEquals(busMap.rail.size, rail.size)
