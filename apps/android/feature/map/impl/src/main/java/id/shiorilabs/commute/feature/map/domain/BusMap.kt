@@ -60,10 +60,21 @@ data class BusMapEdge(
     val shape: String,
     /** Line codes, left to right along [shape]. */
     val lines: List<String>,
+    /**
+     * The whole bundle moved this many line widths right of [shape], so lines going straight on
+     * through a node keep their place where a line joins or leaves (the 13s past CSW as 1 joins).
+     */
+    val shift: Double = 0.0,
 )
 
 /** Line [index] of [count] on an edge: its offset in line widths, right of the edge's direction. */
 fun edgeSlot(index: Int, count: Int): Double = index - (count - 1) / 2.0
+
+/**
+ * A line's width at z15, in dp: what the streets layer draws lines at there, and the unit a halte
+ * bar's [BusMapProps.BAR_OFFSET] is given in, the bar being drawn for that width and scaled with it.
+ */
+const val BUS_LINE_W_15_DP = 3.5f
 
 /**
  * A trunk koridor: a plain-number BRT (`1` … `14`), and 13E and L13E. The streets layer draws only
@@ -152,6 +163,9 @@ object BusMapProps {
     /** A halte mark's way across the street (degrees from north) and how many lines its bar spans. */
     const val BEARING = "bearing"
     const val COUNT = "count"
+
+    /** A halte bar's `[x, 0]` offset in dp at z15, x right of the street's way: its bundle's shift. */
+    const val BAR_OFFSET = "barOffset"
 }
 
 /**
@@ -175,6 +189,8 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
                 }
             }
             val trunks = edge.lines.filter(::isTrunk)
+            // Among the trunks alone the bundle is another one, centred, unless it is all trunks.
+            val trunkShift = if (trunks.size == edge.lines.size) edge.shift else 0.0
             for ((index, code) in edge.lines.withIndex()) {
                 val line = byCode[code] ?: continue
                 add(
@@ -184,8 +200,8 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
                             put(BusMapProps.CODE, line.code)
                             put(BusMapProps.KIND, line.kind)
                             put(BusMapProps.COLOR, line.color)
-                            put(BusMapProps.SLOT, edgeSlot(index, edge.lines.size))
-                            if (isTrunk(code)) put(BusMapProps.TRUNK_SLOT, edgeSlot(trunks.indexOf(code), trunks.size))
+                            put(BusMapProps.SLOT, edgeSlot(index, edge.lines.size) + edge.shift)
+                            if (isTrunk(code)) put(BusMapProps.TRUNK_SLOT, edgeSlot(trunks.indexOf(code), trunks.size) + trunkShift)
                         },
                     ),
                 )
@@ -225,6 +241,7 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
             if (tappable != null && !tappable(stationId)) continue
             val count = mark[4].jsonPrimitive.int
             val only = mark.getOrNull(5)?.jsonPrimitive?.content.orEmpty()
+            val shift = mark.getOrNull(6)?.jsonPrimitive?.double ?: 0.0
             add(
                 feature(
                     geometry = point(mark[1].jsonPrimitive.double, mark[2].jsonPrimitive.double),
@@ -232,6 +249,10 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
                         put(BusMapProps.STATION_ID, stationId)
                         put(BusMapProps.BEARING, mark[3].jsonPrimitive.double)
                         put(BusMapProps.COUNT, count)
+                        putJsonArray(BusMapProps.BAR_OFFSET) {
+                            add(shift * BUS_LINE_W_15_DP)
+                            add(0.0)
+                        }
                         if (count == 1) byCode[only]?.let { put(BusMapProps.COLOR, it.color) }
                     },
                 ),

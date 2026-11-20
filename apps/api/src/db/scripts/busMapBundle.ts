@@ -81,6 +81,8 @@ export interface BusMapEdge {
   shape: string
   /** Line codes from left to right along the shape. */
   lines: string[]
+  /** The bundle moved this many line widths right of the shape (bundleShifts); absent when centred. */
+  shift?: number
 }
 
 /** Koridors before the other lines, then by number: `1`, `1A`, `1B`, `2`, ... `13`. */
@@ -878,6 +880,91 @@ function solveOrders(
   return out
 }
 
+/*
+ * Each bundle moved across its street so the lines going on through a node
+ * keep their place, where centring every bundle on its street moved them: the
+ * 13s along Trunojoyo stepped half a line south where 1 joined them at CSW, and
+ * back where it left. Transit's penalty figure draws it so: a line joining comes
+ * in beside the lines going straight on, which don't move.
+ *
+ * Line i of n on a chain lies at i - (n - 1) / 2 + shift line widths right of
+ * the chain's way. A line going on through a node from one chain to the next
+ * should lie as far right of the way it travels on both; how far it doesn't is
+ * the cost, and SHIFT_COST a line width moved off the street's middle. A linear
+ * program, solved by HiGHS, finds the shifts; a chain of one line stays centred,
+ * so its halte dots stay on it. Shifts are kept within SHIFT_MAX line widths.
+ */
+const SHIFT_MAX = 1
+const SHIFT_COST = 0.25
+
+/** Each chain's shift, in line widths right of its way (see above). */
+export function bundleShifts(list: readonly Chain[], orders: readonly string[][], highs: LegacyHighs): number[] {
+  const shifts = list.map(() => 0)
+  const free = (c: number): boolean => orders[c]!.length >= 2
+  const ends = new Map<number, { chain: number, atStart: boolean }[]>()
+  list.forEach((chain, c) => {
+    for (const atStart of [true, false]) {
+      const node = atStart ? chain.path[0]! : chain.path[chain.path.length - 1]!
+      const here = ends.get(node) ?? []
+      here.push({ chain: c, atStart })
+      ends.set(node, here)
+    }
+  })
+  const place = (c: number, line: string): number => orders[c]!.indexOf(line) - (orders[c]!.length - 1) / 2
+
+  const rows: string[] = []
+  const objective: string[] = []
+  const term = (k: number, name: string): string => `${k >= 0 ? '+' : '-'} ${Math.abs(k)} ${name}`
+  let gaps = 0
+  for (const here of ends.values()) {
+    const endsOf = new Map<string, { chain: number, atStart: boolean }[]>()
+    for (const end of here) {
+      for (const line of orders[end.chain]!) endsOf.set(line, [...(endsOf.get(line) ?? []), end])
+    }
+    for (const [line, through] of endsOf) {
+      if (through.length !== 2 || through[0]!.chain === through[1]!.chain) continue
+      const [a, b] = through as [{ chain: number, atStart: boolean }, { chain: number, atStart: boolean }]
+      if (!free(a.chain) && !free(b.chain)) continue
+      // Travelling in along a and on along b: right of that way is right of a chain run with it.
+      const sa = a.atStart ? -1 : 1
+      const sb = b.atStart ? 1 : -1
+      // gap = sa (place_a + shift_a) - sb (place_b + shift_b), and the cost |gap|.
+      const constant = sa * place(a.chain, line) - sb * place(b.chain, line)
+      const vars: string[] = []
+      if (free(a.chain)) vars.push(term(sa, `s${a.chain}`))
+      if (free(b.chain)) vars.push(term(-sb, `s${b.chain}`))
+      const negated = vars.map(v => (v.startsWith('+') ? `-${v.slice(1)}` : `+${v.slice(1)}`))
+      const gap = `g${gaps++}`
+      rows.push(`+ 1 ${gap} ${negated.join(' ')} >= ${constant}`, `+ 1 ${gap} ${vars.join(' ')} >= ${-constant}`)
+      objective.push(`+ 1 ${gap}`)
+    }
+  }
+  if (gaps === 0) return shifts
+  const chainsFree = list.map((_, c) => c).filter(free)
+  for (const c of chainsFree) {
+    rows.push(`+ 1 u${c} - 1 s${c} >= 0`, `+ 1 u${c} + 1 s${c} >= 0`)
+    objective.push(`+ ${SHIFT_COST} u${c}`)
+  }
+  const lp = [
+    'Minimize',
+    ` obj: ${objective.join('\n  ')}`,
+    'Subject To',
+    ...rows.map((row, i) => ` r${i}: ${row}`),
+    'Bounds',
+    ...chainsFree.map(c => ` -${SHIFT_MAX} <= s${c} <= ${SHIFT_MAX}`),
+    'End',
+    ''
+  ].join('\n')
+  const solution = highs.solve(lp, { time_limit: SOLVE_SECONDS })
+  if (solution.Status !== 'Optimal') {
+    console.warn(`  bundle shifts: ${solution.Status}; bundles left centred`)
+    return shifts
+  }
+  // To a quarter line width: a shift a hair off a round one from the solver reads the same next run.
+  for (const c of chainsFree) shifts[c] = Math.round((solution.Columns[`s${c}`]?.Primal ?? 0) * 4) / 4 || 0
+  return shifts
+}
+
 let solver: Promise<LegacyHighs> | undefined
 /** HiGHS, loaded once. */
 export const loadSolver = (): Promise<LegacyHighs> => (solver ??= highsLoader())
@@ -908,15 +995,18 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport)
   // Exact can't do worse; if it ever reads so, the program is wrong, and the local order stands.
   if (exact > local) console.warn(`  line order: solved ${exact} against local search's ${local}; keeping local`)
   const orders = exact > local ? localOrders : exactOrders
+  const shifts = bundleShifts(list, orders, await loadSolver())
   return list
-    .map((chain, i) => {
+    .map((chain, i): BusMapEdge => {
       const coords = chain.path.map((id) => {
         const p = network.points[id]!
         return [p.x / KX, p.y / KY] as LngLat
       })
+      const shift = shifts[i]!
       return {
         shape: encodePolyline(simplify(coords, SIMPLIFY_M)),
-        lines: orders[i]!
+        lines: orders[i]!,
+        ...(shift !== 0 ? { shift } : {})
       }
     })
     // Stable output: a regenerated file diffs only where the network changed.
@@ -931,8 +1021,11 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport)
  */
 const STOP_MARK_M = 60
 
-/** A halte's mark: code, [lng, lat] on the edge, the edge's bearing (degrees from north), its line count, and its one line's code. */
-export type StopMark = [string, number, number, number, number, string]
+/**
+ * A halte's mark: code, [lng, lat] on the edge, the edge's bearing (degrees from north), its line
+ * count, its one line's code, and the edge's shift when it has one, for the bar to move with its lines.
+ */
+export type StopMark = [string, number, number, number, number, string, number?]
 
 export interface StopIn {
   code: string
@@ -971,8 +1064,10 @@ export function placeStops(edges: readonly BusMapEdge[], stops: readonly StopIn[
     }
     if (!best) continue
     const { x, y, bearing, edge } = best
-    const lines = edges[edge]!.lines
-    out.push([stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), lines.length, lines.length === 1 ? lines[0]! : ''])
+    const { lines, shift } = edges[edge]!
+    const mark: StopMark = [stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), lines.length, lines.length === 1 ? lines[0]! : '']
+    if (shift) mark.push(shift)
+    out.push(mark)
   }
   return out.sort((a, b) => a[0].localeCompare(b[0]))
 }
