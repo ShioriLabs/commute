@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 import { TOPOLOGY } from '../data/topology'
 import { bundle, type BusMapEdge } from './busMapBundle'
+import { loadRoads, snapToRoads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
 
@@ -101,8 +102,14 @@ export interface BusMapLine {
   kind: BusMapLineKind
   /** `#RRGGBB`, the feed's route_color. */
   color: string
-  /** Encoded polylines (Google, precision 5): the pieces that together draw the line once. */
+  /**
+   * Encoded polylines (Google, precision 5): the pieces that together draw the
+   * line once, from the feed (a koridor redrawn on its topology). The source the
+   * generator works from; what clients draw is [drawn].
+   */
   shapes: string[]
+  /** [shapes] laid onto the roads themselves, piece for piece: what a client draws the line with. */
+  drawn: string[]
   /** Halte codes the line calls at, in the order of its longest pattern first. */
   stops: string[]
 }
@@ -244,7 +251,7 @@ export function parseRailCoords(text: string): [string, number, number][] {
 
 // ── build ───────────────────────────────────────────────────────────────────
 
-function main(): void {
+async function main(): Promise<void> {
   if (!fs.existsSync(FEED_DIR)) {
     console.error(`No TJ feed at ${FEED_DIR}. Extract the GTFS zip there first, as generateTJSQL needs.`)
     process.exit(1)
@@ -324,6 +331,8 @@ function main(): void {
       kind: SCOPE[route.route_desc!]!,
       color: `#${(route.route_color || '888888').toUpperCase()}`,
       shapes: kept.map(p => encodePolyline(simplify(p, SIMPLIFY_M))),
+      // Laid onto the roads once the koridors are on their topology (alongRoads).
+      drawn: [],
       stops
     })
   }
@@ -333,8 +342,9 @@ function main(): void {
   const sortedHaltes = Object.fromEntries(Object.entries(normal.haltes).sort(([a], [b]) => a.localeCompare(b)))
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
-  const edges = bundleShapes(normal.lines)
-  const map: BusMap = { attribution: ATTRIBUTION, lines: normal.lines, edges, haltes: sortedHaltes, rail }
+  const onRoads = await alongRoads(normal.lines)
+  const edges = bundleShapes(onRoads)
+  const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads, edges, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
 
   const brt = lines.filter(l => l.kind === 'BRT').length
@@ -348,14 +358,28 @@ function main(): void {
 }
 
 /**
- * The lines' network, from their shapes as shipped: what both `main` and
+ * The lines' network, from their `drawn` shapes: what both `main` and
  * `--rebundle` write. Each line once along a street first, as the feed's patterns
  * are: a koridor redrawn up one carriageway and back down the other (6 on Rasuna
  * Said) is one line on the map, two only where its ways part (a loop to turn).
- * Its `shapes` keep both ways.
+ * Its shapes keep both ways.
  */
 function bundleShapes(lines: readonly BusMapLine[]): BusMapEdge[] {
-  return bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dedupePatterns(l.shapes.map(s => decodePolyline(s))) })))
+  return bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dedupePatterns(l.drawn.map(s => decodePolyline(s))) })))
+}
+
+/**
+ * Every line's `drawn`: its `shapes` laid onto the roads themselves
+ * (busMapRoads.ts), the feed's loose points onto the carriageway and its corners
+ * onto the road's. Kept beside `shapes` rather than over them, so a re-run lays
+ * the same shapes onto the same roads and changes nothing.
+ */
+async function alongRoads(lines: readonly BusMapLine[]): Promise<BusMapLine[]> {
+  const roads = await loadRoads(lines.flatMap(l => l.shapes.map(s => decodePolyline(s))))
+  return lines.map(l => ({
+    ...l,
+    drawn: l.shapes.map(s => encodePolyline(simplify(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT' }), SIMPLIFY_M)))
+  }))
 }
 
 /** The TransJakarta koridors of the routing topology (poster overrides over the feed's), as halte runs. */
@@ -435,17 +459,21 @@ export function alongTopology(
  * `--rebundle`: the koridors redrawn along their topology and the edges rebuilt,
  * from the file's own lines; nothing re-read from the feed.
  */
-function rebundle(): void {
+async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const normal = alongTopology(map.lines, map.haltes)
-  const edges = bundleShapes(normal.lines)
-  const out: BusMap = { attribution: map.attribution, lines: normal.lines, edges, haltes: normal.haltes, rail: map.rail }
+  const onRoads = await alongRoads(normal.lines)
+  const edges = bundleShapes(onRoads)
+  const out: BusMap = { attribution: map.attribution, lines: onRoads, edges, haltes: normal.haltes, rail: map.rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
   console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
   console.log(`  haltes:   ${Object.keys(normal.haltes).length} (was ${Object.keys(map.haltes).length})`)
 }
 
 if (require.main === module) {
-  if (process.argv.includes('--rebundle')) rebundle()
-  else main()
+  const run = process.argv.includes('--rebundle') ? rebundle : main
+  run().catch((e: unknown) => {
+    console.error(e)
+    process.exit(1)
+  })
 }

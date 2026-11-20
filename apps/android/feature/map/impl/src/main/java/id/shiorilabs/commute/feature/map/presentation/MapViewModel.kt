@@ -17,6 +17,8 @@ import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.data.MapStorage
 import id.shiorilabs.commute.feature.map.domain.BusMap
 import id.shiorilabs.commute.feature.map.domain.BusMapGeoJson
+import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
+import id.shiorilabs.commute.feature.map.domain.lineInfo
 import id.shiorilabs.commute.feature.map.domain.GeoStop
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.stops
@@ -258,6 +260,7 @@ class MapViewModel @Inject constructor(
                         geoJson = map.toGeoJson(tappable),
                         attribution = map.attribution,
                         stops = map.stops(tappable),
+                        lines = map.lineInfo(),
                     )
                 }
             }.getOrNull()
@@ -273,7 +276,13 @@ class MapViewModel @Inject constructor(
 }
 
 /** Peta Bus ready for the streets layer: its sources, whose data it is, and its dots for "Sekitar". */
-data class BusMapLayer(val geoJson: BusMapGeoJson, val attribution: String, val stops: List<GeoStop>)
+data class BusMapLayer(
+    val geoJson: BusMapGeoJson,
+    val attribution: String,
+    val stops: List<GeoStop>,
+    /** Each line by code: for one picked on the map, its name and how far it reaches. */
+    val lines: Map<String, BusMapLineInfo>,
+)
 
 /**
  * The route over the map: OTW's [pair], the [journey] open in its sheet (null on the options), and

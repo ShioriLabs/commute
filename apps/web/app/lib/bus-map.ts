@@ -20,6 +20,8 @@ export interface BusMapLine {
   color: string
   /** Encoded polylines (Google, precision 5): the pieces that together draw the line once. */
   shapes: string[]
+  /** [shapes] laid onto the roads themselves (busMapRoads.ts), piece for piece: what to draw the line with. */
+  drawn: string[]
   /** Halte codes the line calls at. `TJ-${code}` is the API's station id. */
   stops: string[]
 }

@@ -39,8 +39,10 @@ data class BusMapLine(
     val kind: String,
     /** `#RRGGBB`, the feed's route colour. */
     val color: String,
-    /** Encoded polylines (Google, precision 5): the pieces that together draw the line once. */
+    /** Encoded polylines (Google, precision 5): the pieces that together draw the line once, as the feed has them. */
     val shapes: List<String>,
+    /** [shapes] laid onto the roads themselves: what the line is drawn with. */
+    val drawn: List<String> = emptyList(),
     /** Halte codes the line calls at. */
     val stops: List<String>,
 )
@@ -122,7 +124,12 @@ fun stopsInView(
 }
 
 /** The streets layer's three sources, as GeoJSON FeatureCollection text MapLibre reads as is. */
-data class BusMapGeoJson(val lines: String, val haltes: String, val rail: String)
+/**
+ * The streets layer's sources: [lines] the bundled network (each street once, its lines side by
+ * side), [routes] every line on its own street geometry (street zoom, and a line alone), [haltes]
+ * and [rail] the dots.
+ */
+data class BusMapGeoJson(val lines: String, val routes: String, val haltes: String, val rail: String)
 
 /** GeoJSON properties the streets layer's style expressions and taps read. */
 object BusMapProps {
@@ -204,8 +211,33 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
             )
         }
     }
+    // Every line on its own geometry, one LineString per shape piece.
+    val routeFeatures = buildJsonArray {
+        for (line in lines) {
+            for (shape in line.drawnShapes) {
+                val points = decodePolyline(shape)
+                if (points.size < 2) continue
+                add(
+                    feature(
+                        geometry = buildJsonObject {
+                            put("type", "LineString")
+                            putJsonArray("coordinates") {
+                                for (p in points) add(buildJsonArray { add(p.longitude); add(p.latitude) })
+                            }
+                        },
+                        properties = buildJsonObject {
+                            put(BusMapProps.CODE, line.code)
+                            put(BusMapProps.KIND, line.kind)
+                            put(BusMapProps.COLOR, line.color)
+                        },
+                    ),
+                )
+            }
+        }
+    }
     return BusMapGeoJson(
         lines = collection(lineFeatures).toString(),
+        routes = collection(routeFeatures).toString(),
         haltes = collection(halteFeatures).toString(),
         rail = collection(railFeatures).toString(),
     )
@@ -229,3 +261,34 @@ private fun collection(features: JsonArray): JsonObject = buildJsonObject {
     put("type", "FeatureCollection")
     put("features", features)
 }
+
+/** A line as the streets layer shows it alone: its name, colour, and where it reaches. */
+data class BusMapLineInfo(
+    val code: String,
+    val name: String,
+    val color: String,
+    val south: Double,
+    val west: Double,
+    val north: Double,
+    val east: Double,
+)
+
+/** Each line's [BusMapLineInfo], by code: what a line picked on the streets layer shows and frames. */
+fun BusMap.lineInfo(): Map<String, BusMapLineInfo> = lines.associate { line ->
+    var south = Double.MAX_VALUE
+    var west = Double.MAX_VALUE
+    var north = -Double.MAX_VALUE
+    var east = -Double.MAX_VALUE
+    for (shape in line.drawnShapes) {
+        for (p in decodePolyline(shape)) {
+            south = minOf(south, p.latitude)
+            north = maxOf(north, p.latitude)
+            west = minOf(west, p.longitude)
+            east = maxOf(east, p.longitude)
+        }
+    }
+    line.code to BusMapLineInfo(line.code, line.name, line.color, south, west, north, east)
+}
+
+/** The pieces the line is drawn with: on the roads when the file has them, else as the feed has them. */
+val BusMapLine.drawnShapes: List<String> get() = drawn.ifEmpty { shapes }
