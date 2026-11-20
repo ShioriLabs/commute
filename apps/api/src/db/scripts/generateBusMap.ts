@@ -10,6 +10,7 @@ import {
   placeStops,
   roundJunctions,
   strokeKeys,
+  trimBarbs,
   type BusMapEdge,
   type CornerTally,
   type OrderReport,
@@ -444,7 +445,7 @@ function laidOnRoads(
       laid = [ends[0], ...pts.slice(1, -1), ends[1]]
       laying.unlaid++
     }
-    return easeCorners(simplify(laid, SIMPLIFY_M), strokes(edge).length, corners)
+    return easeCorners(simplify(trimBarbs(laid), SIMPLIFY_M), strokes(edge).length, corners)
   })
   const joined = roundJunctions(eased.map((path, i) => ({ path, lines: strokes(edges[i]!) })), corners)
   return edges.map((edge, i) => {

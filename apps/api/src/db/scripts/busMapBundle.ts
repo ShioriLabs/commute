@@ -1397,6 +1397,53 @@ export function filletCorners(path: readonly LngLat[], lines: number, tally?: Co
   return toLngLats(out)
 }
 
+/*
+ * Barbs off a line laid onto the roads: where the matched road runs a few
+ * metres past a corner (its nearest point beyond the junction) and the line
+ * goes out to it and comes back, a hook of 5 to 20 m at the corner (koridor 8 by
+ * Gelanggang TB Simatupang, 1 by Flyover Karet). A point the line turns back at
+ * by more than BARB_TURN, with a leg either side of it no longer than BARB_M,
+ * goes; a real U-turn or hairpin runs legs of hundreds of metres and stays. So
+ * does a zigzag: two points turning more than ZIGZAG_TURN, opposite ways, no
+ * more than BARB_M apart (1 by Flyover Karet, 10 and 12 by Walikota Jakarta
+ * Utara), where a street turns the one way and goes on.
+ */
+const BARB_M = 30
+const BARB_TURN_COS = Math.cos((140 * Math.PI) / 180)
+const ZIGZAG_TURN = (90 * Math.PI) / 180
+
+/** [path] without its barbs (see above); its ends stay put. */
+export function trimBarbs(path: readonly LngLat[]): LngLat[] {
+  const xy = toXYs(path)
+  for (let changed = true; changed;) {
+    changed = false
+    for (let i = 1; i < xy.length - 1; i++) {
+      const [ax, ay] = xy[i - 1]!
+      const [px, py] = xy[i]!
+      const [bx, by] = xy[i + 1]!
+      const inLen = Math.hypot(px - ax, py - ay)
+      const outLen = Math.hypot(bx - px, by - py)
+      const same = inLen < 0.1 || outLen < 0.1
+      const back = !same && ((px - ax) * (bx - px) + (py - ay) * (by - py)) / (inLen * outLen) < BARB_TURN_COS
+      if (same || (back && Math.min(inLen, outLen) <= BARB_M)) {
+        xy.splice(i, 1)
+        changed = true
+        break
+      }
+      if (i + 2 < xy.length && outLen <= BARB_M) {
+        const first = turnAt(xy[i - 1]!, xy[i]!, xy[i + 1]!)
+        const second = turnAt(xy[i]!, xy[i + 1]!, xy[i + 2]!)
+        if (Math.abs(first) > ZIGZAG_TURN && Math.abs(second) > ZIGZAG_TURN && first * second < 0) {
+          xy.splice(i, 2)
+          changed = true
+          break
+        }
+      }
+    }
+  }
+  return toLngLats(xy)
+}
+
 /** [path] eased (easeCorners), then its corners rounded (filletCorners), for a bundle of [lines]. */
 export function roundCorners(path: readonly LngLat[], lines: number, tally?: CornerTally): LngLat[] {
   return filletCorners(easeCorners(path, lines, tally), lines, tally)
