@@ -475,6 +475,102 @@ export function popBubbles(network: Network, list: Chain[]): boolean {
   return changed
 }
 
+/*
+ * Junction contraction, as LOOM draws a network. Where lines meet at a
+ * roundabout or a wide crossing (Bundaran HI, Harmoni), every line comes in
+ * and leaves at its own point around it, so the network there is a knot of
+ * short chains, each with a different set of lines, and the bundles weave
+ * across each other. Junctions (where three or more chains meet) within
+ * JUNCTION_LINK_M of each other become one node at their middle, as long as
+ * the group stays within JUNCTION_SPAN_M across; the short chains inside it go,
+ * and every street running in ends at that node. The lines meet there, each
+ * at its place, as at a station on a line diagram.
+ */
+const JUNCTION_LINK_M = 80
+const JUNCTION_SPAN_M = 300
+
+/** Contracts junction knots into one node each (JUNCTION_LINK_M); returns the chains left. */
+export function contract(network: Network, list: Chain[]): Chain[] {
+  const { points } = network
+  const endCount = new Map<number, number>()
+  for (const chain of list) {
+    for (const n of [chain.path[0]!, chain.path[chain.path.length - 1]!]) endCount.set(n, (endCount.get(n) ?? 0) + 1)
+  }
+  const junctions = [...endCount].filter(([, count]) => count >= 3).map(([n]) => n)
+
+  // Single-linkage groups, each kept within JUNCTION_SPAN_M across.
+  const group = new Map<number, number>(junctions.map(n => [n, n]))
+  const members = new Map<number, number[]>(junctions.map(n => [n, [n]]))
+  const root = (n: number): number => {
+    let at = n
+    while (group.get(at) !== at) at = group.get(at)!
+    return at
+  }
+  const span = (ids: number[]): number => {
+    const xs = ids.map(id => points[id]!.x)
+    const ys = ids.map(id => points[id]!.y)
+    return Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+  }
+  const grid = new Map<string, number[]>()
+  const cell = (x: number, y: number): string => `${Math.floor(x / JUNCTION_LINK_M)},${Math.floor(y / JUNCTION_LINK_M)}`
+  for (const n of junctions) {
+    const p = points[n]!
+    const key = cell(p.x, p.y)
+    grid.set(key, [...(grid.get(key) ?? []), n])
+  }
+  const pairs: [number, number, number][] = []
+  for (const n of junctions) {
+    const p = points[n]!
+    const cx = Math.floor(p.x / JUNCTION_LINK_M)
+    const cy = Math.floor(p.y / JUNCTION_LINK_M)
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (const m of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
+          if (m <= n) continue
+          const q = points[m]!
+          const d = Math.hypot(q.x - p.x, q.y - p.y)
+          if (d <= JUNCTION_LINK_M) pairs.push([d, n, m])
+        }
+      }
+    }
+  }
+  pairs.sort((a, b) => a[0] - b[0])
+  for (const [, n, m] of pairs) {
+    const rn = root(n)
+    const rm = root(m)
+    if (rn === rm) continue
+    const joined = [...members.get(rn)!, ...members.get(rm)!]
+    if (span(joined) > JUNCTION_SPAN_M) continue
+    group.set(rm, rn)
+    members.set(rn, joined)
+    members.delete(rm)
+  }
+
+  // Each group of two or more becomes one node at its middle.
+  const nodeOf = new Map<number, number>()
+  for (const ids of members.values()) {
+    if (ids.length < 2) continue
+    const x = ids.reduce((s, id) => s + points[id]!.x, 0) / ids.length
+    const y = ids.reduce((s, id) => s + points[id]!.y, 0) / ids.length
+    const id = points.length
+    points.push({ x, y, ux: 1, uy: 0, piece: -1, index: 0 })
+    for (const m of ids) nodeOf.set(m, id)
+  }
+
+  const out: Chain[] = []
+  for (const chain of list) {
+    const start = nodeOf.get(chain.path[0]!)
+    const end = nodeOf.get(chain.path[chain.path.length - 1]!)
+    // Inside a knot: gone, its lines are met at the node.
+    if (start !== undefined && start === end && chainLength(network, chain) < JUNCTION_SPAN_M * 2) continue
+    const path = [...chain.path]
+    if (start !== undefined) path.unshift(start)
+    if (end !== undefined) path.push(end)
+    out.push({ path, lines: chain.lines })
+  }
+  return out
+}
+
 /** Peta Bus's lines as the edges of one network, each with its lines in order across it. */
 export function bundle(lines: readonly BundleLine[]): BusMapEdge[] {
   const network = buildNetwork(lines)
@@ -486,6 +582,7 @@ export function bundle(lines: readonly BundleLine[]): BusMapEdge[] {
     if (smoothed) list = chains(network)
     if (!popped && !smoothed) break
   }
+  list = contract(network, list)
   orient(network, list)
   const order = bundleOrder(lines)
   const rank = new Map(order.map((code, i) => [code, i]))
