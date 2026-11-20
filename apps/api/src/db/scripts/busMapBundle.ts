@@ -1413,6 +1413,16 @@ const BARB_TURN_COS = Math.cos((140 * Math.PI) / 180)
 const ZIGZAG_TURN = (90 * Math.PI) / 180
 
 /*
+ * A zigzag whose middle leg runs back against the line's way, both its turns
+ * sharper than BACKSTEP_TURN, is a line stepping from one carriageway across to
+ * the other, and goes up to BACKSTEP_M long, two carriageways as far apart as
+ * SNAP_M lets them merge: 10 and 12 at Walikota Jakarta Utara, from Yos
+ * Sudarso's northbound side to its southbound, 34 m apart under the toll road.
+ */
+const BACKSTEP_TURN = (120 * Math.PI) / 180
+const BACKSTEP_M = 2 * SNAP_M
+
+/*
  * And a hook at an edge's end: leaving its node, the edge sets off one way and
  * within END_BARB_M folds back more than END_BARB_TURN, the node lying past the
  * corner the line turns at (where 9's or 12's own two ways part and meet again,
@@ -1454,10 +1464,11 @@ export function trimBarbs(path: readonly LngLat[], haltes: readonly LngLat[] = [
         changed = true
         break
       }
-      if (i + 2 < xy.length && outLen <= BARB_M) {
+      if (i + 2 < xy.length && outLen <= BACKSTEP_M) {
         const first = turnAt(xy[i - 1]!, xy[i]!, xy[i + 1]!)
         const second = turnAt(xy[i]!, xy[i + 1]!, xy[i + 2]!)
-        if (Math.abs(first) > ZIGZAG_TURN && Math.abs(second) > ZIGZAG_TURN && first * second < 0) {
+        const sharp = outLen <= BARB_M ? ZIGZAG_TURN : BACKSTEP_TURN
+        if (Math.abs(first) > sharp && Math.abs(second) > sharp && first * second < 0) {
           xy.splice(i, 2)
           changed = true
           break
