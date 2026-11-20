@@ -46,6 +46,8 @@ export interface TopologyLine {
 export interface AlignInput {
   code: string
   pieces: LngLat[][]
+  /** The haltes the feed has the line call at: the ones its topology drops mark a reroute. */
+  stops?: string[]
 }
 
 export interface Aligned {
@@ -122,34 +124,61 @@ function slice(t: Track, from: number, to: number): [number, number][] {
   return from <= to ? out : out.reverse()
 }
 
+/** Where the last leg left a koridor's own track: the next leg carries on from there. */
+interface Cursor {
+  track: Track
+  at: number
+}
+
+interface Picked extends Cursor {
+  path: [number, number][]
+}
+
 /**
  * The shortest stretch of any of [tracks] from [a] to [b] that isn't a detour;
- * one running the right way first, then one running the other way.
+ * one running the right way first, then one running the other way. With
+ * [detours], any length will do, but not a stretch passing any of [avoid].
+ *
+ * After [after], a stretch carrying on along the same track from there comes
+ * first, the nearest pass of [a] after it: a track that passes a halte twice
+ * (6 by Flyover Kuningan, then back down the other carriageway beside it)
+ * would otherwise skip the loop between the two.
  */
 function stretch(
   tracks: readonly Track[],
   a: [number, number],
   b: [number, number],
-  { near = NEAR_M, detours = false }: { near?: number, detours?: boolean } = {}
-): [number, number][] | null {
+  { near = NEAR_M, detours = false, avoid = [], after = null }:
+  { near?: number, detours?: boolean, avoid?: readonly [number, number][], after?: Cursor | null } = {}
+): Picked | null {
   const straight = Math.hypot(b[0] - a[0], b[1] - a[1])
   const limit = detours ? Infinity : Math.max(straight * DETOUR_FACTOR, straight + DETOUR_SLACK_M)
-  let best: { length: number, forward: boolean, track: Track, from: number, to: number } | null = null
+  let best: { length: number, forward: boolean, onward: number, track: Track, from: number, to: number } | null = null
   for (const t of tracks) {
     const fromA = passes(t, a, near)
     if (fromA.length === 0) continue
     const toB = passes(t, b, near)
-    for (const from of fromA) {
+    const avoided = avoid.flatMap(p => passes(t, p, NEAR_M))
+    // On the track the last leg ended on, only its next pass of [a]: a later one skips what's between.
+    const carried = after?.track === t ? fromA.filter(m => m >= after.at - 2 * NEAR_M) : []
+    const starts = carried.length > 0 ? [Math.min(...carried)] : fromA
+    for (const from of starts) {
       for (const to of toB) {
         const length = Math.abs(to - from)
         if (length > limit) continue
+        if (avoided.some(m => m > Math.min(from, to) + NEAR_M && m < Math.max(from, to) - NEAR_M)) continue
         const forward = to > from
-        const better = !best || (forward && !best.forward) || (forward === best.forward && length < best.length)
-        if (better) best = { length, forward, track: t, from, to }
+        // How far on from the last leg's end this starts; Infinity when it doesn't carry on.
+        const onward = after && after.track === t && forward && from >= after.at - 2 * NEAR_M ? Math.abs(from - after.at) : Infinity
+        const better = !best
+          || (forward && !best.forward)
+          || (forward === best.forward && onward < best.onward)
+          || (forward === best.forward && onward === best.onward && length < best.length)
+        if (better) best = { length, forward, onward, track: t, from, to }
       }
     }
   }
-  return best ? slice(best.track, best.from, best.to) : null
+  return best ? { path: slice(best.track, best.from, best.to), track: best.track, at: best.to } : null
 }
 
 /** Points along the street graph's tracks at most this far apart, so crossing lines find each other. */
@@ -157,6 +186,13 @@ const GRAPH_STEP_M = 20
 
 /** Tracks running within this of each other are joined there: a bus can turn from one street onto the other. */
 const GRAPH_JOIN_M = 25
+
+/**
+ * How far round a line's own pieces may go between two haltes, as a multiple of
+ * how far apart they are: its loops to turn are long for the haltes they join
+ * (6 from Flyover Kuningan round by Latuharhari to Galunggung, 2.5 km for 510 m).
+ */
+const OWN_REACH = 8
 
 /**
  * Every line's shapes as one street graph, for the last resort: the shortest
@@ -169,7 +205,12 @@ class StreetGraph {
   private readonly next: { to: number, m: number }[][] = []
   private readonly cells = new Map<string, number[]>()
 
-  constructor(tracks: readonly Track[]) {
+  /**
+   * [directed]: each track only the way it runs, joined to the others only at its
+   * ends, as one line's own pieces join (a branch leaving the trunk, a loop
+   * rejoining it). Without it, every street both ways, joined wherever lines meet.
+   */
+  constructor(tracks: readonly Track[], private readonly directed = false) {
     const cell = (x: number, y: number): string => `${Math.floor(x / GRAPH_JOIN_M)},${Math.floor(y / GRAPH_JOIN_M)}`
     const add = (p: [number, number]): number => {
       const id = this.xy.length
@@ -181,33 +222,52 @@ class StreetGraph {
       else this.cells.set(key, [id])
       return id
     }
-    const link = (a: number, b: number): void => {
+    const link = (a: number, b: number, bothWays: boolean): void => {
       const m = Math.hypot(this.xy[b]![0] - this.xy[a]![0], this.xy[b]![1] - this.xy[a]![1])
       this.next[a]!.push({ to: b, m })
-      this.next[b]!.push({ to: a, m })
+      if (bothWays) this.next[b]!.push({ to: a, m })
     }
-    for (const t of tracks) {
+    const trackOf: number[] = []
+    const ends: number[] = []
+    tracks.forEach((t, ti) => {
       let previous = -1
+      const added = (id: number): number => {
+        trackOf[id] = ti
+        return id
+      }
       for (let i = 0; i < t.xy.length; i++) {
         const p = t.xy[i]!
         if (i > 0) {
           const q = t.xy[i - 1]!
           const parts = Math.floor(Math.hypot(p[0] - q[0], p[1] - q[1]) / GRAPH_STEP_M)
           for (let k = 1; k < parts; k++) {
-            const id = add([q[0] + ((p[0] - q[0]) * k) / parts, q[1] + ((p[1] - q[1]) * k) / parts])
-            link(previous, id)
+            const id = added(add([q[0] + ((p[0] - q[0]) * k) / parts, q[1] + ((p[1] - q[1]) * k) / parts]))
+            link(previous, id, !directed)
             previous = id
           }
         }
-        const id = add(p)
-        if (previous >= 0) link(previous, id)
+        const id = added(add(p))
+        if (previous >= 0) link(previous, id, !directed)
+        else ends.push(id)
         previous = id
       }
+      ends.push(previous)
+    })
+    if (directed) {
+      // A piece's ends join the other pieces close by, both ways: where it leaves them and rejoins.
+      for (const id of ends) {
+        for (const other of this.near(this.xy[id]!, GRAPH_JOIN_M)) if (trackOf[other] !== trackOf[id]) link(id, other, true)
+      }
+    } else {
+      // Joins between tracks: every point to the points of other tracks close by.
+      for (let id = 0; id < this.xy.length; id++) {
+        for (const other of this.near(this.xy[id]!, GRAPH_JOIN_M)) if (other > id && !this.next[id]!.some(e => e.to === other)) link(id, other, true)
+      }
     }
-    // Joins between tracks: every point to the points of other tracks close by.
-    for (let id = 0; id < this.xy.length; id++) {
-      for (const other of this.near(this.xy[id]!, GRAPH_JOIN_M)) if (other > id && !this.next[id]!.some(e => e.to === other)) link(id, other)
-    }
+  }
+
+  private gap(id: number, [x, y]: [number, number]): number {
+    return Math.hypot(this.xy[id]![0] - x, this.xy[id]![1] - y)
   }
 
   private near([x, y]: [number, number], radius: number): number[] {
@@ -226,10 +286,23 @@ class StreetGraph {
     return out
   }
 
-  /** The shortest way from [a] to [b] along the graph, from and to points within FAR_M of each. */
-  route(a: [number, number], b: [number, number]): [number, number][] | null {
-    const starts = this.near(a, FAR_M)
-    const goals = new Set(this.near(b, FAR_M))
+  /**
+   * The shortest way from [a] to [b] along the graph, from and to points within
+   * [near] of each, passing none of [avoid].
+   */
+  route(
+    a: [number, number],
+    b: [number, number],
+    { near = FAR_M, avoid = [] }: { near?: number, avoid?: readonly [number, number][] } = {}
+  ): [number, number][] | null {
+    // Directed, only the nearest point: a halte by both carriageways is called at from one, the
+    // way the bus came, and starting on the other would skip the loop between them.
+    const around = this.near(a, near)
+    const starts = this.directed && around.length > 0
+      ? [around.reduce((p, q) => (this.gap(q, a) < this.gap(p, a) ? q : p))]
+      : around
+    const goals = new Set(this.near(b, near))
+    const blocked = new Set(avoid.flatMap(p => this.near(p, NEAR_M)))
     if (starts.length === 0 || goals.size === 0) return null
     const cost = new Map<number, number>()
     const previous = new Map<number, number>()
@@ -246,7 +319,7 @@ class StreetGraph {
       for (let i = 1; i < open.length; i++) if (open[i]![0] < open[best]![0]) best = i
       const [c, at] = open.splice(best, 1)[0]!
       if (c > cost.get(at)!) continue
-      if (c > straight * 4 + FAR_M * 2) return null
+      if (c > straight * (this.directed ? OWN_REACH : 4) + FAR_M * 2) return null
       if (goals.has(at)) {
         const path: [number, number][] = [b]
         let walk: number | undefined = at
@@ -258,6 +331,7 @@ class StreetGraph {
         return path.reverse()
       }
       for (const { to, m } of this.next[at]!) {
+        if (blocked.has(to)) continue
         const through = c + m
         if (through < (cost.get(to) ?? Infinity)) {
           cost.set(to, through)
@@ -293,12 +367,20 @@ export function alignToTopology(
     }
     const own = tracksOf.get(line.code) ?? []
     const others = everyTrack.filter(t => t.code !== line.code)
+    // The haltes the feed has it call at that its topology doesn't: where a reroute went.
+    const onTopology = new Set(topo.runs.flat())
+    let ownGraph: StreetGraph | undefined
+    const dropped = (line.stops ?? [])
+      .filter(code => !onTopology.has(code) && haltes[code])
+      .map(code => toXY([haltes[code]![1], haltes[code]![2]]))
     const drawn: LngLat[][] = []
     const calls: string[] = []
     for (const run of topo.runs) {
       const placed = run.filter(code => haltes[code])
       for (const code of placed) if (!calls.includes(code)) calls.push(code)
       const path: [number, number][] = []
+      // Where the last leg left the koridor's own track, for the next to carry on from.
+      let cursor: Cursor | null = null
       for (let i = 1; i < placed.length; i++) {
         const [, aLng, aLat] = haltes[placed[i - 1]!]!
         const [, bLng, bLat] = haltes[placed[i]!]!
@@ -308,14 +390,31 @@ export function alignToTopology(
         for (let k = 1; k < stops.length; k++) {
           const a = stops[k - 1]!
           const b = stops[k]!
-          let piece = stretch(own, a, b) ?? stretch(others, a, b)
+          const ownWay = (options: Parameters<typeof stretch>[3] = {}): [number, number][] | null => {
+            const picked = stretch(own, a, b, { ...options, after: cursor })
+            if (picked) cursor = picked
+            return picked?.path ?? null
+          }
+          const elsewhere = (way: [number, number][] | null | undefined): [number, number][] | null => {
+            if (way) cursor = null
+            return way ?? null
+          }
+          let piece = ownWay()
+            // Its own long way round, calling at no halte the posters dropped: a loop to turn, as 6's
+            // from Flyover Kuningan by Latuharhari back down Rasuna Said to Gembira. A reroute (1 via
+            // Petojo, 6 via Halimun) calls at haltes its line no longer serves, and isn't taken.
+            ?? ownWay({ detours: true, avoid: dropped })
+            // The same across its own pieces, each the way it runs: a loop the feed split from the
+            // trunk it rejoins (6 back down Rasuna Said and into Gembira).
+            ?? elsewhere((ownGraph ??= new StreetGraph(own, true)).route(a, b, { near: NEAR_M, avoid: dropped }))
+            ?? elsewhere(stretch(others, a, b)?.path)
             // No street runs there plainly: a halte set back from the road (FAR_M), else the line's own
             // way however roundabout, which is at least where its buses drive.
-            ?? stretch(own, a, b, { near: FAR_M }) ?? stretch(others, a, b, { near: FAR_M })
-            ?? stretch(own, a, b, { near: FAR_M, detours: true })
+            ?? ownWay({ near: FAR_M }) ?? elsewhere(stretch(others, a, b, { near: FAR_M })?.path)
+            ?? ownWay({ near: FAR_M, detours: true })
             // A koridor's new way no one shape covers yet (6 straight from Galunggung to Setiabudi):
             // across every line's streets, hopping between them where they meet.
-            ?? (graph ??= new StreetGraph(everyTrack)).route(a, b)
+            ?? elsewhere((graph ??= new StreetGraph(everyTrack)).route(a, b))
           if (!piece) {
             straight.push(`${line.code} ${placed[i - 1]}->${placed[i]}`)
             piece = [a, b]
