@@ -44,6 +44,12 @@ export interface BusMap {
   lines: BusMapLine[]
   /** The lines as one network: each street once, its lines left to right along it. What's drawn. */
   edges: BusMapEdge[]
+  /**
+   * Each halte placed on the network, for its mark across the bundle there:
+   * [code, lng, lat, bearing (degrees from north), line count, its one line or ""].
+   * Several lines: a white bar with a dark outline across them all; one: a dot in its colour.
+   */
+  stopMarks: [string, number, number, number, number, string][]
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
   /** Rail stations, as dots for bearings: [station id, lng, lat]. */

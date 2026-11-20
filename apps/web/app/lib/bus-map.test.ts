@@ -25,6 +25,7 @@ describe('linesByHalte', () => {
     const map: BusMap = {
       attribution: '',
       edges: [],
+      stopMarks: [],
       haltes: {},
       rail: [],
       lines: [

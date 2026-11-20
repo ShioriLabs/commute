@@ -10,6 +10,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.double
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -25,6 +26,8 @@ data class BusMap(
     val lines: List<BusMapLine>,
     /** The lines as one network: each street once, its lines left to right along it. What's drawn. */
     val edges: List<BusMapEdge> = emptyList(),
+    /** Each halte on the network: `[code, lng, lat, bearing, line count, its one line]`, for its mark across the bundle. */
+    val stopMarks: List<JsonArray> = emptyList(),
     /** Halte code → `[name, lng, lat]`. `TJ-$code` is the API's station id. */
     val haltes: Map<String, JsonArray>,
     /** Rail stations, as dots for bearings: `[station id, lng, lat]`. */
@@ -129,7 +132,7 @@ fun stopsInView(
  * side), [routes] every line on its own street geometry (street zoom, and a line alone), [haltes]
  * and [rail] the dots.
  */
-data class BusMapGeoJson(val lines: String, val routes: String, val haltes: String, val rail: String)
+data class BusMapGeoJson(val lines: String, val routes: String, val haltes: String, val rail: String, val marks: String = "")
 
 /** GeoJSON properties the streets layer's style expressions and taps read. */
 object BusMapProps {
@@ -145,6 +148,10 @@ object BusMapProps {
 
     /** A trunk koridor's place among the trunks alone on its street, for the zoomed-out network. */
     const val TRUNK_SLOT = "trunkSlot"
+
+    /** A halte mark's way across the street (degrees from north) and how many lines its bar spans. */
+    const val BEARING = "bearing"
+    const val COUNT = "count"
 }
 
 /**
@@ -211,6 +218,26 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
             )
         }
     }
+    // Each halte on its bundle: a bar across all the lines there, or a dot in its one line's colour.
+    val markFeatures = buildJsonArray {
+        for (mark in stopMarks) {
+            val stationId = "TJ-${mark[0].jsonPrimitive.content}"
+            if (tappable != null && !tappable(stationId)) continue
+            val count = mark[4].jsonPrimitive.int
+            val only = mark.getOrNull(5)?.jsonPrimitive?.content.orEmpty()
+            add(
+                feature(
+                    geometry = point(mark[1].jsonPrimitive.double, mark[2].jsonPrimitive.double),
+                    properties = buildJsonObject {
+                        put(BusMapProps.STATION_ID, stationId)
+                        put(BusMapProps.BEARING, mark[3].jsonPrimitive.double)
+                        put(BusMapProps.COUNT, count)
+                        if (count == 1) byCode[only]?.let { put(BusMapProps.COLOR, it.color) }
+                    },
+                ),
+            )
+        }
+    }
     // Every line on its own geometry, one LineString per shape piece.
     val routeFeatures = buildJsonArray {
         for (line in lines) {
@@ -238,6 +265,7 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
     return BusMapGeoJson(
         lines = collection(lineFeatures).toString(),
         routes = collection(routeFeatures).toString(),
+        marks = collection(markFeatures).toString(),
         haltes = collection(halteFeatures).toString(),
         rail = collection(railFeatures).toString(),
     )
