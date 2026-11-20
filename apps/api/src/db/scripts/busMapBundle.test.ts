@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, type LngLat } from '../../utils/polyline'
 import { bundle, bundleOrder, type BundleLine } from './busMapBundle'
+import { networkStats } from './busMapStats'
 
 /*
  * Synthetic streets near Monas, as generateBusMap.test.ts draws them: 0.001
@@ -109,6 +110,19 @@ describe('bundle', () => {
       const pts = decodePolyline(e.shape)
       return [pts[0]!, pts[pts.length - 1]!].every(([lng, lat]) => Math.hypot((lng - LNG) * M_LNG, (lat - LAT) * M_LAT) < 100)
     })).toHaveLength(0)
+  })
+
+  it('puts the line turning left on the left before the turn, whatever the bundle order', () => {
+    // 1 and 2 run north together, then 1 turns east and 2 west. Bundle order alone puts 1 on the
+    // left, so it would cross 2 at the split.
+    const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+    const up = Array.from({ length: 21 }, (_, k) => at(0, k * 50))
+    const east = Array.from({ length: 16 }, (_, k) => at((k + 1) * 50, 1000))
+    const west = Array.from({ length: 16 }, (_, k) => at(-(k + 1) * 50, 1000))
+    const edges = bundle([line('1', 'BRT', [...up, ...east]), line('2', 'BRT', [...up, ...west])])
+    const stats = networkStats(edges)
+    expect(stats.splitCrossings).toBe(0)
+    expect(stats.sameCrossings).toBe(0)
   })
 
   it('keeps every line on its side of the street where a line joins', () => {

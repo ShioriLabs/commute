@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 import { TOPOLOGY } from '../data/topology'
 import { bundle, type BusMapEdge } from './busMapBundle'
-import { loadRoads, snapToRoads } from './busMapRoads'
+import { loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
 
@@ -343,8 +343,8 @@ async function main(): Promise<void> {
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
   const onRoads = await alongRoads(normal.lines)
-  const edges = bundleShapes(onRoads)
-  const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads, edges, haltes: sortedHaltes, rail }
+  const edges = bundleShapes(onRoads.lines, onRoads.roads)
+  const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
 
   const brt = lines.filter(l => l.kind === 'BRT').length
@@ -358,28 +358,64 @@ async function main(): Promise<void> {
 }
 
 /**
- * The lines' network, from their `drawn` shapes: what both `main` and
- * `--rebundle` write. Each line once along a street first, as the feed's patterns
- * are: a koridor redrawn up one carriageway and back down the other (6 on Rasuna
- * Said) is one line on the map, two only where its ways part (a loop to turn).
- * Its shapes keep both ways.
+ * The lines' network: what both `main` and `--rebundle` write. Which lines
+ * share which street comes from their `shapes`, not the roads: a road-exact
+ * line carries every slip road, U-turn lane and split carriageway of OSM, and
+ * the network shattered into stubs where lines part for a few metres (1,939
+ * edges against 1,193). The network's own edges are then laid onto the roads,
+ * so the bundles sit on the streets all the same (laidOnRoads).
+ *
+ * Each line once along a street first, as the feed's patterns are: a koridor
+ * redrawn up one carriageway and back down the other (6 on Rasuna Said) is one
+ * line on the map, two only where its ways part (a loop to turn).
  */
-function bundleShapes(lines: readonly BusMapLine[]): BusMapEdge[] {
-  return bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dedupePatterns(l.drawn.map(s => decodePolyline(s))) })))
+function bundleShapes(lines: readonly BusMapLine[], roads: Roads): BusMapEdge[] {
+  const edges = bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dedupePatterns(l.shapes.map(s => decodePolyline(s))) })))
+  const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
+  return laidOnRoads(edges, roads, brt)
+}
+
+/**
+ * The network's edges laid onto the roads: each edge's way along them, between
+ * its two ends, and each end (a junction several edges meet at) onto the road
+ * nearest it once, the same point for every edge there, so they go on meeting.
+ */
+function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySet<string>): BusMapEdge[] {
+  const nodes = new Map<string, LngLat>()
+  const node = (p: LngLat): LngLat => {
+    const key = `${p[0].toFixed(6)},${p[1].toFixed(6)}`
+    let snapped = nodes.get(key)
+    if (!snapped) {
+      snapped = snapPoint(p, roads)
+      nodes.set(key, snapped)
+    }
+    return snapped
+  }
+  return edges.map((edge) => {
+    const pts = decodePolyline(edge.shape)
+    if (pts.length < 2) return edge
+    const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)) })
+    const laid = [node(pts[0]!), ...inner.slice(1, -1), node(pts[pts.length - 1]!)]
+    return { ...edge, shape: encodePolyline(simplify(laid, SIMPLIFY_M)) }
+  })
 }
 
 /**
  * Every line's `drawn`: its `shapes` laid onto the roads themselves
  * (busMapRoads.ts), the feed's loose points onto the carriageway and its corners
  * onto the road's. Kept beside `shapes` rather than over them, so a re-run lays
- * the same shapes onto the same roads and changes nothing.
+ * the same shapes onto the same roads and changes nothing. The roads come back
+ * too, for the network's edges.
  */
-async function alongRoads(lines: readonly BusMapLine[]): Promise<BusMapLine[]> {
+async function alongRoads(lines: readonly BusMapLine[]): Promise<{ lines: BusMapLine[], roads: Roads }> {
   const roads = await loadRoads(lines.flatMap(l => l.shapes.map(s => decodePolyline(s))))
-  return lines.map(l => ({
-    ...l,
-    drawn: l.shapes.map(s => encodePolyline(simplify(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT' }), SIMPLIFY_M)))
-  }))
+  return {
+    lines: lines.map(l => ({
+      ...l,
+      drawn: l.shapes.map(s => encodePolyline(simplify(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT' }), SIMPLIFY_M)))
+    })),
+    roads
+  }
 }
 
 /** The TransJakarta koridors of the routing topology (poster overrides over the feed's), as halte runs. */
@@ -463,8 +499,8 @@ async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const normal = alongTopology(map.lines, map.haltes)
   const onRoads = await alongRoads(normal.lines)
-  const edges = bundleShapes(onRoads)
-  const out: BusMap = { attribution: map.attribution, lines: onRoads, edges, haltes: normal.haltes, rail: map.rail }
+  const edges = bundleShapes(onRoads.lines, onRoads.roads)
+  const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, haltes: normal.haltes, rail: map.rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
   console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
   console.log(`  haltes:   ${Object.keys(normal.haltes).length} (was ${Object.keys(map.haltes).length})`)

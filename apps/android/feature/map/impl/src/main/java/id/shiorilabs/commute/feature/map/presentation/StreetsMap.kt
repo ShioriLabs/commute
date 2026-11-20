@@ -39,6 +39,7 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.BackgroundLayer
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
@@ -312,7 +313,7 @@ private fun hasLocation(context: Context): Boolean =
  * change.
  */
 private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
-    for (id in LINE_LAYERS + listOf(ISOLATE_LAYER, RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
+    for (id in LINE_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
     for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, HALTES_SOURCE, RAIL_SOURCE)) style.removeSource(id)
 
     style.addSource(GeoJsonSource(LINES_SOURCE, busMap.geoJson.lines))
@@ -404,7 +405,13 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
         PropertyFactory.circleStrokeColor(if (dark) RAIL_STROKE_DARK else RAIL_STROKE),
         PropertyFactory.circleStrokeWidth(2f),
     )
-    for (layer: Layer in listOf(trunks, aui, brt, auiRoutes, brtRoutes, alone, haltes, rail)) {
+    // A wash over the basemap first, as Transit lays a white overlay: its streets and fills step back
+    // behind the lines, its labels (over the slot) stay sharp.
+    val wash = BackgroundLayer(WASH_LAYER).withProperties(
+        PropertyFactory.backgroundColor(if (dark) WASH_DARK else WASH_LIGHT),
+        PropertyFactory.backgroundOpacity(WASH_OPACITY),
+    )
+    for (layer: Layer in listOf(wash, trunks, aui, brt, auiRoutes, brtRoutes, alone, haltes, rail)) {
         if (style.getLayer(OVERLAY_SLOT) != null) style.addLayerBelow(layer, OVERLAY_SLOT) else style.addLayer(layer)
     }
     // Halte names over the whole style: under the basemap's labels they lost every collision to a
@@ -435,6 +442,12 @@ private const val ROUTES_SOURCE = "peta-bus-routes"
 private const val AUI_ROUTE_LAYER = "peta-bus-aui-routes"
 private const val BRT_ROUTE_LAYER = "peta-bus-brt-routes"
 private const val ISOLATE_LAYER = "peta-bus-alone"
+private const val WASH_LAYER = "peta-bus-wash"
+
+/** The wash over the basemap, light and dark: enough to quiet it, not to hide it. */
+private const val WASH_LIGHT = "#FFFFFF"
+private const val WASH_DARK = "#0F172A"
+private const val WASH_OPACITY = 0.35f
 
 /** Where the bundled network gives way to each line on its own streets. */
 private const val STREET_ZOOM = 16f
