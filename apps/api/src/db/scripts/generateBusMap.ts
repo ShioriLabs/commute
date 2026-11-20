@@ -1,6 +1,8 @@
 import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
+import { TOPOLOGY } from '../data/topology'
 import { bundle, type BusMapEdge } from './busMapBundle'
+import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
 
 /*
@@ -30,6 +32,10 @@ import { parseCSV } from './gtfs'
  * Rail dots come from stations_lat_lng.csv, the same hand-kept coordinates
  * generateLatLngSQL seeds the stations table with.
  *
+ * The feed's shapes carry TransJakarta's reroutes as if they were the line (koridor 1
+ * via Petojo, 6 via Halimun). A koridor the routing topology knows is redrawn
+ * along it instead, its poster route (busMapTopology.ts, alongTopology).
+ *
  * The lines also ship as `edges`, one network with the lines sharing a street
  * side by side in a fixed order (busMapBundle.ts), which is what the clients
  * draw. `shapes` stays per line for drawing one line alone, and so the edges
@@ -57,6 +63,9 @@ const SCOPE: Record<string, BusMapLineKind> = {
  * corner looking like a corner while dropping the feed's dense straight runs.
  */
 const SIMPLIFY_M = 4
+
+/** Topology redraws until the koridors settle; see alongTopology. */
+const ALIGN_PASSES = 4
 
 /*
  * Pattern dedupe. A pattern is sampled every SAMPLE_STEP_M; a sample counts as
@@ -320,11 +329,12 @@ function main(): void {
   }
 
   lines.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }))
-  const sortedHaltes = Object.fromEntries(Object.entries(haltes).sort(([a], [b]) => a.localeCompare(b)))
+  const normal = alongTopology(lines, haltes)
+  const sortedHaltes = Object.fromEntries(Object.entries(normal.haltes).sort(([a], [b]) => a.localeCompare(b)))
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
-  const edges = bundleShapes(lines)
-  const map: BusMap = { attribution: ATTRIBUTION, lines, edges, haltes: sortedHaltes, rail }
+  const edges = bundleShapes(normal.lines)
+  const map: BusMap = { attribution: ATTRIBUTION, lines: normal.lines, edges, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
 
   const brt = lines.filter(l => l.kind === 'BRT').length
@@ -342,13 +352,80 @@ function bundleShapes(lines: readonly BusMapLine[]): BusMapEdge[] {
   return bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: l.shapes.map(s => decodePolyline(s)) })))
 }
 
-/** `--rebundle`: the edges rebuilt from the file's own lines, everything else kept as it is. */
+/** The TransJakarta koridors of the routing topology (poster overrides over the feed's), as halte runs. */
+function tjTopology(): TopologyLine[] {
+  return TOPOLOGY
+    .filter(t => t.operator === 'TJ')
+    .map(t => ({
+      code: t.lineCode,
+      runs: [t.path, ...(t.pathReverse ? [t.pathReverse] : [])].map(run => run.map(s => s.station))
+    }))
+}
+
+/**
+ * Each koridor with a topology redrawn along it, its reroutes gone, and its
+ * haltes those of its runs (busMapTopology.ts). A halte no line calls at any
+ * more (one only a reroute served) goes too.
+ *
+ * Redrawn until it settles: a koridor borrows stretches of the others, which
+ * the same pass redraws, so a second pass can still move a stretch a little;
+ * the third finds nothing left to move. So `--rebundle` run again on its own
+ * output changes nothing.
+ */
+export function alongTopology(
+  lines: readonly BusMapLine[],
+  haltes: BusMap['haltes'],
+  topology: readonly TopologyLine[] = tjTopology()
+): { lines: BusMapLine[], haltes: BusMap['haltes'] } {
+  let out: BusMapLine[] = [...lines]
+  for (let pass = 0; pass < ALIGN_PASSES; pass++) {
+    const aligned = alignToTopology(
+      out.map(l => ({ code: l.code, pieces: l.shapes.map(s => decodePolyline(s)) })),
+      haltes,
+      topology
+    )
+    if (pass === 0 && aligned.straight.length > 0) {
+      console.warn(`  ${aligned.straight.length} halte pair(s) no shape runs between, drawn straight: ${aligned.straight.join(', ')}`)
+    }
+    const next = out.map((l) => {
+      const stops = aligned.stops.get(l.code)
+      if (!stops) return l
+      return { ...l, shapes: aligned.pieces.get(l.code)!.map(p => encodePolyline(simplify(p, SIMPLIFY_M))), stops }
+    })
+    const settled = next.every((l, i) => l.shapes.join() === out[i]!.shapes.join())
+    out = next
+    if (settled) break
+  }
+  // A koridor also keeps the feed's stops it still drives past: temporary haltes the posters leave
+  // out (4's Simpang Pramuka B-codes) are real service. A reroute's haltes are off its way now.
+  const managed = new Set(topology.map(t => t.code))
+  const feedStops = new Map(lines.map(l => [l.code, l.stops]))
+  out = out.map((l) => {
+    if (!managed.has(l.code)) return l
+    const pieces = l.shapes.map(s => decodePolyline(s))
+    const kept = (feedStops.get(l.code) ?? []).filter((code) => {
+      const halte = haltes[code]
+      return !l.stops.includes(code) && halte !== undefined && passesBy(pieces, halte[1], halte[2])
+    })
+    return kept.length > 0 ? { ...l, stops: [...l.stops, ...kept] } : l
+  })
+  const called = new Set(out.flatMap(l => l.stops))
+  const kept = Object.fromEntries(Object.entries(haltes).filter(([code]) => called.has(code)))
+  return { lines: out, haltes: kept }
+}
+
+/**
+ * `--rebundle`: the koridors redrawn along their topology and the edges rebuilt,
+ * from the file's own lines; nothing re-read from the feed.
+ */
 function rebundle(): void {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
-  const edges = bundleShapes(map.lines)
-  const out: BusMap = { attribution: map.attribution, lines: map.lines, edges, haltes: map.haltes, rail: map.rail }
+  const normal = alongTopology(map.lines, map.haltes)
+  const edges = bundleShapes(normal.lines)
+  const out: BusMap = { attribution: map.attribution, lines: normal.lines, edges, haltes: normal.haltes, rail: map.rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
   console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
+  console.log(`  haltes:   ${Object.keys(normal.haltes).length} (was ${Object.keys(map.haltes).length})`)
 }
 
 if (require.main === module) {
