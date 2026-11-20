@@ -571,6 +571,163 @@ export function contract(network: Network, list: Chain[]): Chain[] {
   return out
 }
 
+/*
+ * Line order, street by street. Each chain draws its lines in one order, left to
+ * right along it, and where two lines change places it's at a node, never along
+ * a street. At a node, two lines passing through cost:
+ *
+ *   - SAME_CROSSING when they come in and go on along the same two chains but
+ *     swap sides: a crossing a rider sees and nothing explains;
+ *   - SPLIT_CROSSING when they come in together and part, the one turning off
+ *     to the left having come in on the right of the other: a crossing the
+ *     split itself forces only if nothing else is to give.
+ *
+ * Every chain starts in bundle order and each line in turn is moved to wherever
+ * on its chain costs the two nodes at its ends least, until no move helps. Only
+ * a strictly better place is taken, so the result is the same run to run. A line
+ * turning left then comes to the left of the others before the turn, as Transit
+ * draws it, without a rule saying so.
+ */
+const SAME_CROSSING = 4
+const SPLIT_CROSSING = 1
+const ORDER_PASSES = 30
+
+interface PairRule {
+  /** The two lines, by code. */
+  a: string
+  b: string
+  /** The chain they come in on, and whether the node is at its start. */
+  inChain: number
+  inAtStart: boolean
+  /** Same: the chain both go on along. */
+  outChain?: number
+  outAtStart?: boolean
+  /** Split: whether a's way on is to the left of b's. */
+  aGoesLeft?: boolean
+  weight: number
+}
+
+/** Each chain's lines, left to right along it, ordered to cross as little as they can. */
+export function orderLines(network: Network, list: readonly Chain[], rank: ReadonlyMap<string, number>): string[][] {
+  const { points } = network
+  const orders = list.map(chain => [...chain.lines].sort((a, b) => rank.get(a)! - rank.get(b)!))
+
+  // Where each chain's ends are, and the way it leaves each, over its first ~30 m.
+  interface End { chain: number, atStart: boolean, dx: number, dy: number }
+  const ends = new Map<number, End[]>()
+  list.forEach((chain, c) => {
+    for (const atStart of [true, false]) {
+      const path = atStart ? chain.path : [...chain.path].reverse()
+      const from = points[path[0]!]!
+      let to = points[path[path.length - 1]!]!
+      for (const id of path.slice(1)) {
+        const p = points[id]!
+        if (Math.hypot(p.x - from.x, p.y - from.y) >= 30) {
+          to = p
+          break
+        }
+      }
+      const d = Math.hypot(to.x - from.x, to.y - from.y) || 1
+      const here = ends.get(path[0]!) ?? []
+      here.push({ chain: c, atStart, dx: (to.x - from.x) / d, dy: (to.y - from.y) / d })
+      ends.set(path[0]!, here)
+    }
+  })
+
+  // The rules, kept by chain and line, for the moves that can change them.
+  const rulesOf = new Map<string, PairRule[]>()
+  const file = (rule: PairRule, chains: number[]): void => {
+    for (const c of chains) {
+      for (const line of [rule.a, rule.b]) {
+        const key = `${c}|${line}`
+        const list = rulesOf.get(key)
+        if (list) list.push(rule)
+        else rulesOf.set(key, [rule])
+      }
+    }
+  }
+  for (const here of ends.values()) {
+    const endsOf = new Map<string, End[]>()
+    for (const end of here) {
+      for (const line of list[end.chain]!.lines) endsOf.set(line, [...(endsOf.get(line) ?? []), end])
+    }
+    // Lines passing through: in on one chain, out on another. A line ending here crosses nothing.
+    const through = [...endsOf].filter(([, e]) => e.length === 2 && e[0]!.chain !== e[1]!.chain)
+    for (let i = 0; i < through.length; i++) {
+      for (let j = i + 1; j < through.length; j++) {
+        const [a, [a1, a2]] = through[i]!
+        const [b, [b1, b2]] = through[j]!
+        const shared = [a1!, a2!].filter(e => e === b1 || e === b2)
+        if (shared.length === 2) {
+          file({ a, b, inChain: a1!.chain, inAtStart: a1!.atStart, outChain: a2!.chain, outAtStart: a2!.atStart, weight: SAME_CROSSING }, [a1!.chain, a2!.chain])
+        } else if (shared.length === 1) {
+          const into = shared[0]!
+          const outA = into === a1 ? a2! : a1!
+          const outB = into === b1 ? b2! : b1!
+          // Coming in along `into`, which way on turns further left?
+          const hx = -into.dx
+          const hy = -into.dy
+          const turn = (o: End): number => Math.atan2(hx * o.dy - hy * o.dx, hx * o.dx + hy * o.dy)
+          file({ a, b, inChain: into.chain, inAtStart: into.atStart, aGoesLeft: turn(outA) > turn(outB), weight: SPLIT_CROSSING }, [into.chain])
+        }
+      }
+    }
+  }
+
+  const position = orders.map(order => new Map(order.map((line, i) => [line, i])))
+  // Left to right as seen coming in to the node along a chain, or going on away from it.
+  const leftComingIn = (chain: number, atStart: boolean, a: string, b: string): boolean => {
+    const pa = position[chain]!.get(a)!
+    const pb = position[chain]!.get(b)!
+    return atStart ? pa > pb : pa < pb
+  }
+  const leftGoingOn = (chain: number, atStart: boolean, a: string, b: string): boolean => {
+    const pa = position[chain]!.get(a)!
+    const pb = position[chain]!.get(b)!
+    return atStart ? pa < pb : pa > pb
+  }
+  const cost = (rule: PairRule): number => {
+    const aLeft = leftComingIn(rule.inChain, rule.inAtStart, rule.a, rule.b)
+    const crossed = rule.outChain !== undefined
+      ? aLeft !== leftGoingOn(rule.outChain, rule.outAtStart!, rule.a, rule.b)
+      : aLeft !== rule.aGoesLeft
+    return crossed ? rule.weight : 0
+  }
+  const place = (c: number, order: string[]): void => {
+    orders[c] = order
+    position[c] = new Map(order.map((line, i) => [line, i]))
+  }
+
+  for (let pass = 0; pass < ORDER_PASSES; pass++) {
+    let moved = false
+    for (let c = 0; c < orders.length; c++) {
+      if (orders[c]!.length < 2) continue
+      for (const line of [...orders[c]!]) {
+        const rules = rulesOf.get(`${c}|${line}`)
+        if (!rules) continue
+        const others = orders[c]!.filter(l => l !== line)
+        const at = orders[c]!.indexOf(line)
+        const score = (): number => rules.reduce((sum, r) => sum + cost(r), 0)
+        let best = score()
+        let bestAt = at
+        for (let p = 0; p <= others.length; p++) {
+          if (p === at) continue
+          place(c, [...others.slice(0, p), line, ...others.slice(p)])
+          const s = score()
+          if (s < best) {
+            best = s
+            bestAt = p
+          }
+        }
+        place(c, [...others.slice(0, bestAt), line, ...others.slice(bestAt)])
+        if (bestAt !== at) moved = true
+      }
+    }
+    if (!moved) break
+  }
+  return orders
+}
+
 /** Peta Bus's lines as the edges of one network, each with its lines in order across it. */
 export function bundle(lines: readonly BundleLine[]): BusMapEdge[] {
   const network = buildNetwork(lines)
@@ -586,15 +743,16 @@ export function bundle(lines: readonly BundleLine[]): BusMapEdge[] {
   orient(network, list)
   const order = bundleOrder(lines)
   const rank = new Map(order.map((code, i) => [code, i]))
+  const orders = orderLines(network, list, rank)
   return list
-    .map((chain) => {
+    .map((chain, i) => {
       const coords = chain.path.map((id) => {
         const p = network.points[id]!
         return [p.x / KX, p.y / KY] as LngLat
       })
       return {
         shape: encodePolyline(simplify(coords, SIMPLIFY_M)),
-        lines: [...chain.lines].sort((a, b) => rank.get(a)! - rank.get(b)!)
+        lines: orders[i]!
       }
     })
     // Stable output: a regenerated file diffs only where the network changed.

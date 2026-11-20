@@ -265,13 +265,23 @@ export function snapToRoads(piece: readonly LngLat[], roads: Roads, { brt = fals
     previous = best
   }
 
-  // Back to a line: matched points joined along their road where two in a row share one. A few
-  // points between them matching nothing (the feed cutting a corner, its heading off the road's on
-  // both sides) give way to the road too; more than GAP_POINTS is a stretch off the roads, kept.
+  // Back to a line, made of the roads' own points only: every line along a road then has the very
+  // same points there, so lines sharing it share it exactly, and where it hands over to the next
+  // road it does at the road's point nearest, the node the two meet at. Matched points join along
+  // their road where two in a row share one. A few points between them matching nothing (the feed
+  // cutting a corner, its heading off the road's on both sides) give way to the road too; more than
+  // GAP_POINTS is a stretch off the roads, kept as the feed has it.
   const out: [number, number][] = []
   const push = (p: [number, number]): void => {
     const last = out[out.length - 1]
     if (!last || Math.hypot(last[0] - p[0], last[1] - p[1]) > 0.1) out.push(p)
+  }
+  const vertexAt = (m: Match): [number, number] => {
+    const road = roads.roads[m.road]!
+    const at = along(road)
+    let k = 0
+    for (let j = 1; j < at.length; j++) if (Math.abs(at[j]! - m.at) < Math.abs(at[k]! - m.at)) k = j
+    return road.xy[k]!
   }
   let last: Match | null = null
   let unmatched: [number, number][] = []
@@ -289,12 +299,43 @@ export function snapToRoads(piece: readonly LngLat[], roads: Roads, { brt = fals
       const between = road.xy.filter((_, k) => at[k]! > lo && at[k]! < hi)
       for (const p of last.at <= m.at ? between : [...between].reverse()) push(p)
     } else {
+      // Off one road and onto another (or back from off the roads): by their nearest points.
+      if (last) push(vertexAt(last))
       for (const p of unmatched) push(p)
+      push(vertexAt(m))
     }
     unmatched = []
-    push(m.point)
     last = m
   }
+  if (last) push(vertexAt(last))
   for (const p of unmatched) push(p)
   return out.map(toLngLat)
+}
+
+/**
+ * [p] onto the nearest point of any drivable road within SNAP_M, whichever way it
+ * runs; as it is with none. For a junction of the network, where several edges
+ * meet and must go on meeting.
+ */
+export function snapPoint(p: LngLat, roads: Roads): LngLat {
+  const [x, y] = toXY(p)
+  let best: [number, number] | null = null
+  let bestD = SNAP_M
+  for (const { road: r, i: s } of roads.near(x, y)) {
+    const road = roads.roads[r]!
+    const [ax, ay] = road.xy[s]!
+    const [bx, by] = road.xy[s + 1]!
+    const dx = bx - ax
+    const dy = by - ay
+    const l2 = dx * dx + dy * dy
+    if (l2 === 0) continue
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2))
+    const q: [number, number] = [ax + t * dx, ay + t * dy]
+    const d = Math.hypot(x - q[0], y - q[1])
+    if (d < bestD) {
+      bestD = d
+      best = q
+    }
+  }
+  return best ? toLngLat(best) : p
 }
