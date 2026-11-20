@@ -28,8 +28,8 @@ describe('linesByHalte', () => {
       haltes: {},
       rail: [],
       lines: [
-        { code: '1', name: '', kind: 'BRT', color: '#000000', shapes: [], stops: ['H1', 'H2'] },
-        { code: '6M', name: '', kind: 'AUI', color: '#000000', shapes: [], stops: ['H2', 'B9'] }
+        { code: '1', name: '', kind: 'BRT', color: '#000000', shapes: [], drawn: [], stops: ['H1', 'H2'] },
+        { code: '6M', name: '', kind: 'AUI', color: '#000000', shapes: [], drawn: [], stops: ['H2', 'B9'] }
       ]
     }
     const index = linesByHalte(map)

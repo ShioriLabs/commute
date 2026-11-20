@@ -89,6 +89,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -123,6 +124,7 @@ import id.shiorilabs.commute.feature.journey.presentation.MapRouteSheet
 import id.shiorilabs.commute.feature.journey.presentation.MapRouteShown
 import id.shiorilabs.commute.feature.line.presentation.LineSheet
 import id.shiorilabs.commute.feature.map.R
+import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.MapLine
 import id.shiorilabs.commute.feature.map.domain.MapSelection
@@ -540,6 +542,20 @@ private fun MapWithSheet(
 
     BackHandler(enabled = layersOpen) { layersOpen = false }
 
+    // A line picked on the streets: a koridor the artwork knows opens its sheet there, as on the
+    // artwork; any other is named in a pill. Either way it's drawn alone, the rest faded.
+    var streetsPill by remember { mutableStateOf<String?>(null) }
+    val isolatedLine = (selection as? MapSelection.Line)?.line?.takeIf { it.operator == OPERATOR_TJ }?.code ?: streetsPill
+    LaunchedEffect(streets) {
+        if (!streets) streetsPill = null
+    }
+    BackHandler(enabled = streetsPill != null && selection == null) { streetsPill = null }
+    val openStreetsLine = { code: String ->
+        layersOpen = false
+        attributionOpen = false
+        streetsPill = if (controller.isolateLine("$OPERATOR_TJ:$code")) null else code
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val topInset = innerPadding.calculateTopPadding()
         val height = maxHeight
@@ -548,6 +564,15 @@ private fun MapWithSheet(
         LaunchedEffect(restFraction, streetsHeightPx) {
             streetsState.setBottomInset(streetsHeightPx * restFraction)
         }
+        // A line picked: all of it in view, above its sheet when one comes up.
+        val frameEdgePx = with(LocalDensity.current) { LINE_FRAME_EDGE.toPx() }.toDouble()
+        LaunchedEffect(streets, isolatedLine, busMap) {
+            val code = isolatedLine ?: return@LaunchedEffect
+            val info = busMap?.lines?.get(code) ?: return@LaunchedEffect
+            if (!streets) return@LaunchedEffect
+            val sheetPx = if (selection != null) streetsHeightPx * Viewport.PEEK_FRACTION else 0.0
+            streetsState.frame(info, bottomPx = sheetPx, edgePx = frameEdgePx)
+        }
         Box(Modifier.fillMaxSize()) {
             if (streets) {
                 StreetsLayer(
@@ -555,13 +580,29 @@ private fun MapWithSheet(
                     styleUrl = viewModel.streetsStyleUrl(dark),
                     busMap = busMap,
                     dark = dark,
-                    onStationTap = openStation,
+                    onStationTap = { stationId ->
+                        streetsPill = null
+                        openStation(stationId)
+                    },
                     onTap = {
                         attributionOpen = false
                         layersOpen = false
+                        streetsPill = null
                     },
                     onUserMove = { controller.onUserMove() },
+                    onLineTap = openStreetsLine,
+                    isolated = isolatedLine,
                 )
+                val pill = streetsPill?.let { busMap?.lines?.get(it) }
+                if (pill != null && selection == null) {
+                    StreetsLinePill(
+                        line = pill,
+                        onClose = { streetsPill = null },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = topInset + LINE_PILL_TOP, start = 16.dp, end = 16.dp),
+                    )
+                }
             } else {
                 MapSurface(controller, viewModel)
                 TapRipples(controller)
@@ -862,6 +903,8 @@ private fun StreetsLayer(
     onStationTap: (String) -> Unit,
     onTap: () -> Unit,
     onUserMove: () -> Unit,
+    onLineTap: (String) -> Unit,
+    isolated: String?,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -880,8 +923,41 @@ private fun StreetsLayer(
                 onStationTap = onStationTap,
                 onTap = onTap,
                 onUserMove = onUserMove,
+                onLineTap = onLineTap,
+                isolated = isolated,
                 modifier = Modifier.fillMaxSize(),
             )
+        }
+    }
+}
+
+/**
+ * A line picked on the streets with no sheet of its own on the artwork (an Angkutan Umum Integrasi
+ * line, a branch): its roundel, its name, and a way back to all of them.
+ */
+@Composable
+private fun StreetsLinePill(line: BusMapLineInfo, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.widthIn(max = 360.dp),
+        shape = RoundedCornerShape(percent = 50),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 8.dp, top = 6.dp, end = 6.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LineRoundel(code = line.code, color = line.color, operator = OPERATOR_TJ, size = RoundelSize.SM)
+            Text(
+                text = line.name,
+                modifier = Modifier.weight(1f, fill = false),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            CommuteCloseButton(onClick = onClose, contentDescription = stringResource(R.string.map_streets_line_close))
         }
     }
 }
@@ -1227,6 +1303,10 @@ private val LAYERS_CARD_TOP = 112.dp
 /** On home, with no close: the layers button where the close would be, its card under it. */
 private val LAYERS_BUTTON_TOP_HOME = 8.dp
 private val LAYERS_CARD_TOP_HOME = 60.dp
+
+/** A line picked on the streets: the pill naming it, under the title, and the margin it's framed with. */
+private val LINE_PILL_TOP = 60.dp
+private val LINE_FRAME_EDGE = 48.dp
 
 /** How many stations "Sekitar" lists for the panned streets, as many as for the artwork. */
 private const val STREETS_IN_VIEW = 6

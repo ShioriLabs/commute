@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.BusMapProps
 import id.shiorilabs.commute.feature.map.domain.GeoStop
 import id.shiorilabs.commute.feature.map.domain.stopsInView
@@ -62,6 +63,10 @@ fun StreetsMap(
     modifier: Modifier = Modifier,
     onTap: () -> Unit = {},
     onUserMove: () -> Unit = {},
+    /** A line tapped, by code: the caller isolates it. */
+    onLineTap: (code: String) -> Unit = {},
+    /** The line drawn alone, the rest faded, as the artwork isolates one; null for all of them. */
+    isolated: String? = null,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -69,6 +74,7 @@ fun StreetsMap(
     val onStation by rememberUpdatedState(onStationTap)
     val onAnyTap by rememberUpdatedState(onTap)
     val onMove by rememberUpdatedState(onUserMove)
+    val onLine by rememberUpdatedState(onLineTap)
 
     val mapView = remember {
         MapLibre.getInstance(context.applicationContext)
@@ -122,8 +128,16 @@ fun StreetsMap(
                         val s = map.projection.toScreenLocation(LatLng(point.latitude(), point.longitude()))
                         (s.x - p.x) * (s.x - p.x) + (s.y - p.y) * (s.y - p.y)
                     }
-                val stationId = hit?.getStringProperty(BusMapProps.STATION_ID) ?: return@addOnMapClickListener false
-                onStation(stationId)
+                val stationId = hit?.getStringProperty(BusMapProps.STATION_ID)
+                if (stationId != null) {
+                    onStation(stationId)
+                    return@addOnMapClickListener true
+                }
+                // No stop under the finger: a line, the one drawn on top there.
+                val line = map.queryRenderedFeatures(box, ISOLATE_LAYER, BRT_ROUTE_LAYER, AUI_ROUTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)
+                    .firstNotNullOfOrNull { it.getStringProperty(BusMapProps.CODE) }
+                    ?: return@addOnMapClickListener false
+                onLine(line)
                 true
             }
             map.addOnCameraIdleListener { state.saveCamera() }
@@ -146,6 +160,12 @@ fun StreetsMap(
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
         addBusMap(style, busMap, dark)
+    }
+    // A line alone: the rest faded under it, it on its own streets over them.
+    LaunchedEffect(state.style, busMap, dark, isolated) {
+        val style = state.style ?: return@LaunchedEffect
+        if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
+        isolate(style, isolated)
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
@@ -243,6 +263,17 @@ class StreetsMapState(private val initial: StreetsCamera?, private val save: (St
         }
     }
 
+    /** The whole of a line picked alone in view, above whatever covers the map's foot ([bottomPx]). */
+    fun frame(line: BusMapLineInfo, bottomPx: Double, edgePx: Double) {
+        val map = map ?: return
+        if (line.south > line.north || line.west > line.east) return
+        val bounds = LatLngBounds.from(line.north, line.east, line.south, line.west)
+        map.animateCamera(
+            CameraUpdateFactory.newLatLngBounds(bounds, edgePx.toInt(), edgePx.toInt(), edgePx.toInt(), (bottomPx + edgePx).toInt()),
+            RECENTER_MILLIS,
+        )
+    }
+
     /** Onto the rider if their whereabouts are known and on the map, else the whole of central Jakarta. */
     @SuppressLint("MissingPermission")
     fun recenter() {
@@ -281,10 +312,11 @@ private fun hasLocation(context: Context): Boolean =
  * change.
  */
 private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
-    for (id in listOf(RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)) style.removeLayer(id)
-    for (id in listOf(LINES_SOURCE, HALTES_SOURCE, RAIL_SOURCE)) style.removeSource(id)
+    for (id in LINE_LAYERS + listOf(ISOLATE_LAYER, RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
+    for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, HALTES_SOURCE, RAIL_SOURCE)) style.removeSource(id)
 
     style.addSource(GeoJsonSource(LINES_SOURCE, busMap.geoJson.lines))
+    style.addSource(GeoJsonSource(ROUTES_SOURCE, busMap.geoJson.routes))
     style.addSource(GeoJsonSource(HALTES_SOURCE, busMap.geoJson.haltes))
     style.addSource(GeoJsonSource(RAIL_SOURCE, busMap.geoJson.rail))
 
@@ -320,9 +352,35 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
     val trunks = lines(TRUNK_LAYER, BusMapProps.TRUNK_SLOT, Expression.has(BusMapProps.TRUNK_SLOT), TRUNK_SCALE)
         .apply { maxZoom = ALL_LINES_MIN_ZOOM }
     val aui = lines(AUI_LAYER, BusMapProps.SLOT, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("AUI")))
-        .apply { minZoom = ALL_LINES_MIN_ZOOM }
+        .apply {
+            minZoom = ALL_LINES_MIN_ZOOM
+            maxZoom = STREET_ZOOM
+        }
     val brt = lines(BRT_LAYER, BusMapProps.SLOT, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("BRT")))
-        .apply { minZoom = ALL_LINES_MIN_ZOOM }
+        .apply {
+            minZoom = ALL_LINES_MIN_ZOOM
+            maxZoom = STREET_ZOOM
+        }
+    // At street zoom, every line on its own streets, thin and unbundled: the streets are what's read
+    // there, and a bundle drawn into a junction's one point (Bundaran HI) jumps off them.
+    fun routes(id: String, kind: String) = LineLayer(id, ROUTES_SOURCE).withProperties(
+        PropertyFactory.lineColor(Expression.toColor(color)),
+        PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(STREET_ZOOM, ROUTE_W_16), Expression.stop(18, ROUTE_W_18))),
+        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+    ).withFilter(Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal(kind))).apply { minZoom = STREET_ZOOM }
+    val auiRoutes = routes(AUI_ROUTE_LAYER, "AUI")
+    val brtRoutes = routes(BRT_ROUTE_LAYER, "BRT")
+    // A line alone, over the rest faded: on its own streets at every zoom. Hidden until one is picked.
+    val alone = LineLayer(ISOLATE_LAYER, ROUTES_SOURCE).withProperties(
+        PropertyFactory.lineColor(Expression.toColor(color)),
+        PropertyFactory.lineWidth(
+            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, ALONE_W_10), Expression.stop(14, ALONE_W_14), Expression.stop(18, ALONE_W_18)),
+        ),
+        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+        PropertyFactory.visibility(Property.NONE),
+    )
     val haltes = CircleLayer(HALTE_LAYER, HALTES_SOURCE).withProperties(
         PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(13, 2f), Expression.stop(16, 5f), Expression.stop(18, 7f))),
         PropertyFactory.circleColor(if (dark) HALTE_FILL_DARK else HALTE_FILL),
@@ -346,7 +404,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
         PropertyFactory.circleStrokeColor(if (dark) RAIL_STROKE_DARK else RAIL_STROKE),
         PropertyFactory.circleStrokeWidth(2f),
     )
-    for (layer: Layer in listOf(trunks, aui, brt, haltes, rail)) {
+    for (layer: Layer in listOf(trunks, aui, brt, auiRoutes, brtRoutes, alone, haltes, rail)) {
         if (style.getLayer(OVERLAY_SLOT) != null) style.addLayerBelow(layer, OVERLAY_SLOT) else style.addLayer(layer)
     }
     // Halte names over the whole style: under the basemap's labels they lost every collision to a
@@ -354,15 +412,48 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
     style.addLayer(names)
 }
 
+/** Line [code] drawn alone, every other faded under it; null for all of them as they are. */
+private fun isolate(style: Style, code: String?) {
+    for (id in LINE_LAYERS) {
+        (style.getLayer(id) as? LineLayer)?.setProperties(PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f))
+    }
+    (style.getLayer(ISOLATE_LAYER) as? LineLayer)?.apply {
+        if (code != null) {
+            setFilter(Expression.eq(Expression.get(BusMapProps.CODE), Expression.literal(code)))
+            setProperties(PropertyFactory.visibility(Property.VISIBLE))
+        } else {
+            setProperties(PropertyFactory.visibility(Property.NONE))
+        }
+    }
+}
+
 /** shirase's empty layer, just under the basemap's first label: where an app's overlays go. */
 private const val OVERLAY_SLOT = "commute-overlay"
 
 private const val LINES_SOURCE = "peta-bus-lines"
+private const val ROUTES_SOURCE = "peta-bus-routes"
+private const val AUI_ROUTE_LAYER = "peta-bus-aui-routes"
+private const val BRT_ROUTE_LAYER = "peta-bus-brt-routes"
+private const val ISOLATE_LAYER = "peta-bus-alone"
+
+/** Where the bundled network gives way to each line on its own streets. */
+private const val STREET_ZOOM = 16f
+private const val ROUTE_W_16 = 2.5f
+private const val ROUTE_W_18 = 4f
+private const val ALONE_W_10 = 2.5f
+private const val ALONE_W_14 = 4.5f
+private const val ALONE_W_18 = 8f
+
+/** How much of the other lines shows under one drawn alone. */
+private const val FADED_OPACITY = 0.15f
 private const val HALTES_SOURCE = "peta-bus-haltes"
 private const val RAIL_SOURCE = "peta-bus-rail"
 private const val AUI_LAYER = "peta-bus-aui"
 private const val BRT_LAYER = "peta-bus-brt"
 private const val TRUNK_LAYER = "peta-bus-trunks"
+
+/** Every layer drawing lines, faded when one is drawn alone. */
+private val LINE_LAYERS = listOf(TRUNK_LAYER, AUI_LAYER, BRT_LAYER, AUI_ROUTE_LAYER, BRT_ROUTE_LAYER)
 private const val HALTE_LAYER = "peta-bus-haltes"
 private const val HALTE_NAME_LAYER = "peta-bus-halte-names"
 private const val RAIL_LAYER = "peta-bus-rail"
