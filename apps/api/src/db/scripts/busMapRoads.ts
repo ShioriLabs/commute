@@ -49,6 +49,9 @@ const GAP_POINTS = 6
 const DETOUR_RATIO = 3
 const DETOUR_SLACK_M = 50
 
+/** A road's point this near a match, along it, is where the line hands over to the next road. */
+const HANDOVER_M = 25
+
 /** The kinds of road a bus can drive. */
 const DRIVABLE = new Set(['highway', 'major_road', 'minor_road', 'other'])
 const NOT_DRIVABLE = new Set(['footway', 'path', 'pedestrian', 'steps', 'cycleway', 'corridor', 'sidewalk', 'crossing', 'bridleway'])
@@ -285,12 +288,16 @@ export function snapToRoads(
     const last = out[out.length - 1]
     if (!last || Math.hypot(last[0] - p[0], last[1] - p[1]) > 0.1) out.push(p)
   }
+  // Where a line hands over from one road to the next: the road's point nearest the match, the node
+  // the two roads meet at, when it is that near; on a long straight drawn with a point at each end,
+  // the nearest can be hundreds of metres off (koridor 14 jumped 290 m out and back by Kemayoran),
+  // and the match itself is where the line is.
   const vertexAt = (m: Match): [number, number] => {
     const road = roads.roads[m.road]!
     const at = along(road)
     let k = 0
     for (let j = 1; j < at.length; j++) if (Math.abs(at[j]! - m.at) < Math.abs(at[k]! - m.at)) k = j
-    return road.xy[k]!
+    return Math.abs(at[k]! - m.at) <= HANDOVER_M ? road.xy[k]! : m.point
   }
   let last: Match | null = null
   let unmatched: [number, number][] = []
