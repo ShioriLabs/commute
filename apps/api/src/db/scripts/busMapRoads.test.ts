@@ -46,6 +46,17 @@ describe('snapToRoads', () => {
     for (const p of snapped) expect(Math.abs(east(p))).toBeLessThan(0.5)
   })
 
+  it('steps across a divided road drawn as one line rather than round its far end', () => {
+    // Both carriageways and the roundabout joining them as one road: up 12 m east, round at 1200 m,
+    // back down 12 m west. The line crosses from nearer the east one to nearer the west halfway.
+    const up = Array.from({ length: 13 }, (_, k) => [12, k * 100] as [number, number])
+    const down = Array.from({ length: 13 }, (_, k) => [-12, 1200 - k * 100] as [number, number])
+    const roads = new Roads([road([...up, [0, 1220], ...down])])
+    const snapped = snapToRoads([at(8, 0), at(8, 480), at(-8, 520), at(-8, 1000)], roads, { anyWay: true })
+    const north = (p: LngLat): number => p[1] * KY - Y0
+    expect(Math.max(...snapped.map(north))).toBeLessThan(1050)
+  })
+
   it('leaves a point with no road near it where the feed put it', () => {
     const roads = new Roads([road([[0, 0], [0, 100]])])
     const far = [at(500, 0), at(500, 200)]
