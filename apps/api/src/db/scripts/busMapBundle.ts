@@ -1408,13 +1408,32 @@ export function filletCorners(path: readonly LngLat[], lines: number, tally?: Co
  * more than BARB_M apart (1 by Flyover Karet, 10 and 12 by Walikota Jakarta
  * Utara), where a street turns the one way and goes on.
  */
-const BARB_M = 30
+const BARB_M = 45
 const BARB_TURN_COS = Math.cos((140 * Math.PI) / 180)
 const ZIGZAG_TURN = (90 * Math.PI) / 180
 
-/** [path] without its barbs (see above); its ends stay put. */
-export function trimBarbs(path: readonly LngLat[]): LngLat[] {
+/*
+ * And a hook at an edge's end: leaving its node, the edge sets off one way and
+ * within END_BARB_M folds back more than END_BARB_TURN, the node lying past the
+ * corner the line turns at (where 9's or 12's own two ways part and meet again,
+ * 2 and 14 by RSPAD). The point it folds back at goes, the edge setting off from
+ * its node straight to the next; the node, which other edges share, stays.
+ */
+const END_BARB_M = 60
+const END_BARB_TURN_COS = Math.cos((110 * Math.PI) / 180)
+
+/**
+ * A spike's tip this near a halte the edge's lines call at isn't trimmed: a line turning straight back
+ * there is turning round at it (13 at CBD Ciledug, its terminus up a short spur), not overshooting a
+ * corner. A hook or a zigzag by a halte still goes.
+ */
+const KEEP_NEAR_HALTE_M = 25
+
+/** [path] without its barbs (see above); its ends stay put, and its points by any of [haltes]. */
+export function trimBarbs(path: readonly LngLat[], haltes: readonly LngLat[] = []): LngLat[] {
   const xy = toXYs(path)
+  const stops = toXYs(haltes)
+  const byHalte = (p: XY): boolean => stops.some(h => Math.hypot(h[0] - p[0], h[1] - p[1]) <= KEEP_NEAR_HALTE_M)
   for (let changed = true; changed;) {
     changed = false
     for (let i = 1; i < xy.length - 1; i++) {
@@ -1424,8 +1443,13 @@ export function trimBarbs(path: readonly LngLat[]): LngLat[] {
       const inLen = Math.hypot(px - ax, py - ay)
       const outLen = Math.hypot(bx - px, by - py)
       const same = inLen < 0.1 || outLen < 0.1
-      const back = !same && ((px - ax) * (bx - px) + (py - ay) * (by - py)) / (inLen * outLen) < BARB_TURN_COS
-      if (same || (back && Math.min(inLen, outLen) <= BARB_M)) {
+      const cos = same ? 1 : ((px - ax) * (bx - px) + (py - ay) * (by - py)) / (inLen * outLen)
+      const back = !same && cos < BARB_TURN_COS
+      // Next to an end, on a short end leg, a fold sharper than END_BARB_TURN will do.
+      const endHook = !same && cos < END_BARB_TURN_COS
+        && ((i === 1 && inLen <= END_BARB_M) || (i === xy.length - 2 && outLen <= END_BARB_M))
+      // Only a spike turns round at a halte; a hook or a zigzag by one is still a kink.
+      if (same || endHook || (back && Math.min(inLen, outLen) <= BARB_M && !byHalte(xy[i]!))) {
         xy.splice(i, 1)
         changed = true
         break

@@ -363,7 +363,7 @@ async function main(): Promise<void> {
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
   const onRoads = await alongRoads(normal.lines)
-  const edges = await bundleShapes(onRoads.lines, onRoads.roads)
+  const edges = await bundleShapes(onRoads.lines, onRoads.roads, sortedHaltes)
   const stopMarks = marksFor(edges, onRoads.lines, sortedHaltes)
   const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, stopMarks, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
@@ -390,7 +390,7 @@ async function main(): Promise<void> {
  * redrawn up one carriageway and back down the other (6 on Rasuna Said) is one
  * line on the map, two only where its ways part (a loop to turn).
  */
-async function bundleShapes(lines: readonly BusMapLine[], roads: Roads): Promise<BusMapEdge[]> {
+async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: BusMap['haltes']): Promise<BusMapEdge[]> {
   const drawn = lines.filter(l => isDrawn(l.code))
   const order: OrderReport = { local: 0, exact: 0, components: 0, fallbacks: 0 }
   const edges = await bundle(drawn.map(l => ({ code: l.code, kind: l.kind, color: l.color, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })), order)
@@ -399,7 +399,12 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads): Promise
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
   const corners: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
   const laying = { unlaid: 0 }
-  const laid = laidOnRoads(edges, roads, brt, corners, strokeKeys(lines), laying)
+  // Each line's haltes, where a barb isn't one: the line turns round there.
+  const stopsOf = new Map(lines.map(l => [l.code, l.stops.flatMap((code) => {
+    const halte = haltes[code]
+    return halte ? [[halte[1], halte[2]] as LngLat] : []
+  })]))
+  const laid = laidOnRoads(edges, roads, brt, corners, strokeKeys(lines), laying, stopsOf)
   console.log(`  corners:    ${corners.eased} eased into one bend, ${corners.junctions} turned at a node, ${corners.squeezed} narrower than their radius (${corners.folded} folding a bundle)`)
   if (laying.unlaid > 0) console.log(`  roads:      ${laying.unlaid} edge(s) kept to their own way, laid onto a road beside it`)
   return laid
@@ -416,7 +421,8 @@ function laidOnRoads(
   brt: ReadonlySet<string>,
   corners: CornerTally,
   strokeOf: ReadonlyMap<string, string>,
-  laying: { unlaid: number }
+  laying: { unlaid: number },
+  stopsOf: ReadonlyMap<string, readonly LngLat[]>
 ): BusMapEdge[] {
   // A bundle's width, for the radius it turns on, is its strokes, 13, 13E and L13E being one.
   const strokes = (edge: BusMapEdge): string[] => [...new Set(edge.lines.map(l => strokeOf.get(l) ?? l))]
@@ -445,7 +451,8 @@ function laidOnRoads(
       laid = [ends[0], ...pts.slice(1, -1), ends[1]]
       laying.unlaid++
     }
-    return easeCorners(simplify(trimBarbs(laid), SIMPLIFY_M), strokes(edge).length, corners)
+    const stops = edge.lines.flatMap(l => stopsOf.get(l) ?? [])
+    return easeCorners(simplify(trimBarbs(laid, stops), SIMPLIFY_M), strokes(edge).length, corners)
   })
   const joined = roundJunctions(eased.map((path, i) => ({ path, lines: strokes(edges[i]!) })), corners)
   return edges.map((edge, i) => {
@@ -563,7 +570,7 @@ async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const normal = alongTopology(map.lines, map.haltes)
   const onRoads = await alongRoads(normal.lines)
-  const edges = await bundleShapes(onRoads.lines, onRoads.roads)
+  const edges = await bundleShapes(onRoads.lines, onRoads.roads, normal.haltes)
   const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)
   const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: map.rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
