@@ -290,19 +290,30 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean) {
 
     val color = Expression.get(BusMapProps.COLOR)
     val zoom = Expression.zoom()
-    val aui = LineLayer(AUI_LAYER, LINES_SOURCE).withProperties(
+    // One width for every line, and each stretch that many widths across from where it runs, so lines
+    // sharing a street lie side by side as Transit draws them: koridors over the other lines where the
+    // bundling misses.
+    val width = Expression.interpolate(
+        Expression.linear(), zoom,
+        Expression.stop(10, LINE_W_10), Expression.stop(13, LINE_W_13), Expression.stop(15, LINE_W_15), Expression.stop(18, LINE_W_18),
+    )
+    val slot = Expression.get(BusMapProps.SLOT)
+    val offset = Expression.interpolate(
+        Expression.linear(), zoom,
+        Expression.stop(10, Expression.product(slot, Expression.literal(LINE_W_10))),
+        Expression.stop(13, Expression.product(slot, Expression.literal(LINE_W_13))),
+        Expression.stop(15, Expression.product(slot, Expression.literal(LINE_W_15))),
+        Expression.stop(18, Expression.product(slot, Expression.literal(LINE_W_18))),
+    )
+    fun lines(id: String, kind: String) = LineLayer(id, LINES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
-        PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, 0.6f), Expression.stop(14, 1.6f), Expression.stop(18, 4f))),
-        PropertyFactory.lineOpacity(0.75f),
+        PropertyFactory.lineWidth(width),
+        PropertyFactory.lineOffset(offset),
         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-    ).withFilter(Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("AUI")))
-    val brt = LineLayer(BRT_LAYER, LINES_SOURCE).withProperties(
-        PropertyFactory.lineColor(Expression.toColor(color)),
-        PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, 1.2f), Expression.stop(14, 3f), Expression.stop(18, 7f))),
-        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-    ).withFilter(Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("BRT")))
+    ).withFilter(Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal(kind)))
+    val aui = lines(AUI_LAYER, "AUI")
+    val brt = lines(BRT_LAYER, "BRT")
     val haltes = CircleLayer(HALTE_LAYER, HALTES_SOURCE).withProperties(
         PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(13, 2f), Expression.stop(16, 5f), Expression.stop(18, 7f))),
         PropertyFactory.circleColor(if (dark) HALTE_FILL_DARK else HALTE_FILL),
@@ -350,6 +361,12 @@ private const val RAIL_LAYER = "peta-bus-rail"
 private const val LABEL_FONT = "PT Sans Regular"
 
 private const val HALTE_MIN_ZOOM = 12.5f
+
+/** Every line's width, in px by zoom; a stretch's offset is its slot times this. */
+private const val LINE_W_10 = 1.0f
+private const val LINE_W_13 = 2.0f
+private const val LINE_W_15 = 3.5f
+private const val LINE_W_18 = 6.0f
 private const val HALTE_NAME_MIN_ZOOM = 15f
 private const val HALTE_FILL = "#FFFFFF"
 private const val HALTE_STROKE = "#334155"

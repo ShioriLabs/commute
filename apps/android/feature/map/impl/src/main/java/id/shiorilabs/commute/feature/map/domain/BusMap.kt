@@ -23,6 +23,8 @@ import kotlinx.serialization.json.putJsonArray
 data class BusMap(
     val attribution: String,
     val lines: List<BusMapLine>,
+    /** The lines as one network: each street once, its lines left to right along it. What's drawn. */
+    val edges: List<BusMapEdge> = emptyList(),
     /** Halte code → `[name, lng, lat]`. `TJ-$code` is the API's station id. */
     val haltes: Map<String, JsonArray>,
     /** Rail stations, as dots for bearings: `[station id, lng, lat]`. */
@@ -42,6 +44,21 @@ data class BusMapLine(
     /** Halte codes the line calls at. */
     val stops: List<String>,
 )
+
+/**
+ * One street of the network, the generator's `busMapBundle.ts`: lines sharing it are drawn side by
+ * side, as Transit draws them, in [lines]' order from left to right along [shape]'s direction.
+ */
+@Serializable
+data class BusMapEdge(
+    /** Encoded polyline (Google, precision 5). */
+    val shape: String,
+    /** Line codes, left to right along [shape]. */
+    val lines: List<String>,
+)
+
+/** Line [index] of [count] on an edge: its offset in line widths, right of the edge's direction. */
+fun edgeSlot(index: Int, count: Int): Double = index - (count - 1) / 2.0
 
 /** A halte: its station id (`TJ-…`), name and place. */
 data class BusMapHalte(val stationId: String, val name: String, val lng: Double, val lat: Double)
@@ -109,6 +126,9 @@ object BusMapProps {
     const val STATION_ID = "id"
     const val NAME = "name"
     const val LINES = "lines"
+
+    /** A line stretch's place across its street, in line widths to the right of its direction. */
+    const val SLOT = "slot"
 }
 
 /**
@@ -118,23 +138,28 @@ object BusMapProps {
  * halte is kept.
  */
 fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMapGeoJson {
+    // Every edge once per line on it, each at its slot across the street.
+    val byCode = lines.associateBy { it.code }
     val lineFeatures = buildJsonArray {
-        for (line in lines) {
-            for (shape in line.shapes) {
-                val points = decodePolyline(shape)
-                if (points.size < 2) continue
+        for (edge in edges) {
+            val points = decodePolyline(edge.shape)
+            if (points.size < 2) continue
+            val geometry = buildJsonObject {
+                put("type", "LineString")
+                putJsonArray("coordinates") {
+                    for (p in points) add(buildJsonArray { add(p.longitude); add(p.latitude) })
+                }
+            }
+            for ((index, code) in edge.lines.withIndex()) {
+                val line = byCode[code] ?: continue
                 add(
                     feature(
-                        geometry = buildJsonObject {
-                            put("type", "LineString")
-                            putJsonArray("coordinates") {
-                                for (p in points) add(buildJsonArray { add(p.longitude); add(p.latitude) })
-                            }
-                        },
+                        geometry = geometry,
                         properties = buildJsonObject {
                             put(BusMapProps.CODE, line.code)
                             put(BusMapProps.KIND, line.kind)
                             put(BusMapProps.COLOR, line.color)
+                            put(BusMapProps.SLOT, edgeSlot(index, edge.lines.size))
                         },
                     ),
                 )
