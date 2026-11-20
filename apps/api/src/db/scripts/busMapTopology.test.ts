@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LngLat } from '../../utils/polyline'
-import { alignToTopology, passesBy } from './busMapTopology'
+import { alignToTopology, despike, passesBy } from './busMapTopology'
 
 /* Synthetic streets near Monas: 0.001 degree is ~110 m either way at -6.2. */
 const LAT = -6.18
@@ -105,8 +105,35 @@ describe('alignToTopology', () => {
     expect(passesBy(aligned.pieces.get('6')!, ...at(300, 1350))).toBe(false)
   })
 
+  it('runs a koridor\'s own piece backwards for a trip the dedupe folded into it, turning only where its pieces join', () => {
+    // 6 from Galunggung (G) to Setiabudi (S): the feed keeps only the other way, Rasuna Said
+    // (x 0) up to Gembira at y 1000, west along it to G. Galunggung street also crosses Rasuna
+    // Said at y 1200, where no bus may turn: the way is by Gembira.
+    const gHaltes = { G: halte('G', -800, 1000), S: halte('S', 0, 0) }
+    const rasuna = run([0, 0], [0, 1600])
+    const gembira = run([0, 1000], [-800, 1000])
+    const galunggung = run([-800, 1000], [-800, 1200], [400, 1200])
+    const aligned = alignToTopology(
+      [{ code: '6', pieces: [rasuna, gembira, galunggung] }],
+      gHaltes,
+      [{ code: '6', runs: [['G', 'S']] }]
+    )
+    const six = aligned.pieces.get('6')!
+    expect(passesBy(six, ...at(-400, 1000))).toBe(true)
+    expect(passesBy(six, ...at(0, 1200))).toBe(false)
+  })
+
   it('draws straight only when no street at all runs between two haltes', () => {
     const aligned = alignToTopology([{ code: '1', pieces: [run([0, 0], [0, 300])] }], haltes, [{ code: '1', runs: [['A', 'C']] }])
     expect(aligned.straight).toEqual(['1 A->C'])
+  })
+})
+
+describe('despike', () => {
+  it('drops a short out-and-back, keeps a real corner', () => {
+    const spiked: [number, number][] = [[0, 0], [0, 100], [0, 130], [0, 90], [0, 200]]
+    expect(despike(spiked)).toEqual([[0, 0], [0, 100], [0, 200]])
+    const corner: [number, number][] = [[0, 0], [0, 100], [100, 100]]
+    expect(despike(corner)).toEqual(corner)
   })
 })

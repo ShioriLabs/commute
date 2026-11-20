@@ -205,12 +205,20 @@ class StreetGraph {
   private readonly next: { to: number, m: number }[][] = []
   private readonly cells = new Map<string, number[]>()
 
+  private readonly directed: boolean
+  /** One line's own pieces: joined only at their ends, and searched further round. */
+  private readonly own: boolean
+
   /**
-   * [directed]: each track only the way it runs, joined to the others only at its
-   * ends, as one line's own pieces join (a branch leaving the trunk, a loop
-   * rejoining it). Without it, every street both ways, joined wherever lines meet.
+   * [own]: one line's pieces, joined to each other only at their ends, as they
+   * join (a branch leaving the trunk, a loop rejoining it), never where they
+   * merely cross: Galunggung crosses Rasuna Said, but 6 can only turn onto it by
+   * Gembira. [directed]: each only the way it runs, as well. Without either, every
+   * line's streets both ways, joined wherever they meet.
    */
-  constructor(tracks: readonly Track[], private readonly directed = false) {
+  constructor(tracks: readonly Track[], { own = false, directed = false }: { own?: boolean, directed?: boolean } = {}) {
+    this.own = own || directed
+    this.directed = directed
     const cell = (x: number, y: number): string => `${Math.floor(x / GRAPH_JOIN_M)},${Math.floor(y / GRAPH_JOIN_M)}`
     const add = (p: [number, number]): number => {
       const id = this.xy.length
@@ -253,7 +261,7 @@ class StreetGraph {
       }
       ends.push(previous)
     })
-    if (directed) {
+    if (this.own) {
       // A piece's ends join the other pieces close by, both ways: where it leaves them and rejoins.
       for (const id of ends) {
         for (const other of this.near(this.xy[id]!, GRAPH_JOIN_M)) if (trackOf[other] !== trackOf[id]) link(id, other, true)
@@ -319,7 +327,7 @@ class StreetGraph {
       for (let i = 1; i < open.length; i++) if (open[i]![0] < open[best]![0]) best = i
       const [c, at] = open.splice(best, 1)[0]!
       if (c > cost.get(at)!) continue
-      if (c > straight * (this.directed ? OWN_REACH : 4) + FAR_M * 2) return null
+      if (c > straight * (this.own ? OWN_REACH : 4) + FAR_M * 2) return null
       if (goals.has(at)) {
         const path: [number, number][] = [b]
         let walk: number | undefined = at
@@ -370,6 +378,7 @@ export function alignToTopology(
     // The haltes the feed has it call at that its topology doesn't: where a reroute went.
     const onTopology = new Set(topo.runs.flat())
     let ownGraph: StreetGraph | undefined
+    let ownEitherWay: StreetGraph | undefined
     const dropped = (line.stops ?? [])
       .filter(code => !onTopology.has(code) && haltes[code])
       .map(code => toXY([haltes[code]![1], haltes[code]![2]]))
@@ -406,7 +415,10 @@ export function alignToTopology(
             ?? ownWay({ detours: true, avoid: dropped })
             // The same across its own pieces, each the way it runs: a loop the feed split from the
             // trunk it rejoins (6 back down Rasuna Said and into Gembira).
-            ?? elsewhere((ownGraph ??= new StreetGraph(own, true)).route(a, b, { near: NEAR_M, avoid: dropped }))
+            ?? elsewhere((ownGraph ??= new StreetGraph(own, { directed: true })).route(a, b, { near: NEAR_M, avoid: dropped }))
+            // Its own pieces either way: a trip the pattern dedupe folded into the opposite direction of
+            // the same street (6 from Galunggung by Gembira and Rasuna Said, drawn only the other way).
+            ?? elsewhere((ownEitherWay ??= new StreetGraph(own, { own: true })).route(a, b, { near: NEAR_M, avoid: dropped }))
             ?? elsewhere(stretch(others, a, b)?.path)
             // No street runs there plainly: a halte set back from the road (FAR_M), else the line's own
             // way however roundabout, which is at least where its buses drive.
@@ -423,7 +435,8 @@ export function alignToTopology(
           path.push(...(last && last[0] === piece[0]![0] && last[1] === piece[0]![1] ? piece.slice(1) : piece))
         }
       }
-      if (path.length >= 2) drawn.push(path.map(toLngLat))
+      const clean = despike(path)
+      if (clean.length >= 2) drawn.push(clean.map(toLngLat))
     }
     pieces.set(line.code, drawn.length > 0 ? drawn : line.pieces.map(p => [...p]))
     stops.set(line.code, calls)
@@ -435,4 +448,39 @@ export function alignToTopology(
 export function passesBy(pieces: readonly LngLat[][], lng: number, lat: number): boolean {
   const p = toXY([lng, lat])
   return pieces.some(piece => piece.length >= 2 && passes(track('', piece), p, NEAR_M).length > 0)
+}
+
+/** A path going a short way out and turning straight back is a spike, not a street. */
+const SPIKE_M = 80
+const SPIKE_COS = Math.cos((165 * Math.PI) / 180)
+
+/**
+ * [path] without its out-and-back spikes: where a leg ends at the tip of one of
+ * the line's pieces and the next carries on from there back the way it came (6
+ * off Gembira, up Rasuna Said to where its piece began, and back down). A tip
+ * goes when the path reaches it within SPIKE_M and turns straight back.
+ */
+export function despike(path: readonly [number, number][]): [number, number][] {
+  const out: [number, number][] = []
+  for (const p of path) {
+    out.push(p)
+    while (out.length >= 3) {
+      const a = out[out.length - 3]!
+      const tip = out[out.length - 2]!
+      const back = out[out.length - 1]!
+      const ox = tip[0] - a[0]
+      const oy = tip[1] - a[1]
+      const rx = back[0] - tip[0]
+      const ry = back[1] - tip[1]
+      const out1 = Math.hypot(ox, oy)
+      const ret = Math.hypot(rx, ry)
+      if (out1 === 0) {
+        out.splice(out.length - 2, 1)
+        continue
+      }
+      if (ret === 0 || out1 > SPIKE_M || (ox * rx + oy * ry) / (out1 * ret) > SPIKE_COS) break
+      out.splice(out.length - 2, 1)
+    }
+  }
+  return out
 }

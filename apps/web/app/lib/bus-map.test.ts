@@ -116,7 +116,8 @@ describe('bus-map.json', () => {
     // 6 turns from Flyover Kuningan round by Latuharhari and Cokroaminoto (past the Istituto
     // Italiano di Cultura), back down Rasuna Said, and onto Galunggung by Jl. Gembira.
     expect(distanceTo('6', [106.82831, -6.20208])).toBeLessThan(50) // Istituto Italiano di Cultura
-    expect(distanceTo('6', [106.82972, -6.2062])).toBeLessThan(15) // Jl. Gembira
+    // Jl. Gembira, a short street whose corners are simplified; Rasuna Said is ~70 m off.
+    expect(distanceTo('6', [106.82972, -6.2062])).toBeLessThan(30) // Jl. Gembira
   })
 
   it('has rail stations for bearings and no TJ among them', () => {
