@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
-import { encodePolyline, simplify, type LngLat } from '../../utils/polyline'
+import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
+import { bundle, type BusMapEdge } from './busMapBundle'
 import { parseCSV } from './gtfs'
 
 /*
@@ -29,9 +30,16 @@ import { parseCSV } from './gtfs'
  * Rail dots come from stations_lat_lng.csv, the same hand-kept coordinates
  * generateLatLngSQL seeds the stations table with.
  *
+ * The lines also ship as `edges`, one network with the lines sharing a street
+ * side by side in a fixed order (busMapBundle.ts), which is what the clients
+ * draw. `shapes` stays per line for drawing one line alone, and so the edges
+ * can be rebuilt without the feed.
+ *
  * Re-run after a TJ GTFS import (the feed extracted under file_gtfs/, as
  * generateTJSQL needs it) or a station coordinate change:
  *   pnpm --filter api generate:bus-map
+ * After a change to the bundling alone, from the file as it is:
+ *   pnpm --filter api generate:bus-map --rebundle
  */
 
 const FEED_DIR = `${__dirname}/file_gtfs`
@@ -93,6 +101,8 @@ export interface BusMapLine {
 export interface BusMap {
   attribution: string
   lines: BusMapLine[]
+  /** The lines as one network: each street once, its lines left to right along it. What clients draw. */
+  edges: BusMapEdge[]
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
   /** Rail stations for bearings: [station id, lng, lat]. */
@@ -313,16 +323,35 @@ function main(): void {
   const sortedHaltes = Object.fromEntries(Object.entries(haltes).sort(([a], [b]) => a.localeCompare(b)))
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
-  const map: BusMap = { attribution: ATTRIBUTION, lines, haltes: sortedHaltes, rail }
+  const edges = bundleShapes(lines)
+  const map: BusMap = { attribution: ATTRIBUTION, lines, edges, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
 
   const brt = lines.filter(l => l.kind === 'BRT').length
   console.log(`Wrote ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB`)
   console.log(`  lines:    ${lines.length} (${brt} BRT, ${lines.length - brt} Angkutan Umum Integrasi)`)
   console.log(`  patterns: ${patternCount} in the feed, drawn as ${keptCount} pieces`)
+  console.log(`  edges:    ${edges.length}`)
   console.log(`  haltes:   ${Object.keys(sortedHaltes).length}`)
   console.log(`  rail:     ${rail.length} stations`)
   if (noShape.length > 0) console.warn(`  ${noShape.length} line(s) with no shape in the feed: ${noShape.join(', ')}`)
 }
 
-if (require.main === module) main()
+/** The lines' network, from their shapes as shipped: what both `main` and `--rebundle` write. */
+function bundleShapes(lines: readonly BusMapLine[]): BusMapEdge[] {
+  return bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: l.shapes.map(s => decodePolyline(s)) })))
+}
+
+/** `--rebundle`: the edges rebuilt from the file's own lines, everything else kept as it is. */
+function rebundle(): void {
+  const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
+  const edges = bundleShapes(map.lines)
+  const out: BusMap = { attribution: map.attribution, lines: map.lines, edges, haltes: map.haltes, rail: map.rail }
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
+  console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
+}
+
+if (require.main === module) {
+  if (process.argv.includes('--rebundle')) rebundle()
+  else main()
+}
