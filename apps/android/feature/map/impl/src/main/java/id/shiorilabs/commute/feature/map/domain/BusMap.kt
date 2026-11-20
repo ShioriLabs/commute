@@ -60,6 +60,12 @@ data class BusMapEdge(
 /** Line [index] of [count] on an edge: its offset in line widths, right of the edge's direction. */
 fun edgeSlot(index: Int, count: Int): Double = index - (count - 1) / 2.0
 
+/**
+ * A trunk koridor: a plain-number BRT (`1` … `14`), and L13E. Zoomed out, the streets layer draws
+ * only these, as the city's network, the branches and feeders coming in closer.
+ */
+fun isTrunk(code: String): Boolean = code == "L13E" || (code.isNotEmpty() && code.all(Char::isDigit))
+
 /** A halte: its station id (`TJ-…`), name and place. */
 data class BusMapHalte(val stationId: String, val name: String, val lng: Double, val lat: Double)
 
@@ -129,6 +135,9 @@ object BusMapProps {
 
     /** A line stretch's place across its street, in line widths to the right of its direction. */
     const val SLOT = "slot"
+
+    /** A trunk koridor's place among the trunks alone on its street, for the zoomed-out network. */
+    const val TRUNK_SLOT = "trunkSlot"
 }
 
 /**
@@ -138,7 +147,8 @@ object BusMapProps {
  * halte is kept.
  */
 fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMapGeoJson {
-    // Every edge once per line on it, each at its slot across the street.
+    // Every edge once per line on it, each at its slot across the street; a trunk also at its slot
+    // among the trunks alone, closed up for when the others aren't drawn.
     val byCode = lines.associateBy { it.code }
     val lineFeatures = buildJsonArray {
         for (edge in edges) {
@@ -150,6 +160,7 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
                     for (p in points) add(buildJsonArray { add(p.longitude); add(p.latitude) })
                 }
             }
+            val trunks = edge.lines.filter(::isTrunk)
             for ((index, code) in edge.lines.withIndex()) {
                 val line = byCode[code] ?: continue
                 add(
@@ -160,6 +171,7 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
                             put(BusMapProps.KIND, line.kind)
                             put(BusMapProps.COLOR, line.color)
                             put(BusMapProps.SLOT, edgeSlot(index, edge.lines.size))
+                            if (isTrunk(code)) put(BusMapProps.TRUNK_SLOT, edgeSlot(trunks.indexOf(code), trunks.size))
                         },
                     ),
                 )
