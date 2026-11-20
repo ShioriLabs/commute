@@ -45,6 +45,10 @@ const BRIDGE_M = 12
 /** Points matching no road between two on one road are a corner the feed cut, up to this many. */
 const GAP_POINTS = 6
 
+/** Two matches on one road further apart along it than this, for how far apart they are, aren't joined along it. */
+const DETOUR_RATIO = 3
+const DETOUR_SLACK_M = 50
+
 /** The kinds of road a bus can drive. */
 const DRIVABLE = new Set(['highway', 'major_road', 'minor_road', 'other'])
 const NOT_DRIVABLE = new Set(['footway', 'path', 'pedestrian', 'steps', 'cycleway', 'corridor', 'sidewalk', 'crossing', 'bridleway'])
@@ -296,17 +300,26 @@ export function snapToRoads(
       unmatched.push(points[i]!)
       continue
     }
-    if (last && last.road === m.road && unmatched.length <= GAP_POINTS) {
-      const road = roads.roads[m.road]!
-      const at = along(road)
-      const lo = Math.min(last.at, m.at)
-      const hi = Math.max(last.at, m.at)
-      const total = at[at.length - 1]!
-      const [fx, fy] = road.xy[0]!
-      const [tx, ty] = road.xy[road.xy.length - 1]!
+    const road = roads.roads[m.road]!
+    const at = along(road)
+    const lo = last ? Math.min(last.at, m.at) : 0
+    const hi = last ? Math.max(last.at, m.at) : 0
+    const total = at[at.length - 1]!
+    const [fx, fy] = road.xy[0]!
+    const [tx, ty] = road.xy[road.xy.length - 1]!
+    const ring = Math.hypot(fx - tx, fy - ty) < 1
+    // How far along the road from the last match to this one, the short way round a ring.
+    const alongWay = ring ? Math.min(hi - lo, total - (hi - lo)) : hi - lo
+    // Much further along the road than apart is not one stretch of it but two arms of one feature: the
+    // tiles draw both carriageways of a divided road, and the roundabout joining them, as one line
+    // (Sisingamangaraja round Bundaran Senayan). Followed, a step across the median went round the
+    // roundabout and back. Handed over like a change of road instead.
+    const apart = last ? Math.hypot(m.point[0] - last.point[0], m.point[1] - last.point[1]) : 0
+    const sameStretch = alongWay <= apart * DETOUR_RATIO + DETOUR_SLACK_M
+    if (last && last.road === m.road && unmatched.length <= GAP_POINTS && sameStretch) {
       // A ring (a roundabout drawn as one closed road): across its seam is the short way round, not
       // back along all of it.
-      if (Math.hypot(fx - tx, fy - ty) < 1 && hi - lo > total / 2) {
+      if (ring && hi - lo > total / 2) {
         const tail = road.xy.filter((_, k) => at[k]! > hi && at[k]! < total)
         const head = road.xy.filter((_, k) => at[k]! > 0 && at[k]! < lo)
         // Forward past the seam (from late on the ring to early), or backward.
@@ -316,6 +329,11 @@ export function snapToRoads(
         const between = road.xy.filter((_, k) => at[k]! > lo && at[k]! < hi)
         for (const p of last.at <= m.at ? between : [...between].reverse()) push(p)
       }
+    } else if (last && last.road === m.road && unmatched.length <= GAP_POINTS) {
+      // Across from one arm of a road to another: straight between the two matches, the road's nearest
+      // vertex along it being anywhere on a sparsely drawn arm.
+      push(last.point)
+      push(m.point)
     } else {
       // Off one road and onto another (or back from off the roads): by their nearest points.
       if (last) push(vertexAt(last))
