@@ -417,8 +417,8 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         PropertyFactory.backgroundColor(if (dark) WASH_DARK else WASH_LIGHT),
         PropertyFactory.backgroundOpacity(WASH_OPACITY),
     )
-    // Each halte on its bundle, from where every line comes in to street zoom: a bar across them all,
-    // white with a dark outline, or a dot in the colour of its one line, as Transit marks stops.
+    // Each halte on its bundle, from city zoom to street zoom: a bar across them all, or a dot on its
+    // one line, white with a dark outline, as Transit marks stops.
     for (n in 2..MAX_BAR_LINES) style.addImage("$BAR_IMAGE$n", barImage(n, density))
     val bars = SymbolLayer(BAR_LAYER, MARKS_SOURCE).withProperties(
         PropertyFactory.iconImage(Expression.concat(Expression.literal(BAR_IMAGE), Expression.toString(Expression.get(BusMapProps.COUNT)))),
@@ -428,19 +428,19 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         PropertyFactory.iconIgnorePlacement(true),
         // The bundle's width, as the lines': drawn for z15's, scaled with them.
         PropertyFactory.iconSize(
-            Expression.interpolate(Expression.linear(), zoom, Expression.stop(13, LINE_W_13 / LINE_W_15), Expression.stop(15, 1f), Expression.stop(18, LINE_W_18 / LINE_W_15)),
+            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, LINE_W_10 / LINE_W_15), Expression.stop(13, LINE_W_13 / LINE_W_15), Expression.stop(15, 1f), Expression.stop(18, LINE_W_18 / LINE_W_15)),
         ),
     ).withFilter(Expression.gt(Expression.get(BusMapProps.COUNT), Expression.literal(1))).apply {
-        minZoom = ALL_LINES_MIN_ZOOM
+        minZoom = MARKS_MIN_ZOOM
         maxZoom = STREET_ZOOM
     }
     val dots = CircleLayer(MARK_DOT_LAYER, MARKS_SOURCE).withProperties(
-        PropertyFactory.circleColor(Expression.toColor(Expression.get(BusMapProps.COLOR))),
-        PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(13, 2.5f), Expression.stop(15, 3.5f), Expression.stop(16, 4.2f))),
-        PropertyFactory.circleStrokeColor(HALTE_FILL),
-        PropertyFactory.circleStrokeWidth(1.2f),
+        PropertyFactory.circleColor(HALTE_FILL),
+        PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(11, 1.6f), Expression.stop(13, 2.5f), Expression.stop(15, 3.5f), Expression.stop(16, 4.2f))),
+        PropertyFactory.circleStrokeColor(MARK_OUTLINE),
+        PropertyFactory.circleStrokeWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(11, 0.8f), Expression.stop(15, 1.2f))),
     ).withFilter(Expression.eq(Expression.get(BusMapProps.COUNT), Expression.literal(1))).apply {
-        minZoom = ALL_LINES_MIN_ZOOM
+        minZoom = MARKS_MIN_ZOOM
         maxZoom = STREET_ZOOM
     }
     for (layer: Layer in listOf(wash, trunks, aui, brt, auiRoutes, brtRoutes, alone, dots, bars, haltes, rail)) {
@@ -488,6 +488,7 @@ private const val BAR_THICK_DP = 5f
 private const val BAR_OVERHANG_DP = 2f
 private const val BAR_OUTLINE_DP = 1.2f
 private const val BAR_OUTLINE = 0xFF1E293B.toInt()
+private const val MARK_OUTLINE = "#1E293B"
 
 /** The wash over the basemap, light and dark: enough to quiet it, not to hide it. */
 private const val WASH_LIGHT = "#FFFFFF"
@@ -521,11 +522,14 @@ private const val LABEL_FONT = "PT Sans Regular"
 
 private const val HALTE_MIN_ZOOM = 12.5f
 
+/** Where halte marks come in on the bundles: city zoom, as Transit marks every stop. */
+private const val MARKS_MIN_ZOOM = 11.5f
+
 /** Where every line comes in; further out, the trunk koridors alone. */
 private const val ALL_LINES_MIN_ZOOM = 13f
 
-/** How much bolder the trunks are drawn, zoomed out, than every line closer in. */
-private const val TRUNK_SCALE = 1.5f
+/** How much bolder the trunks are drawn, zoomed out, than every line closer in: none while only trunks are drawn. */
+private const val TRUNK_SCALE = 1f
 
 /** Every line's width, in px by zoom; a stretch's offset is its slot times this. */
 private const val LINE_W_10 = 1.0f

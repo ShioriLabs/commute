@@ -301,8 +301,21 @@ export function snapToRoads(
       const at = along(road)
       const lo = Math.min(last.at, m.at)
       const hi = Math.max(last.at, m.at)
-      const between = road.xy.filter((_, k) => at[k]! > lo && at[k]! < hi)
-      for (const p of last.at <= m.at ? between : [...between].reverse()) push(p)
+      const total = at[at.length - 1]!
+      const [fx, fy] = road.xy[0]!
+      const [tx, ty] = road.xy[road.xy.length - 1]!
+      // A ring (a roundabout drawn as one closed road): across its seam is the short way round, not
+      // back along all of it.
+      if (Math.hypot(fx - tx, fy - ty) < 1 && hi - lo > total / 2) {
+        const tail = road.xy.filter((_, k) => at[k]! > hi && at[k]! < total)
+        const head = road.xy.filter((_, k) => at[k]! > 0 && at[k]! < lo)
+        // Forward past the seam (from late on the ring to early), or backward.
+        const way = last.at > m.at ? [...tail, road.xy[0]!, ...head] : [...head].reverse().concat([road.xy[0]!], [...tail].reverse())
+        for (const p of way) push(p)
+      } else {
+        const between = road.xy.filter((_, k) => at[k]! > lo && at[k]! < hi)
+        for (const p of last.at <= m.at ? between : [...between].reverse()) push(p)
+      }
     } else {
       // Off one road and onto another (or back from off the roads): by their nearest points.
       if (last) push(vertexAt(last))

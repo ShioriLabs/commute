@@ -776,31 +776,50 @@ export function roundCorners(path: readonly LngLat[], lines: number): LngLat[] {
 }
 
 /*
- * One way per line through a loop, as Transit's overview draws one: a line whose
- * two directions part round a roundabout or a block (Bundaran HI, Plaza de la
- * República) is drawn on one side of it, the other side being its bypass. A
- * piece of a line is a bypass when both its ends meet the line's main path
- * (within BYPASS_JOIN_M) and the main path between those two points is not much
- * longer than it, nor much shorter (BYPASS_STRETCH, BYPASS_SLACK_M): it runs
- * alongside. Up to BYPASS_MAX_M long: a direction split for kilometres along two
- * carriageways too far apart to share a bundle is still one line in the overview.
- * The line's own streets, both ways, are still drawn at street zoom and alone.
+ * One way per line round a roundabout, as Transit's overview draws one: where a
+ * line's two directions part round a small loop (Bundaran HI's two halves), only
+ * one side is drawn. Each other piece of the line is walked every DENSE_M; a
+ * stretch of it more than NEAR_M from what's kept of the line, leaving and
+ * rejoining the same piece of it, is cut when it is short (LOCAL_MAX_M) and runs
+ * the same way round as that piece (no more than STRETCH times longer, plus
+ * SLACK_M). Kept as Transit keeps them: a one-way pair a block or more apart for
+ * longer than that (two strands, Metrobús 4 through Centro), an end loop that
+ * comes back where it left (rejoining under LOOP_MIN_M along), a branch. A
+ * stretch within NEAR_M (the other carriageway) stays too: it bundles with the
+ * rest. The line's own streets, both ways, are still drawn at street zoom and alone.
  */
-const BYPASS_JOIN_M = 30
-const BYPASS_MAX_M = 6000
-const BYPASS_STRETCH = 3
-const BYPASS_SLACK_M = 300
+const DENSE_M = 10
+const NEAR_M = 40
+const LOCAL_MAX_M = 600
+const LOOP_MIN_M = 40
+const STRETCH = 3
+const SLACK_M = 150
+/** A cut reaches back up to TRIM_REACH_M along what is still more than TRIM_M off the line. */
+const TRIM_M = 10
+const TRIM_REACH_M = 80
 
-/** [pieces] (one line's, deduped, longest first) without the short pieces that bypass the rest. */
+type XY = [number, number]
+
+/** [pieces] (one line's, deduped) with the short stretches that bypass the rest cut out. */
 export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
-  const xy = pieces.map(p => p.map(([lng, lat]) => [lng * KX, lat * KY] as [number, number]))
-  const lengthOf = (p: [number, number][]): number => {
+  const toXY = (p: readonly LngLat[]): XY[] => p.map(([lng, lat]) => [lng * KX, lat * KY])
+  const lengthOf = (p: readonly XY[]): number => {
     let m = 0
     for (let i = 1; i < p.length; i++) m += Math.hypot(p[i]![0] - p[i - 1]![0], p[i]![1] - p[i - 1]![1])
     return m
   }
+  const densify = (p: readonly XY[]): XY[] => {
+    const out: XY[] = p.length ? [p[0]!] : []
+    for (let i = 1; i < p.length; i++) {
+      const [ax, ay] = p[i - 1]!
+      const [bx, by] = p[i]!
+      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / DENSE_M))
+      for (let k = 1; k <= n; k++) out.push([ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n])
+    }
+    return out
+  }
   /** Where along [p] it passes nearest [q], and how near: metres along, distance. */
-  const nearest = (p: [number, number][], [qx, qy]: [number, number]): [number, number] => {
+  const nearestOn = (p: readonly XY[], [qx, qy]: XY): [number, number] => {
     let bestD = Infinity
     let bestAt = 0
     let at = 0
@@ -822,19 +841,68 @@ export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
     }
     return [bestAt, bestD]
   }
-  const kept: number[] = []
-  xy.forEach((piece, i) => {
-    const length = lengthOf(piece)
-    const bypass = length <= BYPASS_MAX_M && kept.some((k) => {
-      const [fromAt, fromD] = nearest(xy[k]!, piece[0]!)
-      const [toAt, toD] = nearest(xy[k]!, piece[piece.length - 1]!)
-      if (fromD > BYPASS_JOIN_M || toD > BYPASS_JOIN_M) return false
-      const around = Math.abs(toAt - fromAt)
-      return around > 0 && around <= length * BYPASS_STRETCH + BYPASS_SLACK_M && around * BYPASS_STRETCH + BYPASS_SLACK_M >= length
+
+  // The longest piece is the line's main path; the rest are walked against what's kept, longest first.
+  const order = pieces.map((p, i) => ({ i, xy: toXY(p) })).sort((a, b) => lengthOf(b.xy) - lengthOf(a.xy))
+  if (!order.length) return []
+  const kept: XY[][] = [order[0]!.xy]
+  const out: LngLat[][] = [[...pieces[order[0]!.i]!]]
+  for (const { i, xy } of order.slice(1)) {
+    const pts = densify(xy)
+    const near = pts.map((q) => {
+      let best = { k: -1, at: 0, d: Infinity }
+      kept.forEach((piece, k) => {
+        const [at, d] = nearestOn(piece, q)
+        if (d < best.d) best = { k, at, d }
+      })
+      return best
     })
-    if (!bypass) kept.push(i)
-  })
-  return kept.map(i => [...pieces[i]!])
+    const cut = pts.map(() => false)
+    for (let a = 0; a < pts.length;) {
+      if (near[a]!.d <= NEAR_M) {
+        a++
+        continue
+      }
+      let b = a
+      while (b < pts.length && near[b]!.d > NEAR_M) b++
+      // A stretch off the line, a..b-1; it bypasses when it leaves and rejoins the same kept piece.
+      if (a > 0 && b < pts.length) {
+        const from = near[a - 1]!
+        const to = near[b]!
+        const run = lengthOf(pts.slice(a - 1, b + 1))
+        const around = Math.abs(to.at - from.at)
+        if (from.k === to.k && run <= LOCAL_MAX_M && around >= LOOP_MIN_M && around <= run * STRETCH + SLACK_M) {
+          for (let k = a; k < b; k++) cut[k] = true
+          // And back along where it is still parting from the line, so no stub splays off the bundle.
+          for (let k = a - 1, m = 0; k >= 0 && near[k]!.d > TRIM_M && m <= TRIM_REACH_M; k--) {
+            cut[k] = true
+            m += DENSE_M
+          }
+          for (let k = b, m = 0; k < pts.length && near[k]!.d > TRIM_M && m <= TRIM_REACH_M; k++) {
+            cut[k] = true
+            m += DENSE_M
+          }
+        }
+      }
+      a = b
+    }
+    if (!cut.some(Boolean)) {
+      kept.push(xy)
+      out.push([...pieces[i]!])
+      continue
+    }
+    let run: XY[] = []
+    const flush = (): void => {
+      if (run.length >= 2) {
+        kept.push(run)
+        out.push(run.map(([x, y]) => [x / KX, y / KY] as LngLat))
+      }
+      run = []
+    }
+    pts.forEach((p, k) => (cut[k] ? flush() : run.push(p)))
+    flush()
+  }
+  return out
 }
 
 /**
