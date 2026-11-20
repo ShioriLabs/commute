@@ -66,10 +66,10 @@ data class BusMapEdge(
 fun edgeSlot(index: Int, count: Int): Double = index - (count - 1) / 2.0
 
 /**
- * A trunk koridor: a plain-number BRT (`1` … `14`), and L13E. Zoomed out, the streets layer draws
- * only these, as the city's network, the branches and feeders coming in closer.
+ * A trunk koridor: a plain-number BRT (`1` … `14`), and 13E and L13E. The streets layer draws only
+ * these for now, at every zoom (the generator bundles only these too: `isDrawn` in busMapBundle.ts).
  */
-fun isTrunk(code: String): Boolean = code == "L13E" || (code.isNotEmpty() && code.all(Char::isDigit))
+fun isTrunk(code: String): Boolean = code == "L13E" || code == "13E" || (code.isNotEmpty() && code.all(Char::isDigit))
 
 /** A halte: its station id (`TJ-…`), name and place. */
 data class BusMapHalte(val stationId: String, val name: String, val lng: Double, val lat: Double)
@@ -240,7 +240,7 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
     }
     // Every line on its own geometry, one LineString per shape piece.
     val routeFeatures = buildJsonArray {
-        for (line in lines) {
+        for (line in lines.filter { isTrunk(it.code) }) {
             for (shape in line.drawnShapes) {
                 val points = decodePolyline(shape)
                 if (points.size < 2) continue
