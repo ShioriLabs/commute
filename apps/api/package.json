@@ -73,6 +73,7 @@
     "@cloudflare/workers-types": "^4.20250610.0",
     "@types/node": "^20.17.30",
     "@vitest/coverage-v8": "^4.1.10",
+    "highs": "1.15.4",
     "tsc-alias": "^1.8.9",
     "tsx": "^4.10.0",
     "vitest": "^4.1.9",
