@@ -74,6 +74,30 @@ export interface BundleLine {
   kind: 'BRT' | 'AUI'
   /** The line's pieces, as drawn: each a polyline. */
   pieces: LngLat[][]
+  /**
+   * Its route colour: lines of one colour on a street are one stroke there (strokesOf), as Transit
+   * draws New York's A, C and E as one blue. Absent, the line is a stroke of its own.
+   */
+  color?: string
+}
+
+/*
+ * Lines drawn as one stroke where they share a street: those of one route
+ * colour. 13, 13E and L13E are one purple along the Ciledug busway; three
+ * stripes of it said nothing a reader could tell apart. Line order and the
+ * bundles' shifts are worked out over strokes, so a stroke's lines sit side by
+ * side in an edge's `lines`, and a client draws each run of one colour there
+ * as one line width.
+ */
+
+/** Each line's stroke: its colour, or the line itself without one. */
+export function strokeKeys(lines: readonly Pick<BundleLine, 'code' | 'color'>[]): Map<string, string> {
+  return new Map(lines.map(l => [l.code, l.color ? `#${l.color.replace(/^#/, '').toUpperCase()}` : l.code]))
+}
+
+/** How many strokes [lines] make, by [strokeOf]. */
+export function strokeCount(lines: readonly string[], strokeOf: ReadonlyMap<string, string>): number {
+  return new Set(lines.map(l => strokeOf.get(l) ?? l)).size
 }
 
 export interface BusMapEdge {
@@ -890,15 +914,36 @@ function solveOrders(
  * Line i of n on a chain lies at i - (n - 1) / 2 + shift line widths right of
  * the chain's way. A line going on through a node from one chain to the next
  * should lie as far right of the way it travels on both; how far it doesn't is
- * the cost, and SHIFT_COST a line width moved off the street's middle. A linear
+ * the cost, in full for one going straight on (within STRAIGHT_TURN) and
+ * TURNING_WEIGHT of it for one turning, whose step across a corner hardly
+ * shows (1 coming off Sisingamangaraja onto Trunojoyo, where the 13s go
+ * straight on), and SHIFT_COST a line width moved off the street's middle. A linear
  * program, solved by HiGHS, finds the shifts; a chain of one line stays centred,
  * so its halte dots stay on it. Shifts are kept within SHIFT_MAX line widths.
  */
 const SHIFT_MAX = 1
 const SHIFT_COST = 0.25
+const STRAIGHT_TURN = (30 * Math.PI) / 180
+const TURNING_WEIGHT = 0.2
+
+/** The unit way [chain] leaves the node at its start (or its end), over its first ~30 m. */
+function leaving(network: Network, chain: Chain, atStart: boolean): [number, number] {
+  const path = atStart ? chain.path : [...chain.path].reverse()
+  const from = network.points[path[0]!]!
+  let to = network.points[path[path.length - 1]!]!
+  for (const id of path.slice(1)) {
+    const p = network.points[id]!
+    if (Math.hypot(p.x - from.x, p.y - from.y) >= 30) {
+      to = p
+      break
+    }
+  }
+  const d = Math.hypot(to.x - from.x, to.y - from.y) || 1
+  return [(to.x - from.x) / d, (to.y - from.y) / d]
+}
 
 /** Each chain's shift, in line widths right of its way (see above). */
-export function bundleShifts(list: readonly Chain[], orders: readonly string[][], highs: LegacyHighs): number[] {
+export function bundleShifts(network: Network, list: readonly Chain[], orders: readonly string[][], highs: LegacyHighs): number[] {
   const shifts = list.map(() => 0)
   const free = (c: number): boolean => orders[c]!.length >= 2
   const ends = new Map<number, { chain: number, atStart: boolean }[]>()
@@ -934,9 +979,13 @@ export function bundleShifts(list: readonly Chain[], orders: readonly string[][]
       if (free(a.chain)) vars.push(term(sa, `s${a.chain}`))
       if (free(b.chain)) vars.push(term(-sb, `s${b.chain}`))
       const negated = vars.map(v => (v.startsWith('+') ? `-${v.slice(1)}` : `+${v.slice(1)}`))
+      // Straight on (coming in against a's way out of the node, going on along b's), or turning.
+      const [ax, ay] = leaving(network, list[a.chain]!, a.atStart)
+      const [bx, by] = leaving(network, list[b.chain]!, b.atStart)
+      const straight = Math.acos(Math.max(-1, Math.min(1, -ax * bx - ay * by))) < STRAIGHT_TURN
       const gap = `g${gaps++}`
       rows.push(`+ 1 ${gap} ${negated.join(' ')} >= ${constant}`, `+ 1 ${gap} ${vars.join(' ')} >= ${-constant}`)
-      objective.push(`+ 1 ${gap}`)
+      objective.push(`+ ${straight ? 1 : TURNING_WEIGHT} ${gap}`)
     }
   }
   if (gaps === 0) return shifts
@@ -983,9 +1032,17 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport)
   orient(network, list)
   const order = bundleOrder(lines)
   const rank = new Map(order.map((code, i) => [code, i]))
-  const rules = pairRules(network, list)
-  const localOrders = orderLinesLocal(list, rules, rank)
-  const exactOrders = orderLinesExact(list, rules, rank, await loadSolver(), report)
+  // Ordered and shifted as strokes, each ranked as its first line.
+  const strokeOf = strokeKeys(lines)
+  const strokeRank = new Map<string, number>()
+  for (const code of order) {
+    const key = strokeOf.get(code)!
+    if (!strokeRank.has(key)) strokeRank.set(key, rank.get(code)!)
+  }
+  const strokes: Chain[] = list.map(chain => ({ path: chain.path, lines: new Set([...chain.lines].map(l => strokeOf.get(l)!)) }))
+  const rules = pairRules(network, strokes)
+  const localOrders = orderLinesLocal(strokes, rules, strokeRank)
+  const exactOrders = orderLinesExact(strokes, rules, strokeRank, await loadSolver(), report)
   const local = orderCost(rules, localOrders)
   const exact = orderCost(rules, exactOrders)
   if (report) {
@@ -994,8 +1051,11 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport)
   }
   // Exact can't do worse; if it ever reads so, the program is wrong, and the local order stands.
   if (exact > local) console.warn(`  line order: solved ${exact} against local search's ${local}; keeping local`)
-  const orders = exact > local ? localOrders : exactOrders
-  const shifts = bundleShifts(list, orders, await loadSolver())
+  const strokeOrders = exact > local ? localOrders : exactOrders
+  const shifts = bundleShifts(network, strokes, strokeOrders, await loadSolver())
+  // Each stroke back to its lines on the chain, in bundle order.
+  const orders = list.map((chain, c) => strokeOrders[c]!.flatMap(key =>
+    [...chain.lines].filter(l => strokeOf.get(l) === key).sort((a, b) => rank.get(a)! - rank.get(b)!)))
   return list
     .map((chain, i): BusMapEdge => {
       const coords = chain.path.map((id) => {
@@ -1016,14 +1076,15 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport)
 /*
  * Where a halte's mark goes on the network: on the nearest edge carrying one of
  * its lines, within STOP_MARK_M, centred across the edge's bundle and turned to
- * its way, so a client draws Transit's bar across all the lines there (one
- * line: a dot in its colour). A halte with no such edge near has no mark.
+ * its way, so a client draws Transit's bar across all the strokes there (one
+ * stroke: a dot in its colour). A halte with no such edge near has no mark.
  */
 const STOP_MARK_M = 60
 
 /**
- * A halte's mark: code, [lng, lat] on the edge, the edge's bearing (degrees from north), its line
- * count, its one line's code, and the edge's shift when it has one, for the bar to move with its lines.
+ * A halte's mark: code, [lng, lat] on the edge, the edge's bearing (degrees from north), its stroke
+ * count, its one stroke's first line, and the edge's shift when it has one, for the bar to move with
+ * its lines.
  */
 export type StopMark = [string, number, number, number, number, string, number?]
 
@@ -1034,7 +1095,11 @@ export interface StopIn {
   lines: readonly string[]
 }
 
-export function placeStops(edges: readonly BusMapEdge[], stops: readonly StopIn[]): StopMark[] {
+export function placeStops(
+  edges: readonly BusMapEdge[],
+  stops: readonly StopIn[],
+  strokeOf: ReadonlyMap<string, string> = new Map()
+): StopMark[] {
   const shapes = edges.map(e => decodePolyline(e.shape).map(([lng, lat]) => [lng * KX, lat * KY] as [number, number]))
   const out: StopMark[] = []
   for (const stop of stops) {
@@ -1065,7 +1130,9 @@ export function placeStops(edges: readonly BusMapEdge[], stops: readonly StopIn[
     if (!best) continue
     const { x, y, bearing, edge } = best
     const { lines, shift } = edges[edge]!
-    const mark: StopMark = [stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), lines.length, lines.length === 1 ? lines[0]! : '']
+    // Across the strokes, not the lines: 13, 13E and L13E are one.
+    const count = strokeCount(lines, strokeOf)
+    const mark: StopMark = [stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), count, count === 1 ? lines[0]! : '']
     if (shift) mark.push(shift)
     out.push(mark)
   }

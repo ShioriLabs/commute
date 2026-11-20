@@ -550,10 +550,14 @@ private fun MapWithSheet(
         if (!streets) streetsPill = null
     }
     BackHandler(enabled = streetsPill != null && selection == null) { streetsPill = null }
-    val openStreetsLine = { code: String ->
+    val openStreetsLine = { codes: List<String> ->
         layersOpen = false
         attributionOpen = false
-        streetsPill = if (controller.isolateLine("$OPERATOR_TJ:$code")) null else code
+        // A stroke a colour's lines share (13, 13E, L13E) asks which, as a shared stroke does on the artwork.
+        if (codes.size < 2 || !controller.offerLineChoices(codes.map { "$OPERATOR_TJ:$it" })) {
+            val code = codes.first()
+            streetsPill = if (controller.isolateLine("$OPERATOR_TJ:$code")) null else code
+        }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -903,7 +907,7 @@ private fun StreetsLayer(
     onStationTap: (String) -> Unit,
     onTap: () -> Unit,
     onUserMove: () -> Unit,
-    onLineTap: (String) -> Unit,
+    onLineTap: (List<String>) -> Unit,
     isolated: String?,
 ) {
     val description = stringResource(R.string.map_streets_description)

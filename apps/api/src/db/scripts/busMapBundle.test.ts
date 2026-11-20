@@ -11,6 +11,8 @@ import {
   placeStops,
   roundCorners,
   roundJunctions,
+  strokeCount,
+  strokeKeys,
   type BundleLine,
   type BusMapEdge,
   type Chain,
@@ -206,6 +208,25 @@ describe('bundle', () => {
     })
     expect(edges.some(e => e.lines.length === 3)).toBe(true)
     for (const code of ['13', '13E']) expect(new Set(places(code)).size).toBe(1)
+  })
+
+  it('keeps lines of one colour side by side, as one stroke, wherever they share a street', async () => {
+    // 13 and L13E one purple, 1 red between them in bundle order: drawn as lines, 1 could sit
+    // between the purples; as strokes it can't.
+    const purple = '#7A357B'
+    const edges = await bundle([
+      { ...line('1', 'BRT', north(0, 2000, 3)), color: '#D62126' },
+      { ...line('13', 'BRT', north(0, 2000)), color: purple },
+      { ...line('L13E', 'BRT', north(0, 2000, 6)), color: purple.toLowerCase() }
+    ])
+    expect(edges).toHaveLength(1)
+    const [lines] = edges.map(e => e.lines)
+    expect(Math.abs(lines!.indexOf('13') - lines!.indexOf('L13E'))).toBe(1)
+    const strokes = strokeKeys([{ code: '1', color: '#D62126' }, { code: '13', color: purple }, { code: 'L13E', color: purple.toLowerCase() }])
+    expect(strokeCount(lines!, strokes)).toBe(2)
+    // A halte there: a bar across two strokes, not three lines.
+    const [mark] = placeStops(edges, [{ code: 'H', lng: LNG, lat: LAT + 1000 / M_LAT, lines: ['13'] }], strokes)
+    expect(mark![4]).toBe(2)
   })
 
   it('merges a joining line in on its own side, as Transit\'s penalty figure has it', async () => {

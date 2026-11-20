@@ -175,7 +175,7 @@ class BusMapTest {
         // does on Trunojoyo's edges either side, right of the eastward way.
         fun eastward(edge: BusMapEdge): Boolean = id.shiorilabs.commute.core.geo.decodePolyline(edge.shape).let { it.last().longitude > it.first().longitude }
         fun place(edge: BusMapEdge, code: String): Double {
-            val right = edgeSlot(edge.lines.indexOf(code), edge.lines.size) + edge.shift
+            val right = busMap.strokesOf(edge).first { code in it.codes }.slot
             return if (eastward(edge)) right else -right
         }
         val trunojoyo = busMap.edges.filter { edge ->
@@ -184,6 +184,25 @@ class BusMapTest {
         val withOne = trunojoyo.filter { "1" in it.lines }
         assertTrue(withOne.isNotEmpty() && trunojoyo.size > withOne.size)
         for (code in listOf("13", "13E", "L13E")) assertEquals(1, trunojoyo.map { place(it, code) }.toSet().size)
+    }
+
+    @Test
+    fun `a colour's lines are one stroke where they share a street, carrying every line for a tap`() {
+        // The Ciledug busway: 13, 13E and L13E, one purple, drawn once.
+        val busway = busMap.edges.filter { edge -> listOf("13", "13E", "L13E").all { it in edge.lines } }
+        assertTrue(busway.isNotEmpty())
+        val lines = features(busMap.toGeoJson().lines)
+        for (edge in busway) {
+            val strokes = busMap.strokesOf(edge)
+            assertEquals(edge.lines.map { code -> busMap.lines.first { it.code == code }.color.uppercase() }.distinct().size, strokes.size)
+            assertEquals(1, strokes.count { "13" in it.codes && "13E" in it.codes && "L13E" in it.codes })
+        }
+        val purple = lines.filter { it.prop(BusMapProps.LINES).split(' ').containsAll(listOf("13", "13E", "L13E")) }
+        assertTrue(purple.isNotEmpty())
+        // Lines of different colours stay strokes of their own.
+        val mixed = strokesOf(listOf("1", "13", "13E"), 0.0, busMap.lines.associateBy { it.code })
+        assertEquals(listOf(listOf("1"), listOf("13", "13E")), mixed.map { it.codes })
+        assertEquals(listOf(-0.5, 0.5), mixed.map { it.slot })
     }
 
     @Test

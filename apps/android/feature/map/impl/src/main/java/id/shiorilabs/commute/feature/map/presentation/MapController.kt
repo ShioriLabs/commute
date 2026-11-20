@@ -507,6 +507,18 @@ class MapController(
         invalidate()
     }
 
+    /**
+     * Asks which of the lines [keys] a tap meant, as a stroke several lines share does on the artwork:
+     * the streets layer draws a colour's lines as one stroke (13, 13E and L13E). False when fewer than
+     * two of them are known here, for the caller to open the one it has.
+     */
+    fun offerLineChoices(keys: List<String>): Boolean {
+        val known = keys.distinct().mapNotNull(data.lines::lineOf)
+        if (known.size < 2) return false
+        choices.value = known
+        return true
+    }
+
     /** One of [lineChoices] picked. */
     fun chooseLine(key: String) {
         if (isolateLine(key)) onHit()

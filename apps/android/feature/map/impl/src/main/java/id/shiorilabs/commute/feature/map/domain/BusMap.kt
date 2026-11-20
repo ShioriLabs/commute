@@ -71,6 +71,39 @@ data class BusMapEdge(
 fun edgeSlot(index: Int, count: Int): Double = index - (count - 1) / 2.0
 
 /**
+ * One stroke across an edge: its lines of one colour, drawn as one line width, as Transit draws New
+ * York's A, C and E as one blue (13, 13E and L13E, one purple, along the Ciledug busway), at [slot]
+ * line widths right of the edge's way, its bundle's shift added.
+ */
+data class BusMapStroke(val codes: List<String>, val color: String, val kind: String, val slot: Double)
+
+/**
+ * [codes]' strokes left to right, each run of one colour in them drawn once (the generator puts a
+ * colour's lines side by side: `strokeKeys` in busMapBundle.ts), [shift] added. A code [byCode]
+ * doesn't know is left out.
+ */
+fun strokesOf(codes: List<String>, shift: Double, byCode: Map<String, BusMapLine>): List<BusMapStroke> {
+    val runs = mutableListOf<MutableList<BusMapLine>>()
+    for (code in codes) {
+        val line = byCode[code] ?: continue
+        val run = runs.lastOrNull()
+        if (run != null && run.first().color.equals(line.color, ignoreCase = true)) run += line else runs += mutableListOf(line)
+    }
+    return runs.mapIndexed { i, run ->
+        BusMapStroke(
+            codes = run.map { it.code },
+            color = run.first().color,
+            kind = if (run.any { it.kind == "BRT" }) "BRT" else run.first().kind,
+            slot = edgeSlot(i, runs.size) + shift,
+        )
+    }
+}
+
+/** [edge]'s strokes left to right (see [strokesOf]). */
+fun BusMap.strokesOf(edge: BusMapEdge, byCode: Map<String, BusMapLine> = lines.associateBy { it.code }): List<BusMapStroke> =
+    strokesOf(edge.lines, edge.shift, byCode)
+
+/**
  * A line's width at z15, in dp: what the streets layer draws lines at there, and the unit a halte
  * bar's [BusMapProps.BAR_OFFSET] is given in, the bar being drawn for that width and scaled with it.
  */
@@ -175,7 +208,8 @@ object BusMapProps {
  * halte is kept.
  */
 fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMapGeoJson {
-    // Every edge once per line on it, each at its slot across the street; a trunk also at its slot
+    // Every edge once per stroke on it (a colour's lines are one: 13, 13E and L13E), each at its slot
+    // across the street, carrying its lines for a tap to ask which; a trunk stroke also at its slot
     // among the trunks alone, closed up for when the others aren't drawn.
     val byCode = lines.associateBy { it.code }
     val lineFeatures = buildJsonArray {
@@ -190,18 +224,19 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
             }
             val trunks = edge.lines.filter(::isTrunk)
             // Among the trunks alone the bundle is another one, centred, unless it is all trunks.
-            val trunkShift = if (trunks.size == edge.lines.size) edge.shift else 0.0
-            for ((index, code) in edge.lines.withIndex()) {
-                val line = byCode[code] ?: continue
+            val trunkStrokes = strokesOf(trunks, if (trunks.size == edge.lines.size) edge.shift else 0.0, byCode)
+            for (stroke in strokesOf(edge, byCode)) {
+                val trunkStroke = trunkStrokes.firstOrNull { trunk -> trunk.codes.any { it in stroke.codes } }
                 add(
                     feature(
                         geometry = geometry,
                         properties = buildJsonObject {
-                            put(BusMapProps.CODE, line.code)
-                            put(BusMapProps.KIND, line.kind)
-                            put(BusMapProps.COLOR, line.color)
-                            put(BusMapProps.SLOT, edgeSlot(index, edge.lines.size) + edge.shift)
-                            if (isTrunk(code)) put(BusMapProps.TRUNK_SLOT, edgeSlot(trunks.indexOf(code), trunks.size) + trunkShift)
+                            put(BusMapProps.CODE, stroke.codes.first())
+                            put(BusMapProps.LINES, stroke.codes.joinToString(" "))
+                            put(BusMapProps.KIND, stroke.kind)
+                            put(BusMapProps.COLOR, stroke.color)
+                            put(BusMapProps.SLOT, stroke.slot)
+                            if (trunkStroke != null) put(BusMapProps.TRUNK_SLOT, trunkStroke.slot)
                         },
                     ),
                 )
