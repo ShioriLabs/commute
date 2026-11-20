@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import { decodePolyline, type LngLat } from '../../utils/polyline'
-import type { BusMapEdge } from './busMapBundle'
+import { strokeKeys, type BusMapEdge } from './busMapBundle'
 
 /*
  * How tidy Peta Bus's network is, from the edges as shipped: the yardstick for
@@ -44,7 +44,11 @@ function across(edge: BusMapEdge, end: End, leaving: boolean): string[] {
   return along ? edge.lines : [...edge.lines].reverse()
 }
 
-export function networkStats(edges: readonly BusMapEdge[]): NetworkStats {
+/**
+ * [edges]' counts; with [strokeOf], two lines of one stroke (13 and L13E, one purple) are drawn as
+ * one, and their order within it crosses nothing.
+ */
+export function networkStats(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<string, string> = new Map()): NetworkStats {
   const shapes = edges.map(e => decodePolyline(e.shape))
   const at = new Map<string, End[]>()
   let shortEdges = 0
@@ -87,6 +91,7 @@ export function networkStats(edges: readonly BusMapEdge[]): NetworkStats {
       for (let j = i + 1; j < through.length; j++) {
         const [a, [a1, a2]] = through[i]!
         const [b, [b1, b2]] = through[j]!
+        if (strokeOf.has(a) && strokeOf.get(a) === strokeOf.get(b)) continue
         // Look from each edge they share into the node.
         for (const [inA, outA, inB, outB] of [[a1!, a2!, b1!, b2!], [a2!, a1!, b2!, b1!]] as const) {
           if (inA.edge !== inB.edge) continue
@@ -120,6 +125,6 @@ export function networkStats(edges: readonly BusMapEdge[]): NetworkStats {
 
 if (require.main === module) {
   const file = process.argv[2] ?? `${__dirname}/../../../../web/app/data/bus-map.json`
-  const map = JSON.parse(fs.readFileSync(file, 'utf-8')) as { edges: BusMapEdge[] }
-  console.log(networkStats(map.edges))
+  const map = JSON.parse(fs.readFileSync(file, 'utf-8')) as { edges: BusMapEdge[], lines: { code: string, color: string }[] }
+  console.log(networkStats(map.edges, strokeKeys(map.lines)))
 }

@@ -9,6 +9,7 @@ import {
   isDrawn,
   placeStops,
   roundJunctions,
+  strokeKeys,
   type BusMapEdge,
   type CornerTally,
   type OrderReport,
@@ -387,12 +388,12 @@ async function main(): Promise<void> {
 async function bundleShapes(lines: readonly BusMapLine[], roads: Roads): Promise<BusMapEdge[]> {
   const drawn = lines.filter(l => isDrawn(l.code))
   const order: OrderReport = { local: 0, exact: 0, components: 0, fallbacks: 0 }
-  const edges = await bundle(drawn.map(l => ({ code: l.code, kind: l.kind, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })), order)
+  const edges = await bundle(drawn.map(l => ({ code: l.code, kind: l.kind, color: l.color, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })), order)
   console.log(`  line order: crossings cost ${order.exact} solved exactly (local search: ${order.local}), ${order.components} component(s)`)
   if (order.fallbacks > 0) console.warn(`  ${order.fallbacks} component(s) unsolved in time, local order kept`)
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
   const corners: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
-  const laid = laidOnRoads(edges, roads, brt, corners)
+  const laid = laidOnRoads(edges, roads, brt, corners, strokeKeys(lines))
   console.log(`  corners:    ${corners.eased} eased into one bend, ${corners.junctions} turned at a node, ${corners.squeezed} narrower than their radius (${corners.folded} folding a bundle)`)
   return laid
 }
@@ -402,7 +403,15 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads): Promise
  * its two ends, and each end (a junction several edges meet at) onto the road
  * nearest it once, the same point for every edge there, so they go on meeting.
  */
-function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySet<string>, corners: CornerTally): BusMapEdge[] {
+function laidOnRoads(
+  edges: readonly BusMapEdge[],
+  roads: Roads,
+  brt: ReadonlySet<string>,
+  corners: CornerTally,
+  strokeOf: ReadonlyMap<string, string>
+): BusMapEdge[] {
+  // A bundle's width, for the radius it turns on, is its strokes, 13, 13E and L13E being one.
+  const strokes = (edge: BusMapEdge): string[] => [...new Set(edge.lines.map(l => strokeOf.get(l) ?? l))]
   const nodes = new Map<string, LngLat>()
   const node = (p: LngLat): LngLat => {
     const key = `${p[0].toFixed(6)},${p[1].toFixed(6)}`
@@ -420,13 +429,13 @@ function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySe
     if (pts.length < 2) return pts
     const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)), anyWay: true })
     const laid = [node(pts[0]!), ...inner.slice(1, -1), node(pts[pts.length - 1]!)]
-    return easeCorners(simplify(laid, SIMPLIFY_M), edge.lines.length, corners)
+    return easeCorners(simplify(laid, SIMPLIFY_M), strokes(edge).length, corners)
   })
-  const joined = roundJunctions(eased.map((path, i) => ({ path, lines: edges[i]!.lines })), corners)
+  const joined = roundJunctions(eased.map((path, i) => ({ path, lines: strokes(edges[i]!) })), corners)
   return edges.map((edge, i) => {
     const path = joined[i]!
     if (path.length < 2) return edge
-    return { ...edge, shape: encodePolyline(filletCorners(path, edge.lines.length, corners)) }
+    return { ...edge, shape: encodePolyline(filletCorners(path, strokes(edge).length, corners)) }
   })
 }
 
@@ -436,7 +445,7 @@ function marksFor(edges: readonly BusMapEdge[], lines: readonly BusMapLine[], ha
   for (const line of lines) {
     for (const code of line.stops) calling.set(code, [...(calling.get(code) ?? []), line.code])
   }
-  return placeStops(edges, Object.entries(haltes).map(([code, [, lng, lat]]) => ({ code, lng, lat, lines: calling.get(code) ?? [] })))
+  return placeStops(edges, Object.entries(haltes).map(([code, [, lng, lat]]) => ({ code, lng, lat, lines: calling.get(code) ?? [] })), strokeKeys(lines))
 }
 
 /**

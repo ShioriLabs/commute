@@ -28,9 +28,11 @@ export interface BusMapLine {
 
 /**
  * One street of the network (apps/api/src/db/scripts/busMapBundle.ts): the lines
- * sharing it, drawn side by side as Transit draws them. Line i of n goes at
- * MapLibre `line-offset` (i - (n - 1) / 2 + shift) line widths, right of the
- * shape's direction, which keeps every line in its place street to street.
+ * sharing it, drawn side by side as Transit draws them. Lines of one route
+ * colour are one stroke there (13, 13E and L13E, one purple), and sit side by
+ * side in `lines`: stroke i of n goes at MapLibre `line-offset`
+ * (i - (n - 1) / 2 + shift) line widths, right of the shape's direction, which
+ * keeps every stroke in its place street to street.
  */
 export interface BusMapEdge {
   /** Encoded polyline (Google, precision 5). */
@@ -38,7 +40,7 @@ export interface BusMapEdge {
   /** Line codes, left to right along the shape. */
   lines: string[]
   /**
-   * The bundle moved this many line widths right of the shape, so lines going
+   * The bundle moved this many stroke widths right of the shape, so strokes going
    * straight on through a node keep their place where one joins; absent when 0.
    */
   shift?: number
@@ -51,8 +53,8 @@ export interface BusMap {
   edges: BusMapEdge[]
   /**
    * Each halte placed on the network, for its mark across the bundle there:
-   * [code, lng, lat, bearing (degrees from north), line count, its one line or "", the edge's shift if any].
-   * Several lines: a white bar with a dark outline across them all, moved by the shift; one: a dot in its colour.
+   * [code, lng, lat, bearing (degrees from north), stroke count, its one stroke's first line or "", the edge's shift if any].
+   * Several strokes: a white bar with a dark outline across them all, moved by the shift; one: a dot in its colour.
    */
   stopMarks: [string, number, number, number, number, string, number?][]
   /** Halte code -> [name, lng, lat]. */

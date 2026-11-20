@@ -69,8 +69,8 @@ fun StreetsMap(
     modifier: Modifier = Modifier,
     onTap: () -> Unit = {},
     onUserMove: () -> Unit = {},
-    /** A line tapped, by code: the caller isolates it. */
-    onLineTap: (code: String) -> Unit = {},
+    /** A stroke tapped, by its lines' codes (several where a colour's lines are one stroke): the caller isolates one. */
+    onLineTap: (codes: List<String>) -> Unit = {},
     /** The line drawn alone, the rest faded, as the artwork isolates one; null for all of them. */
     isolated: String? = null,
 ) {
@@ -141,10 +141,14 @@ fun StreetsMap(
                     return@addOnMapClickListener true
                 }
                 // No stop under the finger: a line, the one drawn on top there.
-                val line = map.queryRenderedFeatures(box, ISOLATE_LAYER, BRT_ROUTE_LAYER, AUI_ROUTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)
-                    .firstNotNullOfOrNull { it.getStringProperty(BusMapProps.CODE) }
+                val lines = map.queryRenderedFeatures(box, ISOLATE_LAYER, BRT_ROUTE_LAYER, AUI_ROUTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)
+                    .firstNotNullOfOrNull { feature ->
+                        // A stroke carries all its lines; a line on its own streets, just its code.
+                        feature.getStringProperty(BusMapProps.LINES)?.split(' ')?.filter(String::isNotEmpty)?.ifEmpty { null }
+                            ?: feature.getStringProperty(BusMapProps.CODE)?.let(::listOf)
+                    }
                     ?: return@addOnMapClickListener false
-                onLine(line)
+                onLine(lines)
                 true
             }
             map.addOnCameraIdleListener { state.saveCamera() }
