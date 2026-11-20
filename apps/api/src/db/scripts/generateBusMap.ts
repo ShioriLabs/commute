@@ -347,9 +347,15 @@ function main(): void {
   if (noShape.length > 0) console.warn(`  ${noShape.length} line(s) with no shape in the feed: ${noShape.join(', ')}`)
 }
 
-/** The lines' network, from their shapes as shipped: what both `main` and `--rebundle` write. */
+/**
+ * The lines' network, from their shapes as shipped: what both `main` and
+ * `--rebundle` write. Each line once along a street first, as the feed's patterns
+ * are: a koridor redrawn up one carriageway and back down the other (6 on Rasuna
+ * Said) is one line on the map, two only where its ways part (a loop to turn).
+ * Its `shapes` keep both ways.
+ */
 function bundleShapes(lines: readonly BusMapLine[]): BusMapEdge[] {
-  return bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: l.shapes.map(s => decodePolyline(s)) })))
+  return bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dedupePatterns(l.shapes.map(s => decodePolyline(s))) })))
 }
 
 /** The TransJakarta koridors of the routing topology (poster overrides over the feed's), as halte runs. */
