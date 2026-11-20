@@ -187,6 +187,27 @@ describe('bundle', () => {
     expect(edges.every(e => e.lines.length === 1)).toBe(true)
   })
 
+  it('moves a bundle across its street so the lines going straight on through a join keep their place', async () => {
+    // 13 and 13E east along a street; 1 joins them from the north halfway and leaves to the south
+    // 500 m on, as at CSW. Centred, the 13s would step half a line aside where 1 joins and back.
+    const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+    const east = (from: number, to: number, y = 0): LngLat[] => Array.from({ length: (to - from) / 50 + 1 }, (_, k) => at(from + k * 50, y))
+    const edges = await bundle([
+      line('1', 'BRT', [...Array.from({ length: 10 }, (_, k) => at(0, 500 - k * 50)), ...east(0, 500), ...Array.from({ length: 10 }, (_, k) => at(500, -(k + 1) * 50))]),
+      line('13', 'BRT', east(-1000, 1500)),
+      line('13E', 'BRT', east(-1000, 1500, 3))
+    ])
+    /** Where [code] lies across each edge carrying it, in line widths right of the eastward way. */
+    const places = (code: string): number[] => edges.filter(e => e.lines.includes(code) && e.lines.length > 1).map((e) => {
+      const pts = decodePolyline(e.shape)
+      const eastward = pts[pts.length - 1]![0] > pts[0]![0]
+      const right = e.lines.indexOf(code) - (e.lines.length - 1) / 2 + (e.shift ?? 0)
+      return eastward ? right : -right
+    })
+    expect(edges.some(e => e.lines.length === 3)).toBe(true)
+    for (const code of ['13', '13E']) expect(new Set(places(code)).size).toBe(1)
+  })
+
   it('merges a joining line in on its own side, as Transit\'s penalty figure has it', async () => {
     // 1 and 2 run north; 3 comes in from the west and joins them. Bundle order would put 3 on the
     // east, crossing both on the way in ("merging lines crossing"), or between them ("merging in

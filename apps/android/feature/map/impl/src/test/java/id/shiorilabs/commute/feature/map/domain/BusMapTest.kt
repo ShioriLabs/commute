@@ -129,9 +129,10 @@ class BusMapTest {
         assertTrue(withTrunkSlot.isNotEmpty())
         assertTrue(withTrunkSlot.all { isTrunk(it.prop(BusMapProps.CODE)) })
         assertTrue(lines.filter { isTrunk(it.prop(BusMapProps.CODE)) }.size == withTrunkSlot.size)
-        // Closed up: no trunk sits further out than its street's trunks alone reach.
+        // Closed up: no trunk sits further out than its street's trunks alone reach, its bundle moved
+        // across the street (a line width at most) aside.
         val widest = busMap.edges.maxOf { edge -> edge.lines.count(::isTrunk) }
-        val reach = (widest - 1) / 2.0
+        val reach = (widest - 1) / 2.0 + 1.0
         assertTrue(withTrunkSlot.all { kotlin.math.abs(it.prop(BusMapProps.TRUNK_SLOT).toDouble()) <= reach })
         // With only trunks on the network, a line's trunk slot is its slot.
         assertTrue(withTrunkSlot.all { it.prop(BusMapProps.TRUNK_SLOT) == it.prop(BusMapProps.SLOT) })
@@ -147,6 +148,42 @@ class BusMapTest {
         assertTrue(marks.all { it.prop(BusMapProps.STATION_ID).startsWith("TJ-") })
         val single = marks.filter { it.prop(BusMapProps.COUNT) == "1" }
         assertTrue(single.isNotEmpty() && single.all { it.prop(BusMapProps.COLOR).matches(Regex("#[0-9A-Fa-f]{6}")) })
+    }
+
+    @Test
+    fun `a bundle moved across its street moves every line on it, and its halte bars`() {
+        val shifted = BusMap(
+            attribution = "",
+            lines = listOf(
+                BusMapLine(code = "1", name = "", kind = "BRT", color = "#D62126", shapes = emptyList(), stops = listOf("A")),
+                BusMapLine(code = "13", name = "", kind = "BRT", color = "#7A3381", shapes = emptyList(), stops = listOf("A")),
+            ),
+            edges = listOf(BusMapEdge(shape = "_p~iF~ps|U_ulLnnqC", lines = listOf("1", "13"), shift = -0.5)),
+            stopMarks = listOf(Json.parseToJsonElement("""["A", -120.2, 38.5, 90, 2, "", -0.5]""").jsonArray),
+            haltes = emptyMap(),
+            rail = emptyList(),
+        ).toGeoJson()
+        val slots = features(shifted.lines).associate { it.prop(BusMapProps.CODE) to it.prop(BusMapProps.SLOT).toDouble() }
+        assertEquals(mapOf("1" to -1.0, "13" to 0.0), slots)
+        val bar = features(shifted.marks).single()["properties"]!!.jsonObject[BusMapProps.BAR_OFFSET]!!.jsonArray
+        assertEquals(listOf(-0.5 * BUS_LINE_W_15_DP, 0.0), bar.map { it.jsonPrimitive.double })
+    }
+
+    @Test
+    fun `the 13s keep their place past CSW where 1 rides with them`() {
+        // Trunojoyo east of CSW 1, where 1 joins 13, 13E and L13E for 400 m: each 13 lies where it
+        // does on Trunojoyo's edges either side, right of the eastward way.
+        fun eastward(edge: BusMapEdge): Boolean = id.shiorilabs.commute.core.geo.decodePolyline(edge.shape).let { it.last().longitude > it.first().longitude }
+        fun place(edge: BusMapEdge, code: String): Double {
+            val right = edgeSlot(edge.lines.indexOf(code), edge.lines.size) + edge.shift
+            return if (eastward(edge)) right else -right
+        }
+        val trunojoyo = busMap.edges.filter { edge ->
+            "13" in edge.lines && id.shiorilabs.commute.core.geo.decodePolyline(edge.shape).any { it.latitude in -6.2410..-6.2390 && it.longitude in 106.795..106.806 }
+        }
+        val withOne = trunojoyo.filter { "1" in it.lines }
+        assertTrue(withOne.isNotEmpty() && trunojoyo.size > withOne.size)
+        for (code in listOf("13", "13E", "L13E")) assertEquals(1, trunojoyo.map { place(it, code) }.toSet().size)
     }
 
     @Test

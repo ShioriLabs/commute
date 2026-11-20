@@ -26,6 +26,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import id.shiorilabs.commute.feature.map.domain.BUS_LINE_W_15_DP
 import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.BusMapProps
 import id.shiorilabs.commute.feature.map.domain.GeoStop
@@ -430,6 +431,10 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         PropertyFactory.iconSize(
             Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, LINE_W_10 / LINE_W_15), Expression.stop(13, LINE_W_13 / LINE_W_15), Expression.stop(15, 1f), Expression.stop(18, LINE_W_18 / LINE_W_15)),
         ),
+        // Across with its bundle where that is moved off the street's middle: in z15's dp, scaled by
+        // the icon size as the bar is, and turned with it. Typed, as icon-offset takes only an
+        // array<number, 2>, which Expression.array() doesn't assert.
+        PropertyFactory.iconOffset(Expression.raw("""["array", "number", 2, ["get", "${BusMapProps.BAR_OFFSET}"]]""")),
     ).withFilter(Expression.gt(Expression.get(BusMapProps.COUNT), Expression.literal(1))).apply {
         minZoom = MARKS_MIN_ZOOM
         maxZoom = STREET_ZOOM
@@ -534,7 +539,7 @@ private const val TRUNK_SCALE = 1f
 /** Every line's width, in px by zoom; a stretch's offset is its slot times this. */
 private const val LINE_W_10 = 1.0f
 private const val LINE_W_13 = 2.0f
-private const val LINE_W_15 = 3.5f
+private const val LINE_W_15 = BUS_LINE_W_15_DP
 private const val LINE_W_18 = 6.0f
 private const val HALTE_NAME_MIN_ZOOM = 15f
 private const val HALTE_FILL = "#FFFFFF"
