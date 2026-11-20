@@ -53,3 +53,19 @@ describe('snapToRoads', () => {
     expect(east(snapped[0]!)).toBeCloseTo(500, 0)
   })
 })
+
+describe('snapToRoads on a roundabout', () => {
+  it('goes the short way round a ring across where it is drawn from, not all the way round', () => {
+    // A ring 60 m across, drawn anticlockwise from its east point: the seam is at the east.
+    const ring: [number, number][] = Array.from({ length: 25 }, (_, k) => {
+      const a = (k * 15 * Math.PI) / 180
+      return [60 * Math.cos(a), 60 * Math.sin(a)] as [number, number]
+    })
+    const roads = new Roads([road(ring, { oneway: true }), road([[60, 60], [60, 1000]]), road([[60, -60], [60, -1000]])])
+    // South past the ring's east side, across the seam.
+    const line = [at(60, 500), at(60, 80), at(55, 25), at(60, 0), at(55, -25), at(60, -80), at(60, -500)]
+    const snapped = snapToRoads(line, roads, { anyWay: true })
+    // Never out on the ring's west side.
+    expect(Math.min(...snapped.map(east))).toBeGreaterThan(0)
+  })
+})

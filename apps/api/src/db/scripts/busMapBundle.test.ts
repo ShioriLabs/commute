@@ -202,24 +202,46 @@ describe('roundCorners on a hairpin', () => {
 describe('dropBypasses', () => {
   const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
   const run = (...pts: [number, number][]): LngLat[] => pts.map(([x, y]) => at(x, y))
+  const metres = ([lng, lat]: LngLat): [number, number] => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT]
+  /** Whether any point the pieces keep lies within [r] metres of (x, y). */
+  const passes = (pieces: LngLat[][], x: number, y: number, r = 15): boolean =>
+    pieces.flat().map(metres).some(([px, py]) => Math.hypot(px - x, py - y) < r)
 
-  it('keeps one way round a loop: the other side is a bypass', () => {
-    // Main path north through a roundabout's west side; the other direction round its east side.
+  it('keeps one way round a roundabout: the other half is cut', () => {
+    // Main path north round a roundabout's west side; the other direction round its east side.
     const main = run([0, 0], [0, 950], [-50, 1000], [0, 1050], [0, 2000])
     const east = run([0, 950], [50, 1000], [0, 1050])
-    expect(dropBypasses([main, east])).toEqual([main])
+    const kept = dropBypasses([main, east])
+    expect(kept[0]).toEqual(main)
+    expect(passes(kept, 50, 1000)).toBe(false)
+  })
+
+  it('cuts only the roundabout from a long opposite carriageway', () => {
+    // The other direction 25 m east for 2 km, round the roundabout's east side halfway.
+    const main = run([0, 0], [0, 950], [-50, 1000], [0, 1050], [0, 2000])
+    const back = run([25, 2000], [25, 1050], [75, 1000], [25, 950], [25, 0])
+    const kept = dropBypasses([main, back])
+    expect(passes(kept, 75, 1000)).toBe(false)
+    expect(passes(kept, 25, 1500)).toBe(true)
+    expect(passes(kept, 25, 500)).toBe(true)
+  })
+
+  it('keeps a one-way pair a block apart as two strands', () => {
+    // Out along one street, back along the next one over, 150 m apart for 2 km.
+    const main = run([0, 0], [0, 3000])
+    const pair = run([0, 2500], [150, 2400], [150, 600], [0, 500])
+    expect(dropBypasses([main, pair])).toEqual([main, pair])
+  })
+
+  it('keeps an end loop that comes back where it left', () => {
+    const main = run([0, 0], [0, 2000])
+    const loop = run([0, 2000], [200, 2100], [300, 2000], [200, 1950], [10, 2000])
+    expect(dropBypasses([main, loop])).toEqual([main, loop])
   })
 
   it('keeps a branch that goes somewhere else', () => {
     const main = run([0, 0], [0, 2000])
     const branch = run([0, 1000], [800, 1000], [800, 1800])
-    expect(dropBypasses([main, branch])).toHaveLength(2)
-  })
-
-  it('keeps a long detour the main path does not run alongside', () => {
-    // Leaves and rejoins 100 m apart, but goes 2 km round: not the same way, a loop of its own.
-    const main = run([0, 0], [0, 2000])
-    const loop = run([0, 1000], [900, 1000], [900, 1100], [0, 1100])
-    expect(dropBypasses([main, loop])).toHaveLength(2)
+    expect(dropBypasses([main, branch])).toEqual([main, branch])
   })
 })
