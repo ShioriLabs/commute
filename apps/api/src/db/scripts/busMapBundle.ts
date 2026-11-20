@@ -53,6 +53,9 @@ const SNAP_COS = Math.cos((35 * Math.PI) / 180)
 const OWN_REACH_M = 500
 const OWN_TAIL = Math.ceil(OWN_REACH_M / SAMPLE_M)
 
+/** A piece within SNAP_M of what's drawn for less than this, and off it either side, is beside it, not on it. */
+const SHARED_MIN_M = 100
+
 /** Two snapped points not yet joined are bridged along the network when it has a path this short. */
 const BRIDGE_HOPS = 6
 const BRIDGE_STRETCH = 2.5
@@ -204,15 +207,16 @@ export function buildNetwork(lines: readonly BundleLine[]): Network {
         pieceId++
         continue
       }
-      let previous = -1
-      for (let i = 0; i < samples.length; i++) {
-        const [x, y] = samples[i]!
+      const heading = (i: number): [number, number] => {
         const [nx, ny] = samples[Math.min(i + 1, samples.length - 1)]!
         const [px, py] = samples[Math.max(i - 1, 0)]!
         const dl = Math.hypot(nx - px, ny - py) || 1
-        const ux = (nx - px) / dl
-        const uy = (ny - py) / dl
-
+        return [(nx - px) / dl, (ny - py) / dl]
+      }
+      /** The nearest point within SNAP_M running the same way (either way) that sample [i] may snap onto. */
+      const nearest = (i: number, othersOnly: boolean): number => {
+        const [x, y] = samples[i]!
+        const [ux, uy] = heading(i)
         let best = -1
         let bestD = SNAP_M
         const cx = Math.floor(x / SNAP_M)
@@ -221,7 +225,7 @@ export function buildNetwork(lines: readonly BundleLine[]): Network {
           for (let dy = -1; dy <= 1; dy++) {
             for (const id of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
               const p = points[id]!
-              if (p.piece === pieceId && i - p.index < OWN_TAIL) continue
+              if (p.piece === pieceId && (othersOnly || i - p.index < OWN_TAIL)) continue
               if (Math.abs(p.ux * ux + p.uy * uy) < SNAP_COS) continue
               const d = Math.hypot(p.x - x, p.y - y)
               if (d <= bestD) {
@@ -231,6 +235,31 @@ export function buildNetwork(lines: readonly BundleLine[]): Network {
             }
           }
         }
+        return best
+      }
+      // The stretches where the piece would snap onto what's drawn before it, measured first: one
+      // shorter than SHARED_MIN_M, the piece off it on both sides, is a street running close by, not
+      // the same one (the one-way pair either side of the canal from Harmoni to Pecenongan, 35 m
+      // apart for a few dozen metres): there the piece keeps its own way.
+      const sharing = samples.map((_, i) => nearest(i, true) >= 0)
+      const apart = sharing.map(() => false)
+      for (let a = 0; a < sharing.length;) {
+        if (!sharing[a]) {
+          a++
+          continue
+        }
+        let b = a
+        while (b < sharing.length && sharing[b]) b++
+        if (a > 0 && b < sharing.length && (b - a) * SAMPLE_M < SHARED_MIN_M) for (let k = a; k < b; k++) apart[k] = true
+        a = b
+      }
+
+      let previous = -1
+      for (let i = 0; i < samples.length; i++) {
+        const [x, y] = samples[i]!
+        const [ux, uy] = heading(i)
+        let best = nearest(i, false)
+        if (apart[i] && best >= 0 && points[best]!.piece !== pieceId) best = -1
         const at = best >= 0 ? best : addPoint({ x, y, ux, uy, piece: pieceId, index: i })
         if (previous >= 0 && at !== previous) {
           const known = adjacency.get(previous)?.has(at)
