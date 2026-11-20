@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, encodePolyline, type LngLat } from '../../utils/polyline'
-import { bundle, bundleOrder, dropBypasses, placeStops, roundCorners, type BundleLine } from './busMapBundle'
+import {
+  bundle,
+  bundleOrder,
+  dropBypasses,
+  loadSolver,
+  orderCost,
+  orderLinesExact,
+  orderLinesLocal,
+  placeStops,
+  roundCorners,
+  roundJunctions,
+  type BundleLine,
+  type BusMapEdge,
+  type Chain,
+  type CornerTally,
+  type PairRule
+} from './busMapBundle'
 import { networkStats } from './busMapStats'
 
 /*
@@ -23,7 +39,7 @@ const north = (fromM: number, toM: number, eastM = 0): LngLat[] => {
 const line = (code: string, kind: 'BRT' | 'AUI', ...pieces: LngLat[][]): BundleLine => ({ code, kind, pieces })
 
 /** The edges a line is drawn on, with where it sits across each (its index of how many). */
-const placesOf = (edges: ReturnType<typeof bundle>, code: string) =>
+const placesOf = (edges: BusMapEdge[], code: string) =>
   edges.filter(e => e.lines.includes(code)).map(e => ({ at: e.lines.indexOf(code), of: e.lines.length, northward: northward(e.shape) }))
 
 const northward = (shape: string): boolean => {
@@ -49,13 +65,13 @@ describe('bundleOrder', () => {
 })
 
 describe('bundle', () => {
-  it('draws a line alone as its street', () => {
-    const edges = bundle([line('1', 'BRT', north(0, 2000))])
+  it('draws a line alone as its street', async () => {
+    const edges = await bundle([line('1', 'BRT', north(0, 2000))])
     expect(edges.map(e => e.lines)).toEqual([['1']])
   })
 
-  it('lays lines sharing a street side by side, on one edge, in bundle order', () => {
-    const edges = bundle([
+  it('lays lines sharing a street side by side, on one edge, in bundle order', async () => {
+    const edges = await bundle([
       line('6B', 'BRT', north(0, 2000, 5)),
       line('1', 'BRT', north(0, 2000)),
       line('6A', 'BRT', north(2000, 0, 10))
@@ -64,22 +80,22 @@ describe('bundle', () => {
     expect(edges[0]!.lines).toEqual(['1', '6A', '6B'])
   })
 
-  it('draws a line up one carriageway and back down the other once', () => {
+  it('draws a line up one carriageway and back down the other once', async () => {
     // Koridor 1 on Thamrin: one out-and-back piece, the carriageways ~31 m apart.
-    const edges = bundle([line('1', 'BRT', [...north(0, 2000), ...north(2000, 0, 31)])])
+    const edges = await bundle([line('1', 'BRT', [...north(0, 2000), ...north(2000, 0, 31)])])
     const total = edges.reduce((m, e) => m + decodePolyline(e.shape).length, 0)
     expect(edges.every(e => e.lines.length === 1)).toBe(true)
     // About one street's worth of points, not two.
     expect(total).toBeLessThan(2000 / 4 * 1.5)
   })
 
-  it('keeps a hairpin\'s legs apart, on the roads they run on', () => {
+  it('keeps a hairpin\'s legs apart, on the roads they run on', async () => {
     // Gambir 2: north up a road, round at the halte and back down the road 40 m beside it, then east.
     const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
     const up = Array.from({ length: 20 }, (_, k) => at(0, (k + 1) * 10))
     const back = Array.from({ length: 21 }, (_, k) => at(40, 200 - k * 10))
     const east = Array.from({ length: 20 }, (_, k) => at(40 + (k + 1) * 25, 0))
-    const edges = bundle([line('2', 'BRT', [...north(-1000, 0), ...up, at(20, 215), ...back, ...east])])
+    const edges = await bundle([line('2', 'BRT', [...north(-1000, 0), ...up, at(20, 215), ...back, ...east])])
     const metres = ([lng, lat]: LngLat): [number, number] => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT]
     /** Whether a drawn segment runs north-south at [x] past y = 100. */
     const runsAt = (x: number): boolean => edges.some((e) => {
@@ -93,13 +109,13 @@ describe('bundle', () => {
     expect(runsAt(40)).toBe(true)
   })
 
-  it('keeps a street a block over its own', () => {
-    const edges = bundle([line('1', 'BRT', north(0, 2000)), line('1H', 'BRT', north(0, 2000, 200))])
+  it('keeps a street a block over its own', async () => {
+    const edges = await bundle([line('1', 'BRT', north(0, 2000)), line('1H', 'BRT', north(0, 2000, 200))])
     expect(edges).toHaveLength(2)
     expect(edges.every(e => e.lines.length === 1)).toBe(true)
   })
 
-  it('takes lines round a roundabout on its ring, as Transit draws one, never through its middle', () => {
+  it('takes lines round a roundabout on its ring, as Transit draws one, never through its middle', async () => {
     // A roundabout, schematically: a ring 80 m across, one line north to
     // south round its east side, one east to west round its north side.
     const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
@@ -115,7 +131,7 @@ describe('bundle', () => {
       Array.from({ length: 21 }, (_, k) => at(x0 + ((x1 - x0) * k) / 20, y0 + ((y1 - y0) * k) / 20))
     const southward = [...straight(0, 1000, 0, 40), ...arc(90, -90).slice(1), ...straight(0, -40, 0, -1000).slice(1)]
     const westward = [...straight(1000, 0, 40, 0), ...arc(0, 180).slice(1), ...straight(-40, 0, -1000, 0).slice(1)]
-    const edges = bundle([line('1', 'BRT', southward), line('2', 'BRT', westward)])
+    const edges = await bundle([line('1', 'BRT', southward), line('2', 'BRT', westward)])
 
     const fromMiddle = ([lng, lat]: LngLat): number => Math.hypot((lng - LNG) * M_LNG, (lat - LAT) * M_LAT)
     const points = edges.flatMap(e => decodePolyline(e.shape))
@@ -126,23 +142,23 @@ describe('bundle', () => {
     expect(onRing.length).toBeGreaterThan(6)
   })
 
-  it('puts the line turning left on the left before the turn, whatever the bundle order', () => {
+  it('puts the line turning left on the left before the turn, whatever the bundle order', async () => {
     // 1 and 2 run north together, then 1 turns east and 2 west. Bundle order alone puts 1 on the
     // left, so it would cross 2 at the split.
     const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
     const up = Array.from({ length: 21 }, (_, k) => at(0, k * 50))
     const east = Array.from({ length: 16 }, (_, k) => at((k + 1) * 50, 1000))
     const west = Array.from({ length: 16 }, (_, k) => at(-(k + 1) * 50, 1000))
-    const edges = bundle([line('1', 'BRT', [...up, ...east]), line('2', 'BRT', [...up, ...west])])
+    const edges = await bundle([line('1', 'BRT', [...up, ...east]), line('2', 'BRT', [...up, ...west])])
     const stats = networkStats(edges)
     expect(stats.splitCrossings).toBe(0)
     expect(stats.sameCrossings).toBe(0)
   })
 
-  it('keeps every line on its side of the street where a line joins', () => {
+  it('keeps every line on its side of the street where a line joins', async () => {
     // 1 and 6A run the whole street; 9D joins from the east halfway up.
     const joining: LngLat[] = [[LNG + 800 / M_LNG, LAT + 1000 / M_LAT], ...north(1000, 2000, 8)]
-    const edges = bundle([
+    const edges = await bundle([
       line('1', 'BRT', north(0, 2000)),
       line('6A', 'BRT', north(2000, 0, 6)),
       line('9D', 'BRT', joining)
@@ -152,6 +168,56 @@ describe('bundle', () => {
     // 1 stays west of 6A on every shared edge, before and after 9D joins.
     for (let i = 0; i < Math.min(one.length, sixA.length); i++) expect(one[i]).toBeLessThan(sixA[i]!)
     expect(edges.some(e => e.lines.length === 3)).toBe(true)
+  })
+
+  it('merges a joining line in on its own side, as Transit\'s penalty figure has it', async () => {
+    // 1 and 2 run north; 3 comes in from the west and joins them. Bundle order would put 3 on the
+    // east, crossing both on the way in ("merging lines crossing"), or between them ("merging in
+    // between"); drawn right it comes in on the west and crosses nothing ("no issues").
+    const joining: LngLat[] = [[LNG - 800 / M_LNG, LAT + 1000 / M_LAT], ...north(1000, 2000, -6)]
+    const edges = await bundle([
+      line('1', 'BRT', north(0, 2000)),
+      line('2', 'BRT', north(0, 2000, 6)),
+      line('3', 'BRT', joining)
+    ])
+    const stats = networkStats(edges)
+    expect(stats.splitCrossings).toBe(0)
+    expect(stats.sameCrossings).toBe(0)
+    const three = placesOf(edges, '3').filter(p => p.of === 3).map(fromWest)
+    expect(three.length).toBeGreaterThan(0)
+    expect(three.every(at => at === 0)).toBe(true)
+  })
+})
+
+describe('line order', () => {
+  /*
+   * Two chains of A and B meeting at a node, A and B going straight on from one
+   * to the other; at each chain's far end they part, the way that wants B on
+   * the left. Turning either chain alone crosses them at the middle node (4) to
+   * save one split (1); only turning both at once gets to nothing.
+   */
+  const list: Chain[] = [
+    { path: [0, 1], lines: new Set(['A', 'B']) },
+    { path: [1, 2], lines: new Set(['A', 'B']) }
+  ]
+  const rules: PairRule[] = [
+    { a: 'A', b: 'B', inChain: 0, inAtStart: false, outChain: 1, outAtStart: true, weight: 4 },
+    { a: 'A', b: 'B', inChain: 0, inAtStart: true, aGoesLeft: true, weight: 1 },
+    { a: 'A', b: 'B', inChain: 1, inAtStart: false, aGoesLeft: false, weight: 1 }
+  ]
+  const rank = new Map([['A', 0], ['B', 1]])
+
+  it('finds by solving what moving one line at a time cannot', async () => {
+    const local = orderLinesLocal(list, rules, rank)
+    expect(orderCost(rules, local)).toBe(2)
+    const exact = orderLinesExact(list, rules, rank, await loadSolver())
+    expect(orderCost(rules, exact)).toBe(0)
+    expect(exact).toEqual([['B', 'A'], ['B', 'A']])
+  })
+
+  it('keeps bundle order where no crossing asks otherwise', async () => {
+    const calm: PairRule[] = [rules[0]!]
+    expect(orderLinesExact(list, calm, rank, await loadSolver())).toEqual([['A', 'B'], ['A', 'B']])
   })
 })
 
@@ -189,6 +255,78 @@ describe('roundCorners', () => {
   it('leaves a gentle bend as it is', () => {
     const gentle = [at(0, 0), at(0, 500), at(50, 1000)]
     expect(roundCorners(gentle, 3)).toHaveLength(3)
+  })
+
+  it('turns a chamfered corner on one circle at the full radius, as Transit\'s corner figure does', () => {
+    // North, then 15 m north-east, then east: two 45° cuts, each too short a leg apart for 5 lines.
+    const cut = 15 / Math.SQRT2
+    const chamfer = [at(0, -500), at(0, 0), at(cut, cut), at(500, cut)]
+    const tally: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
+    const round = roundCorners(chamfer, 5, tally).map(metres)
+    expect(tally.eased).toBe(1)
+    expect(tally.squeezed).toBe(0)
+    // The two legs meet at (0, cut); the circle of 15 + 14 × 5 = 85 m sits south-east of it.
+    const r = 85
+    const [cx, cy] = [r, cut - r]
+    for (const [x, y] of round.slice(1, -1)) expect(Math.hypot(x - cx, y - cy)).toBeCloseTo(r, 0)
+  })
+
+  it('straightens a short jog rather than turning twice', () => {
+    const jog = [at(0, 0), at(0, 500), at(5, 505), at(5, 1000)]
+    expect(roundCorners(jog, 5)).toHaveLength(2)
+  })
+})
+
+describe('roundJunctions', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  const metres = ([lng, lat]: LngLat): [number, number] => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT]
+
+  it('turns two edges meeting at a corner on one arc, and brings the node\'s other edges to its middle', () => {
+    // 1 north up one edge and east along the next; 2 carries on north from the corner.
+    const node = at(0, 500)
+    const tally: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
+    const [up, east, on, stub] = roundJunctions([
+      { path: [at(0, 0), node], lines: ['1'] },
+      { path: [node, at(500, 500)], lines: ['1'] },
+      { path: [node, at(0, 1000)], lines: ['2'] },
+      // An edge of no length there, as the network leaves one now and then: it goes with the node.
+      { path: [node, node], lines: ['1'] }
+    ], tally).map(p => p.map(metres))
+    expect(tally.junctions).toBe(1)
+    // Both halves on the circle of 15 + 14 = 29 m, centred south-east of the corner.
+    const r = 29
+    for (const [x, y] of [...up!.slice(1), ...east!.slice(0, -1)]) expect(Math.hypot(x - r, y - (500 - r))).toBeCloseTo(r, 0)
+    // The three still meet, at the arc's middle.
+    const middle = up![up!.length - 1]!
+    expect(east![0]![0]).toBeCloseTo(middle[0], 6)
+    expect(east![0]![1]).toBeCloseTo(middle[1], 6)
+    expect(on![0]![0]).toBeCloseTo(middle[0], 6)
+    expect(on![0]![1]).toBeCloseTo(middle[1], 6)
+    for (const [x, y] of stub!) {
+      expect(x).toBeCloseTo(middle[0], 6)
+      expect(y).toBeCloseTo(middle[1], 6)
+    }
+  })
+
+  it('leaves a node a line goes straight through where it is', () => {
+    // 1 straight up through the node, 13E coming up with it and turning east: rounding 13E's corner
+    // would move the node off 1's street.
+    const node = at(0, 500)
+    const edges = [
+      { path: [at(0, 0), node], lines: ['1', '13E'] },
+      { path: [node, at(0, 1000)], lines: ['1'] },
+      { path: [node, at(500, 500)], lines: ['13E'] }
+    ]
+    const tally: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
+    const out = roundJunctions(edges, tally)
+    expect(tally.junctions).toBe(0)
+    out.forEach((path, e) => {
+      expect(path).toHaveLength(edges[e]!.path.length)
+      path.forEach(([lng, lat], i) => {
+        expect(lng).toBeCloseTo(edges[e]!.path[i]![0], 9)
+        expect(lat).toBeCloseTo(edges[e]!.path[i]![1], 9)
+      })
+    })
   })
 })
 

@@ -1,3 +1,4 @@
+import highsLoader, { type LegacyHighs } from 'highs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 
 /*
@@ -247,7 +248,7 @@ export function buildNetwork(lines: readonly BundleLine[]): Network {
 
 const sameLines = (a: Set<string>, b: Set<string>): boolean => a.size === b.size && [...a].every(c => b.has(c))
 
-interface Chain {
+export interface Chain {
   /** Point ids, end to end. */
   path: number[]
   lines: Set<string>
@@ -491,17 +492,22 @@ export function popBubbles(network: Network, list: Chain[]): boolean {
  *     to the left having come in on the right of the other: a crossing the
  *     split itself forces only if nothing else is to give.
  *
- * Every chain starts in bundle order and each line in turn is moved to wherever
- * on its chain costs the two nodes at its ends least, until no move helps. Only
- * a strictly better place is taken, so the result is the same run to run. A line
- * turning left then comes to the left of the others before the turn, as Transit
- * draws it, without a rule saying so.
+ * These score Transit's own four cases (its technical follow-up's penalty
+ * figure) as it marks them: a pair crossing is one SAME_CROSSING; a line merging
+ * across two lines, two SPLIT_CROSSINGs; one merging in between, one; one
+ * merging on its own side, none. A line turning left then comes to the left of
+ * the others before the turn, as Transit draws it, without a rule saying so.
+ *
+ * The order is solved for exactly (orderLinesExact): one crossing put right can
+ * force another elsewhere, so it is the whole network's least cost, as Transit
+ * solves it, by integer linear programming. orderLinesLocal, which moves one
+ * line at a time while that helps, is kept as its fallback.
  */
 const SAME_CROSSING = 4
 const SPLIT_CROSSING = 1
 const ORDER_PASSES = 30
 
-interface PairRule {
+export interface PairRule {
   /** The two lines, by code. */
   a: string
   b: string
@@ -516,10 +522,9 @@ interface PairRule {
   weight: number
 }
 
-/** Each chain's lines, left to right along it, ordered to cross as little as they can. */
-export function orderLines(network: Network, list: readonly Chain[], rank: ReadonlyMap<string, number>): string[][] {
+/** The pairs of lines passing through each node, and what crossing there costs (see above). */
+export function pairRules(network: Network, list: readonly Chain[]): PairRule[] {
   const { points } = network
-  const orders = list.map(chain => [...chain.lines].sort((a, b) => rank.get(a)! - rank.get(b)!))
 
   // Where each chain's ends are, and the way it leaves each, over its first ~30 m.
   interface End { chain: number, atStart: boolean, dx: number, dy: number }
@@ -543,18 +548,7 @@ export function orderLines(network: Network, list: readonly Chain[], rank: Reado
     }
   })
 
-  // The rules, kept by chain and line, for the moves that can change them.
-  const rulesOf = new Map<string, PairRule[]>()
-  const file = (rule: PairRule, chains: number[]): void => {
-    for (const c of chains) {
-      for (const line of [rule.a, rule.b]) {
-        const key = `${c}|${line}`
-        const list = rulesOf.get(key)
-        if (list) list.push(rule)
-        else rulesOf.set(key, [rule])
-      }
-    }
-  }
+  const rules: PairRule[] = []
   for (const here of ends.values()) {
     const endsOf = new Map<string, End[]>()
     for (const end of here) {
@@ -568,7 +562,7 @@ export function orderLines(network: Network, list: readonly Chain[], rank: Reado
         const [b, [b1, b2]] = through[j]!
         const shared = [a1!, a2!].filter(e => e === b1 || e === b2)
         if (shared.length === 2) {
-          file({ a, b, inChain: a1!.chain, inAtStart: a1!.atStart, outChain: a2!.chain, outAtStart: a2!.atStart, weight: SAME_CROSSING }, [a1!.chain, a2!.chain])
+          rules.push({ a, b, inChain: a1!.chain, inAtStart: a1!.atStart, outChain: a2!.chain, outAtStart: a2!.atStart, weight: SAME_CROSSING })
         } else if (shared.length === 1) {
           const into = shared[0]!
           const outA = into === a1 ? a2! : a1!
@@ -577,31 +571,62 @@ export function orderLines(network: Network, list: readonly Chain[], rank: Reado
           const hx = -into.dx
           const hy = -into.dy
           const turn = (o: End): number => Math.atan2(hx * o.dy - hy * o.dx, hx * o.dx + hy * o.dy)
-          file({ a, b, inChain: into.chain, inAtStart: into.atStart, aGoesLeft: turn(outA) > turn(outB), weight: SPLIT_CROSSING }, [into.chain])
+          rules.push({ a, b, inChain: into.chain, inAtStart: into.atStart, aGoesLeft: turn(outA) > turn(outB), weight: SPLIT_CROSSING })
         }
       }
     }
   }
+  return rules
+}
 
-  const position = orders.map(order => new Map(order.map((line, i) => [line, i])))
+/** The chains a rule reads: both a pair's, or the one a split comes in on. */
+const chainsOf = (rule: PairRule): number[] => (rule.outChain !== undefined ? [rule.inChain, rule.outChain] : [rule.inChain])
+
+/** Whether [rule] crosses with each chain's lines placed at [position]. */
+function crosses(rule: PairRule, position: readonly ReadonlyMap<string, number>[]): boolean {
+  const before = (chain: number, a: string, b: string): boolean => position[chain]!.get(a)! < position[chain]!.get(b)!
   // Left to right as seen coming in to the node along a chain, or going on away from it.
-  const leftComingIn = (chain: number, atStart: boolean, a: string, b: string): boolean => {
-    const pa = position[chain]!.get(a)!
-    const pb = position[chain]!.get(b)!
-    return atStart ? pa > pb : pa < pb
+  const aLeft = rule.inAtStart ? !before(rule.inChain, rule.a, rule.b) : before(rule.inChain, rule.a, rule.b)
+  if (rule.outChain === undefined) return aLeft !== rule.aGoesLeft
+  const aLeftOn = rule.outAtStart ? before(rule.outChain, rule.a, rule.b) : !before(rule.outChain, rule.a, rule.b)
+  return aLeft !== aLeftOn
+}
+
+const positionsOf = (orders: readonly string[][]): Map<string, number>[] => orders.map(order => new Map(order.map((line, i) => [line, i])))
+
+/** What [orders] (each chain's lines, left to right) cost under [rules]. */
+export function orderCost(rules: readonly PairRule[], orders: readonly string[][]): number {
+  const position = positionsOf(orders)
+  return rules.reduce((sum, rule) => sum + (crosses(rule, position) ? rule.weight : 0), 0)
+}
+
+/** Each chain's lines in bundle order: where both orderings start. */
+const inBundleOrder = (list: readonly Chain[], rank: ReadonlyMap<string, number>): string[][] =>
+  list.map(chain => [...chain.lines].sort((a, b) => rank.get(a)! - rank.get(b)!))
+
+/**
+ * Each chain's lines, left to right along it, by local search: every chain in
+ * bundle order, then each line in turn moved to wherever on its chain costs the
+ * nodes at its ends least, until no move helps. Only a strictly better place is
+ * taken, so the result is the same run to run. It can settle where only two
+ * lines moving at once would help: orderLinesExact's fallback.
+ */
+export function orderLinesLocal(list: readonly Chain[], rules: readonly PairRule[], rank: ReadonlyMap<string, number>): string[][] {
+  const orders = inBundleOrder(list, rank)
+  // The rules, kept by chain and line, for the moves that can change them.
+  const rulesOf = new Map<string, PairRule[]>()
+  for (const rule of rules) {
+    for (const c of chainsOf(rule)) {
+      for (const line of [rule.a, rule.b]) {
+        const key = `${c}|${line}`
+        const here = rulesOf.get(key)
+        if (here) here.push(rule)
+        else rulesOf.set(key, [rule])
+      }
+    }
   }
-  const leftGoingOn = (chain: number, atStart: boolean, a: string, b: string): boolean => {
-    const pa = position[chain]!.get(a)!
-    const pb = position[chain]!.get(b)!
-    return atStart ? pa < pb : pa > pb
-  }
-  const cost = (rule: PairRule): number => {
-    const aLeft = leftComingIn(rule.inChain, rule.inAtStart, rule.a, rule.b)
-    const crossed = rule.outChain !== undefined
-      ? aLeft !== leftGoingOn(rule.outChain, rule.outAtStart!, rule.a, rule.b)
-      : aLeft !== rule.aGoesLeft
-    return crossed ? rule.weight : 0
-  }
+  const position = positionsOf(orders)
+  const cost = (rule: PairRule): number => (crosses(rule, position) ? rule.weight : 0)
   const place = (c: number, order: string[]): void => {
     orders[c] = order
     position[c] = new Map(order.map((line, i) => [line, i]))
@@ -637,8 +662,199 @@ export function orderLines(network: Network, list: readonly Chain[], rank: Reado
   return orders
 }
 
+/** How the ordering went: crossings' cost by local search and solved exactly, and how often the solver gave up. */
+export interface OrderReport {
+  local: number
+  exact: number
+  components: number
+  fallbacks: number
+}
+
+/** A component the solver may take this long over before its local order stands. */
+const SOLVE_SECONDS = 10
+
+/**
+ * Each chain's lines, left to right along it, at the least cost the rules allow
+ * across the whole network: an integer linear program, solved by HiGHS, for
+ * each set of chains the rules tie together.
+ *
+ * On each chain, a binary per pair of its lines (bundle order first): 1 when the
+ * earlier is left of the later, the other way round its complement, and every
+ * three kept consistent (0 <= x_ij + x_jk - x_ik <= 1), so the pairs are one
+ * order. A split costs its weight when its pair is the wrong way round coming
+ * in; a pair crossing costs its weight through a binary forced to 1 when its two
+ * chains disagree. Each pair out of bundle order costs 1, the crossings scaled
+ * above all of those together: among equally good orders the one nearest bundle
+ * order wins, so a regenerated file changes only where the network did.
+ */
+export function orderLinesExact(
+  list: readonly Chain[],
+  rules: readonly PairRule[],
+  rank: ReadonlyMap<string, number>,
+  highs: LegacyHighs,
+  report?: OrderReport
+): string[][] {
+  const orders = inBundleOrder(list, rank)
+  // Chains a pair crossing ties together are solved together.
+  const parent = list.map((_, i) => i)
+  const find = (i: number): number => {
+    let at = i
+    while (parent[at] !== at) {
+      parent[at] = parent[parent[at]!]!
+      at = parent[at]!
+    }
+    return at
+  }
+  for (const rule of rules) {
+    if (rule.outChain !== undefined) parent[find(rule.outChain)] = find(rule.inChain)
+  }
+  const groups = new Map<number, PairRule[]>()
+  for (const rule of rules) {
+    const root = find(rule.inChain)
+    const here = groups.get(root)
+    if (here) here.push(rule)
+    else groups.set(root, [rule])
+  }
+
+  let local: string[][] | undefined
+  for (const group of groups.values()) {
+    const here = [...new Set(group.flatMap(chainsOf))].sort((a, b) => a - b)
+    const solved = solveOrders(here, orders, group, highs)
+    if (report) report.components++
+    if (solved) {
+      for (const [c, order] of solved) orders[c] = order
+      continue
+    }
+    if (report) report.fallbacks++
+    local ??= orderLinesLocal(list, rules, rank)
+    for (const c of here) orders[c] = local[c]!
+  }
+  return orders
+}
+
+/** A term of the program: a pair's binary, or its complement (1 - x). */
+interface Literal {
+  name: string
+  positive: boolean
+}
+
+/** One component's orders, by chain, solved from bundle-order [orders]; null when HiGHS doesn't prove one. */
+function solveOrders(
+  here: readonly number[],
+  orders: readonly string[][],
+  rules: readonly PairRule[],
+  highs: LegacyHighs
+): Map<number, string[]> | null {
+  const indexOf = new Map(here.map(c => [c, new Map(orders[c]!.map((line, i) => [line, i]))]))
+  const pair = (c: number, i: number, j: number): string => `x${c}_${i}_${j}`
+  // [a] left of [b] on chain [c].
+  const before = (c: number, a: string, b: string): Literal => {
+    const i = indexOf.get(c)!.get(a)!
+    const j = indexOf.get(c)!.get(b)!
+    return i < j ? { name: pair(c, i, j), positive: true } : { name: pair(c, j, i), positive: false }
+  }
+  const not = (l: Literal): Literal => ({ ...l, positive: !l.positive })
+
+  const binaries: string[] = []
+  const objective = new Map<string, number>()
+  const cost = (name: string, weight: number): void => {
+    objective.set(name, (objective.get(name) ?? 0) + weight)
+  }
+  // A literal's weight: on x, or on 1 - x (the constant left out).
+  const costOf = (l: Literal, weight: number): void => cost(l.name, l.positive ? weight : -weight)
+  const rows: string[] = []
+  // sum(terms) >= bound, a literal's constant moved across.
+  const atLeast = (terms: [Literal | string, number][], bound: number): void => {
+    let rhs = bound
+    const parts: string[] = []
+    for (const [term, k] of terms) {
+      if (typeof term === 'string') {
+        parts.push(`${k >= 0 ? '+' : '-'} ${Math.abs(k)} ${term}`)
+        continue
+      }
+      if (!term.positive) rhs -= k
+      const coef = term.positive ? k : -k
+      parts.push(`${coef >= 0 ? '+' : '-'} ${Math.abs(coef)} ${term.name}`)
+    }
+    rows.push(`${parts.join(' ')} >= ${rhs}`)
+  }
+
+  let pairs = 0
+  for (const c of here) {
+    const n = orders[c]!.length
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        binaries.push(pair(c, i, j))
+        pairs++
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        for (let k = j + 1; k < n; k++) {
+          const ij = { name: pair(c, i, j), positive: true }
+          const jk = { name: pair(c, j, k), positive: true }
+          const ik = { name: pair(c, i, k), positive: true }
+          atLeast([[ij, 1], [jk, 1], [ik, -1]], 0)
+          atLeast([[ij, -1], [jk, -1], [ik, 1]], -1)
+        }
+      }
+    }
+  }
+  // Every crossing outweighs all the tie-breaks together.
+  const scale = pairs + 1
+  for (const name of binaries) cost(name, -1)
+  rules.forEach((rule, r) => {
+    const ab = before(rule.inChain, rule.a, rule.b)
+    const aLeft = rule.inAtStart ? not(ab) : ab
+    const weight = rule.weight * scale
+    if (rule.outChain === undefined) {
+      costOf(rule.aGoesLeft ? not(aLeft) : aLeft, weight)
+      return
+    }
+    const on = before(rule.outChain, rule.a, rule.b)
+    const aLeftOn = rule.outAtStart! ? on : not(on)
+    const crossed = `y${r}`
+    binaries.push(crossed)
+    cost(crossed, weight)
+    atLeast([[crossed, 1], [aLeft, -1], [aLeftOn, 1]], 0)
+    atLeast([[crossed, 1], [aLeftOn, -1], [aLeft, 1]], 0)
+  })
+
+  const terms = [...objective].filter(([, k]) => k !== 0).map(([name, k]) => `${k >= 0 ? '+' : '-'} ${Math.abs(k)} ${name}`)
+  const lp = [
+    'Minimize',
+    ` obj: ${terms.length > 0 ? terms.join('\n  ') : `0 ${binaries[0]}`}`,
+    'Subject To',
+    ...rows.map((row, i) => ` r${i}: ${row}`),
+    'Binary',
+    ...binaries.map(name => ` ${name}`),
+    'End',
+    ''
+  ].join('\n')
+  const solution = highs.solve(lp, { time_limit: SOLVE_SECONDS })
+  if (solution.Status !== 'Optimal') return null
+
+  const out = new Map<number, string[]>()
+  for (const c of here) {
+    const lines = orders[c]!
+    // A line's place: how many of the chain's others it is left of, most first.
+    const leftOf = lines.map((_, i) => lines.reduce((sum, __, j) => {
+      if (i === j) return sum
+      const l = i < j ? { name: pair(c, i, j), positive: true } : { name: pair(c, j, i), positive: false }
+      const x = solution.Columns[l.name]?.Primal ?? 0
+      return sum + ((l.positive ? x : 1 - x) > 0.5 ? 1 : 0)
+    }, 0))
+    out.set(c, lines.map((line, i) => ({ line, left: leftOf[i]! })).sort((p, q) => q.left - p.left).map(p => p.line))
+  }
+  return out
+}
+
+let solver: Promise<LegacyHighs> | undefined
+/** HiGHS, loaded once. */
+export const loadSolver = (): Promise<LegacyHighs> => (solver ??= highsLoader())
+
 /** Peta Bus's lines as the edges of one network, each with its lines in order across it. */
-export function bundle(lines: readonly BundleLine[]): BusMapEdge[] {
+export async function bundle(lines: readonly BundleLine[], report?: OrderReport): Promise<BusMapEdge[]> {
   const network = buildNetwork(lines)
   let list = chains(network)
   for (let pass = 0; pass < 6; pass++) {
@@ -651,7 +867,18 @@ export function bundle(lines: readonly BundleLine[]): BusMapEdge[] {
   orient(network, list)
   const order = bundleOrder(lines)
   const rank = new Map(order.map((code, i) => [code, i]))
-  const orders = orderLines(network, list, rank)
+  const rules = pairRules(network, list)
+  const localOrders = orderLinesLocal(list, rules, rank)
+  const exactOrders = orderLinesExact(list, rules, rank, await loadSolver(), report)
+  const local = orderCost(rules, localOrders)
+  const exact = orderCost(rules, exactOrders)
+  if (report) {
+    report.local += local
+    report.exact += exact
+  }
+  // Exact can't do worse; if it ever reads so, the program is wrong, and the local order stands.
+  if (exact > local) console.warn(`  line order: solved ${exact} against local search's ${local}; keeping local`)
+  const orders = exact > local ? localOrders : exactOrders
   return list
     .map((chain, i) => {
       const coords = chain.path.map((id) => {
@@ -726,8 +953,15 @@ export function placeStops(edges: readonly BusMapEdge[], stops: readonly StopIn[
  * is an arc too, so every line of a bundle turns cleanly round the same centre.
  * The radius grows with the bundle (ARC_BASE_M, then ARC_PER_LINE_M a line, the
  * width a line takes around z14, where bundles are drawn), so the inner lines
- * of a wide one don't fold over themselves on a turn. Where the legs either side
- * of a corner are too short for it, it is as wide as they allow.
+ * of a wide one don't fold over themselves on a turn.
+ *
+ * The radius is kept by simplifying the shape, as Transit's follow-up does
+ * (easeCorners): a corner the roads draw as a few short cuts (a chamfer, a
+ * tight curve sampled every few metres) is one bend, and is turned on one
+ * circle between its two long legs, at the full radius, where rounding each cut
+ * on its own would leave arcs a few metres wide and the bundle bunched on the
+ * inside of the bend. A corner where edges meet is turned too (roundJunctions).
+ * Only where neither can be done is a corner as wide as its legs allow.
  */
 const ARC_BASE_M = 15
 const ARC_PER_LINE_M = 14
@@ -735,49 +969,295 @@ const ARC_MIN_TURN = (20 * Math.PI) / 180
 /** Sharper than this is a hairpin (a U-turn, a spike where a line doubles back): rounded, it would loop. */
 const ARC_MAX_TURN = (120 * Math.PI) / 180
 const ARC_STEP = (15 * Math.PI) / 180
+/** A jog sideways (a lane shift, a kerb build-out) of up to this is straightened rather than turned twice. */
+const JOG_M = 15
+/** A corner may run this much short of its tangent before it counts as squeezed. */
+const FIT_SLACK_M = 0.5
 
-/** [path] with each corner turning more than ARC_MIN_TURN rounded off for a bundle of [lines]; its ends stay put. */
-export function roundCorners(path: readonly LngLat[], lines: number): LngLat[] {
+/**
+ * How the corners went: eased (cuts merged into one bend), turned at a node,
+ * left narrower than their radius, and of those, folded: so tight that the
+ * innermost line of a bundle of two or more turns on less than nothing (the
+ * bundle's half-width at z14, where it is drawn widest for its streets).
+ */
+export interface CornerTally {
+  eased: number
+  junctions: number
+  squeezed: number
+  folded: number
+}
+
+/** The radius a bundle of [lines] turns on. */
+const arcRadius = (lines: number): number => ARC_BASE_M + ARC_PER_LINE_M * lines
+
+/** Tallies a corner of [turn] rounded with [tangent] where it wanted [wanted], for a bundle of [lines]. */
+function tallyCorner(tally: CornerTally | undefined, turn: number, wanted: number, tangent: number, lines: number): void {
+  if (!tally || wanted <= tangent + FIT_SLACK_M) return
+  tally.squeezed++
+  if (lines >= 2 && tangent / Math.tan(Math.abs(turn) / 2) < (lines * ARC_PER_LINE_M) / 2) tally.folded++
+}
+
+const toXYs = (path: readonly LngLat[]): XY[] => path.map(([lng, lat]) => [lng * KX, lat * KY])
+const toLngLats = (xy: readonly XY[]): LngLat[] => xy.map(([x, y]) => [x / KX, y / KY] as LngLat)
+
+/** The turn at [p] coming from [a] and going on to [b], radians, left positive. */
+function turnAt(a: XY, p: XY, b: XY): number {
+  const ux = p[0] - a[0]
+  const uy = p[1] - a[1]
+  const vx = b[0] - p[0]
+  const vy = b[1] - p[1]
+  return Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy)
+}
+
+/** What a corner of [turn] takes of each leg to turn on [radius]: none when it isn't rounded (a hairpin). */
+const tangentFor = (turn: number, radius: number): number => (Math.abs(turn) > ARC_MAX_TURN ? 0 : radius * Math.tan(Math.abs(turn) / 2))
+
+/** How far [p] is from the segment [a]..[b]. */
+function distanceTo([px, py]: XY, [ax, ay]: XY, [bx, by]: XY): number {
+  const dx = bx - ax
+  const dy = by - ay
+  const l2 = dx * dx + dy * dy || 1
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2))
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+}
+
+/** How far each leg of [xy] falls short of what the corners at its two ends take; a path end takes nothing. */
+function shortfalls(xy: readonly XY[], radius: number): number[] {
+  const need = xy.map((p, i) => (i === 0 || i === xy.length - 1 ? 0 : tangentFor(turnAt(xy[i - 1]!, p, xy[i + 1]!), radius)))
+  return xy.slice(1).map((p, i) => need[i]! + need[i + 1]! - Math.hypot(p[0] - xy[i]![0], p[1] - xy[i]![1]))
+}
+
+/**
+ * [path] simplified until each corner fits its radius for a bundle of [lines]:
+ * while a leg is shorter than the corners at its ends take, worst first, its two
+ * corners become one. Turning the same way, they are replaced by where the legs
+ * either side meet (the chamfer's corner, rounded whole). Turning opposite ways,
+ * a jog of under JOG_M, the leg goes and the legs either side are joined
+ * straight. Its ends stay put, a hairpin stays as it is, and a corner is not
+ * moved further than its radius from where the road turns; a leg that can't be
+ * fixed so is left for filletCorners to squeeze.
+ */
+export function easeCorners(path: readonly LngLat[], lines: number, tally?: CornerTally): LngLat[] {
+  if (path.length < 4) return [...path]
+  const radius = arcRadius(lines)
+  const xy = toXYs(path)
+  const stuck = new Set<string>()
+  const keyOf = (i: number): string => `${xy[i]![0]},${xy[i]![1]}|${xy[i + 1]![0]},${xy[i + 1]![1]}`
+  for (let guard = path.length * 2; guard > 0; guard--) {
+    const short = shortfalls(xy, radius)
+    let worst = -1
+    for (let i = 0; i < short.length; i++) {
+      if (short[i]! > FIT_SLACK_M && !stuck.has(keyOf(i)) && (worst < 0 || short[i]! > short[worst]!)) worst = i
+    }
+    if (worst < 0) break
+    // The leg xy[worst]..xy[worst + 1]; both its corners must be inside the path to merge.
+    const merged = worst >= 1 && worst + 2 <= xy.length - 1 ? mergeLeg(xy, worst, radius) : null
+    if (!merged) {
+      stuck.add(keyOf(worst))
+      continue
+    }
+    xy.splice(worst, 2, ...merged)
+    if (tally) tally.eased++
+  }
+  return toLngLats(xy)
+}
+
+/** The two corners at the ends of leg [i] of [xy] as one: the points to put in their place, or null. */
+function mergeLeg(xy: readonly XY[], i: number, radius: number): XY[] | null {
+  const a = xy[i - 1]!
+  const p = xy[i]!
+  const q = xy[i + 1]!
+  const b = xy[i + 2]!
+  const first = turnAt(a, p, q)
+  const second = turnAt(p, q, b)
+  if (Math.abs(first) > ARC_MAX_TURN || Math.abs(second) > ARC_MAX_TURN) return null
+  if (Math.sign(first) !== Math.sign(second)) {
+    // A jog: straight from a to b, when neither corner is far off that line.
+    if (distanceTo(p, a, b) > JOG_M || distanceTo(q, a, b) > JOG_M) return null
+    return []
+  }
+  if (Math.abs(first + second) > ARC_MAX_TURN) return null
+  // Where the leg in (a -> p) and the leg out (q -> b) meet: ahead of p, behind q.
+  const ux = p[0] - a[0]
+  const uy = p[1] - a[1]
+  const vx = b[0] - q[0]
+  const vy = b[1] - q[1]
+  const cross = ux * vy - uy * vx
+  if (cross === 0) return null
+  const wx = q[0] - p[0]
+  const wy = q[1] - p[1]
+  const s = (wx * vy - wy * vx) / cross
+  const t = (ux * wy - uy * wx) / cross
+  if (s < 0 || t < 0) return null
+  const meet: XY = [p[0] + s * ux, p[1] + s * uy]
+  if (distanceTo(meet, p, q) > radius) return null
+  return [meet]
+}
+
+/**
+ * The arc turning [turn] at corner [p], coming in along ([ux], [uy]) (a unit
+ * vector), from [tangent] before p to as far after it, in [steps] even steps.
+ */
+function arcPoints(p: XY, ux: number, uy: number, turn: number, tangent: number, steps: number): XY[] {
+  const r = tangent / Math.tan(Math.abs(turn) / 2)
+  const sx = p[0] - ux * tangent
+  const sy = p[1] - uy * tangent
+  const left = turn > 0 ? 1 : -1
+  const cx = sx - uy * r * left
+  const cy = sy + ux * r * left
+  const start = Math.atan2(sy - cy, sx - cx)
+  const out: XY[] = []
+  for (let k = 0; k <= steps; k++) {
+    const angle = start + left * Math.abs(turn) * (k / steps)
+    out.push([cx + r * Math.cos(angle), cy + r * Math.sin(angle)])
+  }
+  return out
+}
+
+/** What a corner filletCorners rounds takes of each leg for [radius]: none for one it leaves (gentle, or a hairpin). */
+const roundedNeed = (turn: number, radius: number): number =>
+  Math.abs(turn) < ARC_MIN_TURN || Math.abs(turn) > ARC_MAX_TURN ? 0 : radius * Math.tan(Math.abs(turn) / 2)
+
+/**
+ * How much of a leg of [length] a corner wanting [need] gets, the corner at its
+ * other end wanting [other]: all it wants when both fit, else the leg shared in
+ * proportion, so both are short of their radius by the same part of it.
+ */
+const share = (need: number, other: number, length: number): number =>
+  need + other <= length ? need : (length * need) / (need + other)
+
+/**
+ * [path] with each corner turning between ARC_MIN_TURN and ARC_MAX_TURN rounded
+ * off for a bundle of [lines]; its ends stay put. Each leg goes to the corners at
+ * its two ends (share), all of it to one whose neighbour isn't rounded (a path
+ * end, an arc's own steps); a corner the legs leave short of its tangent is as
+ * wide as they allow, and is tallied as squeezed.
+ */
+export function filletCorners(path: readonly LngLat[], lines: number, tally?: CornerTally): LngLat[] {
   if (path.length < 3) return [...path]
-  const radius = ARC_BASE_M + ARC_PER_LINE_M * lines
-  const xy = path.map(([lng, lat]) => [lng * KX, lat * KY] as [number, number])
-  const out: [number, number][] = [xy[0]!]
-  // How much of each leg the corners at its two ends may take: half, or all of it at the path's ends.
+  const radius = arcRadius(lines)
+  const xy = toXYs(path)
+  const out: XY[] = [xy[0]!]
   const leg = (i: number): number => Math.hypot(xy[i + 1]![0] - xy[i]![0], xy[i + 1]![1] - xy[i]![1])
+  const need = xy.map((p, i) => (i === 0 || i === xy.length - 1 ? 0 : roundedNeed(turnAt(xy[i - 1]!, p, xy[i + 1]!), radius)))
   for (let i = 1; i < xy.length - 1; i++) {
-    const [ax, ay] = xy[i - 1]!
-    const [px, py] = xy[i]!
-    const [bx, by] = xy[i + 1]!
+    const p = xy[i]!
     const inLen = leg(i - 1)
     const outLen = leg(i)
     if (inLen === 0 || outLen === 0) continue
-    const ux = (px - ax) / inLen
-    const uy = (py - ay) / inLen
-    const vx = (bx - px) / outLen
-    const vy = (by - py) / outLen
-    const turn = Math.acos(Math.max(-1, Math.min(1, ux * vx + uy * vy)))
-    if (turn < ARC_MIN_TURN || turn > ARC_MAX_TURN) {
-      out.push([px, py])
+    const turn = turnAt(xy[i - 1]!, p, xy[i + 1]!)
+    if (Math.abs(turn) < ARC_MIN_TURN || Math.abs(turn) > ARC_MAX_TURN) {
+      out.push(p)
       continue
     }
-    const room = Math.min(i === 1 ? inLen : inLen / 2, i === xy.length - 2 ? outLen : outLen / 2)
-    const tangent = Math.min(radius * Math.tan(turn / 2), room)
-    const r = tangent / Math.tan(turn / 2)
-    // The arc from where it leaves the incoming leg to where it meets the outgoing one.
-    const sx = px - ux * tangent
-    const sy = py - uy * tangent
-    const left = ux * vy - uy * vx > 0 ? 1 : -1
-    const cx = sx - uy * r * left
-    const cy = sy + ux * r * left
-    const start = Math.atan2(sy - cy, sx - cx)
-    const steps = Math.max(1, Math.ceil(turn / ARC_STEP))
-    for (let k = 0; k <= steps; k++) {
-      const a = start + left * turn * (k / steps)
-      out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)])
-    }
+    const wanted = need[i]!
+    const room = Math.min(share(wanted, need[i - 1]!, inLen), share(wanted, need[i + 1]!, outLen))
+    tallyCorner(tally, turn, wanted, Math.min(wanted, room), lines)
+    const ux = (p[0] - xy[i - 1]![0]) / inLen
+    const uy = (p[1] - xy[i - 1]![1]) / inLen
+    out.push(...arcPoints(p, ux, uy, turn, Math.min(wanted, room), Math.max(1, Math.ceil(Math.abs(turn) / ARC_STEP))))
   }
   out.push(xy[xy.length - 1]!)
-  return out.map(([x, y]) => [x / KX, y / KY] as LngLat)
+  return toLngLats(out)
+}
+
+/** [path] eased (easeCorners), then its corners rounded (filletCorners), for a bundle of [lines]. */
+export function roundCorners(path: readonly LngLat[], lines: number, tally?: CornerTally): LngLat[] {
+  return filletCorners(easeCorners(path, lines, tally), lines, tally)
+}
+
+/** An edge for roundJunctions: its points, and its lines. */
+export interface JunctionEdge {
+  path: readonly LngLat[]
+  lines: readonly string[]
+}
+
+/**
+ * The network's corners at its nodes rounded, as along an edge: at each node,
+ * the two edges sharing the most lines (the bigger turn between equals) turn on
+ * one arc for the wider of them, when they turn by ARC_MIN_TURN to ARC_MAX_TURN.
+ * Each takes half the arc, as far as its share of its end leg (share; half, on
+ * an edge of one leg, whose other end may turn too); the node moves to the
+ * arc's middle, for every edge ending there, so the edges go on meeting. Ends
+ * that meet are one point, as laidOnRoads leaves them.
+ *
+ * A node a line goes straight through is left as it is: moved into a corner's
+ * arc, it would put a notch in that line (koridor 1 straight down past Blok M,
+ * where the 13E bundle turns off it).
+ */
+export function roundJunctions(edges: readonly JunctionEdge[], tally?: CornerTally): LngLat[][] {
+  /** An edge's end at a node: the way it leaves, its end leg, and what of that leg the corner at its far end takes. */
+  interface End { edge: number, atStart: boolean, dx: number, dy: number, leg: number, other: number }
+  const paths = edges.map(e => toXYs(e.path))
+  const ends = new Map<string, End[]>()
+  edges.forEach((edge, e) => {
+    const xy = paths[e]!
+    if (xy.length < 2) return
+    for (const atStart of [true, false]) {
+      const [lng, lat] = atStart ? edge.path[0]! : edge.path[edge.path.length - 1]!
+      const from = atStart ? xy[0]! : xy[xy.length - 1]!
+      const to = atStart ? xy[1]! : xy[xy.length - 2]!
+      // An end of no length (an edge drawn to the point it starts at) turns nothing, but still moves with its node.
+      const leg = Math.hypot(to[0] - from[0], to[1] - from[1])
+      // The far end of the end leg: a corner of the edge, or (a one-leg edge) its other node, which may turn too.
+      const beyond = atStart ? xy[2] : xy[xy.length - 3]
+      const other = beyond ? roundedNeed(turnAt(from, to, beyond), arcRadius(edge.lines.length)) : Infinity
+      const key = `${lng},${lat}`
+      const here = ends.get(key) ?? []
+      here.push({ edge: e, atStart, dx: leg > 0 ? (to[0] - from[0]) / leg : 0, dy: leg > 0 ? (to[1] - from[1]) / leg : 0, leg, other })
+      ends.set(key, here)
+    }
+  })
+  /** What of [end]'s leg a corner at the node wanting [wanted] gets: half of a one-leg edge, else its share. */
+  const roomAt = (end: End, wanted: number): number => (end.other === Infinity ? Math.min(wanted, end.leg / 2) : share(wanted, end.other, end.leg))
+
+  // Decided first, on the edges as they are, then applied: an end takes no more of its leg than its share.
+  const cuts: { end: End, points: XY[] }[] = []
+  const moves: { end: End, to: XY }[] = []
+  for (const here of ends.values()) {
+    let best: { a: End, b: End, shared: number, turn: number } | null = null
+    let straightThrough = false
+    for (let i = 0; i < here.length; i++) {
+      for (let j = i + 1; j < here.length; j++) {
+        const a = here[i]!
+        const b = here[j]!
+        if (a.edge === b.edge || a.leg === 0 || b.leg === 0) continue
+        const lines = new Set(edges[a.edge]!.lines)
+        const shared = edges[b.edge]!.lines.filter(l => lines.has(l)).length
+        if (shared === 0) continue
+        // Coming in along a (against the way it leaves the node), going on along b.
+        const turn = Math.atan2(-a.dx * b.dy + a.dy * b.dx, -a.dx * b.dx - a.dy * b.dy)
+        if (Math.abs(turn) < ARC_MIN_TURN) straightThrough = true
+        if (Math.abs(turn) < ARC_MIN_TURN || Math.abs(turn) > ARC_MAX_TURN) continue
+        if (!best || shared > best.shared || (shared === best.shared && Math.abs(turn) > Math.abs(best.turn))) best = { a, b, shared, turn }
+      }
+    }
+    if (!best || straightThrough) continue
+    const { a, b, turn } = best
+    const radius = arcRadius(Math.max(edges[a.edge]!.lines.length, edges[b.edge]!.lines.length))
+    const wanted = tangentFor(turn, radius)
+    const tangent = Math.min(wanted, roomAt(a, wanted), roomAt(b, wanted))
+    tallyCorner(tally, turn, wanted, tangent, Math.max(edges[a.edge]!.lines.length, edges[b.edge]!.lines.length))
+    const xyA = paths[a.edge]!
+    const node = a.atStart ? xyA[0]! : xyA[xyA.length - 1]!
+    const half = Math.max(1, Math.ceil(Math.abs(turn) / ARC_STEP / 2))
+    const arc = arcPoints(node, -a.dx, -a.dy, turn, tangent, half * 2)
+    const middle = arc[half]!
+    // Each run from the edge's inside to the node, now the arc's middle.
+    cuts.push({ end: a, points: arc.slice(0, half + 1) }, { end: b, points: arc.slice(half).reverse() })
+    for (const end of here) if (end !== a && end !== b) moves.push({ end, to: middle })
+    if (tally) tally.junctions++
+  }
+  for (const { end, points } of cuts) {
+    const xy = paths[end.edge]!
+    if (end.atStart) xy.splice(0, 1, ...[...points].reverse())
+    else xy.splice(xy.length - 1, 1, ...points)
+  }
+  for (const { end, to } of moves) {
+    const xy = paths[end.edge]!
+    xy[end.atStart ? 0 : xy.length - 1] = to
+  }
+  return paths.map(toLngLats)
 }
 
 /*

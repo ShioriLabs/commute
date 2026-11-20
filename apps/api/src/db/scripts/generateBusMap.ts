@@ -1,7 +1,19 @@
 import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 import { TOPOLOGY } from '../data/topology'
-import { bundle, dropBypasses, isDrawn, placeStops, roundCorners, type BusMapEdge, type StopMark } from './busMapBundle'
+import {
+  bundle,
+  dropBypasses,
+  easeCorners,
+  filletCorners,
+  isDrawn,
+  placeStops,
+  roundJunctions,
+  type BusMapEdge,
+  type CornerTally,
+  type OrderReport,
+  type StopMark
+} from './busMapBundle'
 import { loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
@@ -345,7 +357,7 @@ async function main(): Promise<void> {
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
   const onRoads = await alongRoads(normal.lines)
-  const edges = bundleShapes(onRoads.lines, onRoads.roads)
+  const edges = await bundleShapes(onRoads.lines, onRoads.roads)
   const stopMarks = marksFor(edges, onRoads.lines, sortedHaltes)
   const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, stopMarks, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
@@ -372,11 +384,17 @@ async function main(): Promise<void> {
  * redrawn up one carriageway and back down the other (6 on Rasuna Said) is one
  * line on the map, two only where its ways part (a loop to turn).
  */
-function bundleShapes(lines: readonly BusMapLine[], roads: Roads): BusMapEdge[] {
+async function bundleShapes(lines: readonly BusMapLine[], roads: Roads): Promise<BusMapEdge[]> {
   const drawn = lines.filter(l => isDrawn(l.code))
-  const edges = bundle(drawn.map(l => ({ code: l.code, kind: l.kind, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })))
+  const order: OrderReport = { local: 0, exact: 0, components: 0, fallbacks: 0 }
+  const edges = await bundle(drawn.map(l => ({ code: l.code, kind: l.kind, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })), order)
+  console.log(`  line order: crossings cost ${order.exact} solved exactly (local search: ${order.local}), ${order.components} component(s)`)
+  if (order.fallbacks > 0) console.warn(`  ${order.fallbacks} component(s) unsolved in time, local order kept`)
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
-  return laidOnRoads(edges, roads, brt)
+  const corners: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
+  const laid = laidOnRoads(edges, roads, brt, corners)
+  console.log(`  corners:    ${corners.eased} eased into one bend, ${corners.junctions} turned at a node, ${corners.squeezed} narrower than their radius (${corners.folded} folding a bundle)`)
+  return laid
 }
 
 /**
@@ -384,7 +402,7 @@ function bundleShapes(lines: readonly BusMapLine[], roads: Roads): BusMapEdge[] 
  * its two ends, and each end (a junction several edges meet at) onto the road
  * nearest it once, the same point for every edge there, so they go on meeting.
  */
-function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySet<string>): BusMapEdge[] {
+function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySet<string>, corners: CornerTally): BusMapEdge[] {
   const nodes = new Map<string, LngLat>()
   const node = (p: LngLat): LngLat => {
     const key = `${p[0].toFixed(6)},${p[1].toFixed(6)}`
@@ -395,13 +413,20 @@ function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySe
     }
     return snapped
   }
-  return edges.map((edge) => {
+  // Corners rounded last, on the simplified line, so a corner is a real turn and not a wobble: each
+  // edge's tight bends eased to one first, then the corners at nodes, then the rest along each edge.
+  const eased = edges.map((edge) => {
     const pts = decodePolyline(edge.shape)
-    if (pts.length < 2) return edge
+    if (pts.length < 2) return pts
     const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)), anyWay: true })
     const laid = [node(pts[0]!), ...inner.slice(1, -1), node(pts[pts.length - 1]!)]
-    // Corners rounded last, on the simplified line, so a corner is a real turn and not a wobble.
-    return { ...edge, shape: encodePolyline(roundCorners(simplify(laid, SIMPLIFY_M), edge.lines.length)) }
+    return easeCorners(simplify(laid, SIMPLIFY_M), edge.lines.length, corners)
+  })
+  const joined = roundJunctions(eased.map((path, i) => ({ path, lines: edges[i]!.lines })), corners)
+  return edges.map((edge, i) => {
+    const path = joined[i]!
+    if (path.length < 2) return edge
+    return { ...edge, shape: encodePolyline(filletCorners(path, edge.lines.length, corners)) }
   })
 }
 
@@ -513,7 +538,7 @@ async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const normal = alongTopology(map.lines, map.haltes)
   const onRoads = await alongRoads(normal.lines)
-  const edges = bundleShapes(onRoads.lines, onRoads.roads)
+  const edges = await bundleShapes(onRoads.lines, onRoads.roads)
   const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)
   const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: map.rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
