@@ -170,6 +170,23 @@ describe('bundle', () => {
     expect(edges.some(e => e.lines.length === 3)).toBe(true)
   })
 
+  it('keeps a one-way pair apart where its streets come close for a few dozen metres', async () => {
+    // Harmoni to Pecenongan: eastbound on one bank of a canal, westbound on the other, 60 m apart but
+    // 35 m for 50 m halfway. Merged there, the eastbound line dipped across and back.
+    const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+    const bank = (y: (x: number) => number, from: number, to: number): LngLat[] => {
+      const pts: LngLat[] = []
+      for (let x = from; from < to ? x <= to : x >= to; x += from < to ? 10 : -10) pts.push(at(x, y(x)))
+      return pts
+    }
+    const south = (x: number): number => (Math.abs(x) <= 25 ? -35 : Math.abs(x) >= 75 ? -60 : -35 - ((Math.abs(x) - 25) / 50) * 25)
+    const edges = await bundle([
+      line('2', 'BRT', bank(south, 1000, -1000)),
+      line('3', 'BRT', bank(() => 0, -1000, 1000))
+    ])
+    expect(edges.every(e => e.lines.length === 1)).toBe(true)
+  })
+
   it('merges a joining line in on its own side, as Transit\'s penalty figure has it', async () => {
     // 1 and 2 run north; 3 comes in from the west and joins them. Bundle order would put 3 on the
     // east, crossing both on the way in ("merging lines crossing"), or between them ("merging in
