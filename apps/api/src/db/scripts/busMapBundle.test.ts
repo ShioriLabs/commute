@@ -40,6 +40,9 @@ const north = (fromM: number, toM: number, eastM = 0): LngLat[] => {
 
 const line = (code: string, kind: 'BRT' | 'AUI', ...pieces: LngLat[][]): BundleLine => ({ code, kind, pieces })
 
+/** LNG in the bundler's metres (its KX), for a test's line drawn down the middle of a split road. */
+const LNG_X = LNG * Math.cos((-6.2 * Math.PI) / 180) * 111_320
+
 /** The edges a line is drawn on, with where it sits across each (its index of how many). */
 const placesOf = (edges: BusMapEdge[], code: string) =>
   edges.filter(e => e.lines.includes(code)).map(e => ({ at: e.lines.indexOf(code), of: e.lines.length, northward: northward(e.shape) }))
@@ -170,6 +173,16 @@ describe('bundle', () => {
     // 1 stays west of 6A on every shared edge, before and after 9D joins.
     for (let i = 0; i < Math.min(one.length, sixA.length); i++) expect(one[i]).toBeLessThan(sixA[i]!)
     expect(edges.some(e => e.lines.length === 3)).toBe(true)
+  })
+
+  it('draws a road split by a toll road as two, its sides however near', async () => {
+    // 10 north up one side of Yos Sudarso, 12 south down the other, 34 m apart: bundled, without a
+    // toll road between them, as one street.
+    const together = await bundle([line('10', 'BRT', north(0, 2000)), line('12', 'BRT', north(2000, 0, 34))])
+    expect(together.some(e => e.lines.length === 2)).toBe(true)
+    const keptApart = (a: [number, number], b: [number, number]): boolean => Math.sign(a[0] - LNG_X - 17) !== Math.sign(b[0] - LNG_X - 17)
+    const split = await bundle([line('10', 'BRT', north(0, 2000)), line('12', 'BRT', north(2000, 0, 34))], undefined, keptApart)
+    expect(split.every(e => e.lines.length === 1)).toBe(true)
   })
 
   it('keeps a one-way pair apart where its streets come close for a few dozen metres', async () => {

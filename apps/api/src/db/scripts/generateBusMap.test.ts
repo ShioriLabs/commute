@@ -49,6 +49,15 @@ describe('dedupePatterns', () => {
     expect(dedupePatterns([outbound, inbound])).toHaveLength(1)
   })
 
+  it('keeps both sides of a road split by a toll road between them', () => {
+    // 40 m apart, a toll road down the middle 20 m north (Yos Sudarso under the Tanjung Priok toll).
+    const outbound = east(0, 5000)
+    const inbound = east(0, 4000, 40)
+    const tollY = LAT * 110_574 + 20
+    const apart = (a: [number, number], b: [number, number]): boolean => (a[1] - tollY) * (b[1] - tollY) < 0
+    expect(dedupePatterns([outbound, inbound], apart)).toHaveLength(2)
+  })
+
   it('keeps a one-way pair a block apart', () => {
     const outbound = east(0, 5000)
     const inbound = east(0, 4000, 250)

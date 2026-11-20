@@ -11,8 +11,8 @@ const xy = (east: number, north: number): [number, number] => [X0 + east, Y0 + n
 const at = (east: number, north: number): LngLat => [(X0 + east) / KX, (Y0 + north) / KY]
 const east = ([lng]: LngLat): number => lng * KX - X0
 
-const road = (points: [number, number][], { oneway = false, busway = false, bridge = false } = {}) =>
-  ({ xy: points.map(([e, n]) => xy(e, n)), oneway, busway, bridge })
+const road = (points: [number, number][], { oneway = false, busway = false, bridge = false, motorway = false } = {}) =>
+  ({ xy: points.map(([e, n]) => xy(e, n)), oneway, busway, bridge, motorway })
 
 describe('snapToRoads', () => {
   it('lays a loose line onto its road', () => {
@@ -72,6 +72,18 @@ describe('snapToRoads', () => {
     const far = [at(500, 0), at(500, 200)]
     const snapped = snapToRoads(far, roads)
     expect(east(snapped[0]!)).toBeCloseTo(500, 0)
+  })
+})
+
+describe('Roads.motorwayBetween', () => {
+  it('parts the two sides of a road split by a toll road alongside, not two points it crosses over', () => {
+    // Yos Sudarso at Walikota: carriageways 17 m either side of the toll road, running north.
+    const roads = new Roads([road([[0, -500], [0, 500]], { motorway: true }), road([[-500, 300], [500, 300]], { motorway: true })])
+    const northward: [number, number] = [0, 1]
+    expect(roads.motorwayBetween(xy(-17, 0), xy(17, 0), northward)).toBe(true)
+    expect(roads.motorwayBetween(xy(-17, 0), xy(-17, 30), northward)).toBe(false)
+    // Along a street the east-west toll road crosses over: the same street either side of it.
+    expect(roads.motorwayBetween(xy(100, 290), xy(100, 310), northward)).toBe(false)
   })
 })
 
