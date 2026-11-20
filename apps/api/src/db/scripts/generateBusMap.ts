@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 import { TOPOLOGY } from '../data/topology'
-import { bundle, placeStops, roundCorners, type BusMapEdge, type StopMark } from './busMapBundle'
+import { bundle, dropBypasses, placeStops, roundCorners, type BusMapEdge, type StopMark } from './busMapBundle'
 import { loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
@@ -373,7 +373,7 @@ async function main(): Promise<void> {
  * line on the map, two only where its ways part (a loop to turn).
  */
 function bundleShapes(lines: readonly BusMapLine[], roads: Roads): BusMapEdge[] {
-  const edges = bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dedupePatterns(l.shapes.map(s => decodePolyline(s))) })))
+  const edges = bundle(lines.map(l => ({ code: l.code, kind: l.kind, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })))
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
   return laidOnRoads(edges, roads, brt)
 }
@@ -397,7 +397,7 @@ function laidOnRoads(edges: readonly BusMapEdge[], roads: Roads, brt: ReadonlySe
   return edges.map((edge) => {
     const pts = decodePolyline(edge.shape)
     if (pts.length < 2) return edge
-    const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)) })
+    const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)), anyWay: true })
     const laid = [node(pts[0]!), ...inner.slice(1, -1), node(pts[pts.length - 1]!)]
     // Corners rounded last, on the simplified line, so a corner is a real turn and not a wobble.
     return { ...edge, shape: encodePolyline(roundCorners(simplify(laid, SIMPLIFY_M), edge.lines.length)) }
