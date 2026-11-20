@@ -78,6 +78,10 @@ const SCOPE: Record<string, BusMapLineKind> = {
  */
 const SIMPLIFY_M = 4
 
+/** An edge laid onto the roads longer than this times its own length, and this much more, went onto a road beside it. */
+const LAID_STRETCH = 1.5
+const LAID_SLACK_M = 20
+
 /** Topology redraws until the koridors settle; see alongTopology. */
 const ALIGN_PASSES = 4
 
@@ -393,8 +397,10 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads): Promise
   if (order.fallbacks > 0) console.warn(`  ${order.fallbacks} component(s) unsolved in time, local order kept`)
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
   const corners: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
-  const laid = laidOnRoads(edges, roads, brt, corners, strokeKeys(lines))
+  const laying = { unlaid: 0 }
+  const laid = laidOnRoads(edges, roads, brt, corners, strokeKeys(lines), laying)
   console.log(`  corners:    ${corners.eased} eased into one bend, ${corners.junctions} turned at a node, ${corners.squeezed} narrower than their radius (${corners.folded} folding a bundle)`)
+  if (laying.unlaid > 0) console.log(`  roads:      ${laying.unlaid} edge(s) kept to their own way, laid onto a road beside it`)
   return laid
 }
 
@@ -408,7 +414,8 @@ function laidOnRoads(
   roads: Roads,
   brt: ReadonlySet<string>,
   corners: CornerTally,
-  strokeOf: ReadonlyMap<string, string>
+  strokeOf: ReadonlyMap<string, string>,
+  laying: { unlaid: number }
 ): BusMapEdge[] {
   // A bundle's width, for the radius it turns on, is its strokes, 13, 13E and L13E being one.
   const strokes = (edge: BusMapEdge): string[] => [...new Set(edge.lines.map(l => strokeOf.get(l) ?? l))]
@@ -428,7 +435,15 @@ function laidOnRoads(
     const pts = decodePolyline(edge.shape)
     if (pts.length < 2) return pts
     const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)), anyWay: true })
-    const laid = [node(pts[0]!), ...inner.slice(1, -1), node(pts[pts.length - 1]!)]
+    const ends = [node(pts[0]!), node(pts[pts.length - 1]!)] as const
+    let laid = [ends[0], ...inner.slice(1, -1), ends[1]]
+    // Laid much longer than it runs is laid onto a road beside it: koridor 1's 8 m link between two
+    // nodes at CSW took its middle onto the carriageway 20 m west, a V off the junction. Its own way
+    // then, between its laid ends.
+    if (lengthM(laid) > lengthM(pts) * LAID_STRETCH + LAID_SLACK_M) {
+      laid = [ends[0], ...pts.slice(1, -1), ends[1]]
+      laying.unlaid++
+    }
     return easeCorners(simplify(laid, SIMPLIFY_M), strokes(edge).length, corners)
   })
   const joined = roundJunctions(eased.map((path, i) => ({ path, lines: strokes(edges[i]!) })), corners)
