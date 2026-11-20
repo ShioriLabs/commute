@@ -65,6 +65,18 @@ describe('alignToTopology', () => {
     expect(passesBy(aligned.pieces.get('1')!, ...at(0, 1500))).toBe(true)
   })
 
+  it('takes a pair through its waypoints, where the search alone would take another street', () => {
+    // A to C two ways: line 2 straight up the street, line 3 round by a street 300 m east.
+    // The bus can only go the east way (6 by Jl. Gembira), which a waypoint says.
+    const east = run([0, 0], [300, 0], [300, 2000], [0, 2000])
+    const lines = [{ code: '1', pieces: [run([0, 0], [0, 100])] }, { code: '2', pieces: [street] }, { code: '3', pieces: [east] }]
+    const plain = alignToTopology(lines, haltes, [{ code: '1', runs: [['A', 'C']] }])
+    const routed = alignToTopology(lines, haltes, [{ code: '1', runs: [['A', 'C']], via: { 'A->C': [at(300, 1000)] } }])
+    expect(passesBy(plain.pieces.get('1')!, ...at(300, 1000))).toBe(false)
+    expect(passesBy(routed.pieces.get('1')!, ...at(300, 1000))).toBe(true)
+    expect(routed.straight).toEqual([])
+  })
+
   it('draws straight only when no street at all runs between two haltes', () => {
     const aligned = alignToTopology([{ code: '1', pieces: [run([0, 0], [0, 300])] }], haltes, [{ code: '1', runs: [['A', 'C']] }])
     expect(aligned.straight).toEqual(['1 A->C'])

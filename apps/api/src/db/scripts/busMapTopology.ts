@@ -35,6 +35,12 @@ export interface TopologyLine {
   code: string
   /** The koridor's runs as halte codes: `path`, and `pathReverse` where it differs. */
   runs: string[][]
+  /**
+   * Points a halte pair's way must pass, by `from->to` halte code: for a way the
+   * shapes can't tell, where the only street there is (6 from Galunggung onto
+   * Rasuna Said, by Jl. Gembira) isn't the one the search would find.
+   */
+  via?: Record<string, LngLat[]>
 }
 
 export interface AlignInput {
@@ -296,22 +302,27 @@ export function alignToTopology(
       for (let i = 1; i < placed.length; i++) {
         const [, aLng, aLat] = haltes[placed[i - 1]!]!
         const [, bLng, bLat] = haltes[placed[i]!]!
-        const a = toXY([aLng, aLat])
-        const b = toXY([bLng, bLat])
-        let piece = stretch(own, a, b) ?? stretch(others, a, b)
-          // No street runs there plainly: a halte set back from the road (FAR_M), else the line's own
-          // way however roundabout, which is at least where its buses drive.
-          ?? stretch(own, a, b, { near: FAR_M }) ?? stretch(others, a, b, { near: FAR_M })
-          ?? stretch(own, a, b, { near: FAR_M, detours: true })
-          // A koridor's new way no one shape covers yet (6 straight from Galunggung to Setiabudi):
-          // across every line's streets, hopping between them where they meet.
-          ?? (graph ??= new StreetGraph(everyTrack)).route(a, b)
-        if (!piece) {
-          straight.push(`${line.code} ${placed[i - 1]}->${placed[i]}`)
-          piece = [a, b]
+        // Through the pair's waypoints, if it has any: each leg found on its own.
+        const via = topo.via?.[`${placed[i - 1]}->${placed[i]}`] ?? []
+        const stops = [[aLng, aLat] as LngLat, ...via, [bLng, bLat] as LngLat].map(toXY)
+        for (let k = 1; k < stops.length; k++) {
+          const a = stops[k - 1]!
+          const b = stops[k]!
+          let piece = stretch(own, a, b) ?? stretch(others, a, b)
+            // No street runs there plainly: a halte set back from the road (FAR_M), else the line's own
+            // way however roundabout, which is at least where its buses drive.
+            ?? stretch(own, a, b, { near: FAR_M }) ?? stretch(others, a, b, { near: FAR_M })
+            ?? stretch(own, a, b, { near: FAR_M, detours: true })
+            // A koridor's new way no one shape covers yet (6 straight from Galunggung to Setiabudi):
+            // across every line's streets, hopping between them where they meet.
+            ?? (graph ??= new StreetGraph(everyTrack)).route(a, b)
+          if (!piece) {
+            straight.push(`${line.code} ${placed[i - 1]}->${placed[i]}`)
+            piece = [a, b]
+          }
+          const last = path[path.length - 1]
+          path.push(...(last && last[0] === piece[0]![0] && last[1] === piece[0]![1] ? piece.slice(1) : piece))
         }
-        const last = path[path.length - 1]
-        path.push(...(last && last[0] === piece[0]![0] && last[1] === piece[0]![1] ? piece.slice(1) : piece))
       }
       if (path.length >= 2) drawn.push(path.map(toLngLat))
     }
