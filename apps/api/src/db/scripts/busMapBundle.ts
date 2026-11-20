@@ -167,7 +167,10 @@ export interface Network {
   adjacency: Map<number, Set<number>>
 }
 
-export function buildNetwork(lines: readonly BundleLine[]): Network {
+/** Whether two points, in metres, of a line heading [heading] lie either side of something keeping their streets apart. */
+export type KeptApart = (a: [number, number], b: [number, number], heading: [number, number]) => boolean
+
+export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart = () => false): Network {
   const order = bundleOrder(lines)
   const byCode = new Map(lines.map(l => [l.code, l]))
   const points: Point[] = []
@@ -275,6 +278,8 @@ export function buildNetwork(lines: readonly BundleLine[]): Network {
               const p = points[id]!
               if (p.piece === pieceId && (othersOnly || i - p.index < OWN_TAIL)) continue
               if (Math.abs(p.ux * ux + p.uy * uy) < SNAP_COS) continue
+              // Either side of a toll road: a split road's two sides, drawn as two (Yos Sudarso).
+              if (keptApart([x, y], [p.x, p.y], [ux, uy])) continue
               const d = Math.hypot(p.x - x, p.y - y)
               if (d <= bestD) {
                 bestD = d
@@ -1064,8 +1069,8 @@ let solver: Promise<LegacyHighs> | undefined
 export const loadSolver = (): Promise<LegacyHighs> => (solver ??= highsLoader())
 
 /** Peta Bus's lines as the edges of one network, each with its lines in order across it. */
-export async function bundle(lines: readonly BundleLine[], report?: OrderReport): Promise<BusMapEdge[]> {
-  const network = buildNetwork(lines)
+export async function bundle(lines: readonly BundleLine[], report?: OrderReport, keptApart?: KeptApart): Promise<BusMapEdge[]> {
+  const network = buildNetwork(lines, keptApart)
   let list = chains(network)
   for (let pass = 0; pass < 6; pass++) {
     const popped = popBubbles(network, list)
@@ -1604,7 +1609,7 @@ const TRIM_REACH_M = 80
 type XY = [number, number]
 
 /** [pieces] (one line's, deduped) with the short stretches that bypass the rest cut out. */
-export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
+export function dropBypasses(pieces: readonly LngLat[][], apart?: KeptApart): LngLat[][] {
   const toXY = (p: readonly LngLat[]): XY[] => p.map(([lng, lat]) => [lng * KX, lat * KY])
   const lengthOf = (p: readonly XY[]): number => {
     let m = 0
@@ -1647,6 +1652,26 @@ export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
 
   // The longest piece is the line's main path; the rest are walked against what's kept, longest first.
   const order = pieces.map((p, i) => ({ i, xy: toXY(p) })).sort((a, b) => lengthOf(b.xy) - lengthOf(a.xy))
+  /** The point of [p] nearest [q]. */
+  const footOn = (p: readonly XY[], [qx, qy]: XY): XY => {
+    let best: XY = p[0]!
+    let bestD = Infinity
+    for (let i = 1; i < p.length; i++) {
+      const [ax, ay] = p[i - 1]!
+      const [bx, by] = p[i]!
+      const dx = bx - ax
+      const dy = by - ay
+      const l2 = dx * dx + dy * dy || 1
+      const t = Math.max(0, Math.min(1, ((qx - ax) * dx + (qy - ay) * dy) / l2))
+      const f: XY = [ax + t * dx, ay + t * dy]
+      const d = Math.hypot(qx - f[0], qy - f[1])
+      if (d < bestD) {
+        bestD = d
+        best = f
+      }
+    }
+    return best
+  }
   if (!order.length) return []
   const kept: XY[][] = [order[0]!.xy]
   const out: LngLat[][] = [[...pieces[order[0]!.i]!]]
@@ -1674,7 +1699,15 @@ export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
         const to = near[b]!
         const run = lengthOf(pts.slice(a - 1, b + 1))
         const around = Math.abs(to.at - from.at)
-        if (from.k === to.k && run <= LOCAL_MAX_M && around >= LOOP_MIN_M && around <= run * STRETCH + SLACK_M) {
+        // The other side of a road split by a toll road isn't a bypass: it is drawn (10 down Yos Sudarso).
+        const mid = pts[Math.floor((a + b) / 2)]!
+        const split = apart !== undefined && (() => {
+          const foot = footOn(kept[from.k]!, mid)
+          const [hx, hy] = [pts[b - 1]![0] - pts[a]![0], pts[b - 1]![1] - pts[a]![1]]
+          const hl = Math.hypot(hx, hy) || 1
+          return apart(mid, foot, [hx / hl, hy / hl])
+        })()
+        if (!split && from.k === to.k && run <= LOCAL_MAX_M && around >= LOOP_MIN_M && around <= run * STRETCH + SLACK_M) {
           for (let k = a; k < b; k++) cut[k] = true
           // And back along where it is still parting from the line, so no stub splays off the bundle.
           for (let k = a - 1, m = 0; k >= 0 && near[k]!.d > TRIM_M && m <= TRIM_REACH_M; k--) {

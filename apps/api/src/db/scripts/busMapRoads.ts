@@ -64,7 +64,12 @@ interface Road {
   oneway: boolean
   busway: boolean
   bridge: boolean
+  /** A toll road (OSM motorway): what parts a split road's two carriageways (Yos Sudarso at Walikota). */
+  motorway?: boolean
 }
+
+/** A motorway runs alongside two points when within this of the way between them (SNAP_COS in busMapBundle). */
+const ALONGSIDE_COS = Math.cos((35 * Math.PI) / 180)
 
 interface Segment {
   road: number
@@ -97,6 +102,42 @@ export class Roads {
   }
 
   /** The segments with a cell around ([x], [y]), once each. */
+  /**
+   * Whether a motorway runs between [a] and [b], alongside a line heading [heading] (a unit vector)
+   * there: the two sides of a road split by a toll road (Yos Sudarso under the Tanjung Priok toll at
+   * Walikota), not one road. A motorway crossing over the line's street doesn't part them.
+   */
+  motorwayBetween([ax, ay]: [number, number], [bx, by]: [number, number], [hx, hy]: [number, number]): boolean {
+    const dx = bx - ax
+    const dy = by - ay
+    if (dx === 0 && dy === 0) return false
+    const seen = new Set<string>()
+    for (const [x, y] of [[ax, ay], [(ax + bx) / 2, (ay + by) / 2], [bx, by]] as const) {
+      for (const s of this.near(x, y)) {
+        const key = `${s.road}:${s.i}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        const road = this.roads[s.road]!
+        if (!road.motorway) continue
+        const [cx, cy] = road.xy[s.i]!
+        const [ex, ey] = road.xy[s.i + 1]!
+        const fx = ex - cx
+        const fy = ey - cy
+        const fl = Math.hypot(fx, fy)
+        if (fl === 0) continue
+        // Alongside: running the line's way, either way.
+        if (Math.abs((hx * fx + hy * fy) / fl) < ALONGSIDE_COS) continue
+        // And between: the segments a..b and c..e cross.
+        const den = dx * fy - dy * fx
+        if (den === 0) continue
+        const t = ((cx - ax) * fy - (cy - ay) * fx) / den
+        const u = ((cx - ax) * dy - (cy - ay) * dx) / den
+        if (t > 0 && t < 1 && u >= 0 && u <= 1) return true
+      }
+    }
+    return false
+  }
+
   near(x: number, y: number): Segment[] {
     const out: Segment[] = []
     const seen = new Set<string>()
@@ -188,7 +229,8 @@ export async function loadRoads(pieces: readonly LngLat[][]): Promise<Roads> {
               xy: part.map(([px, py]) => toXY(tileLngLat(TILE_ZOOM, x, y, layer.extent, px, py))),
               oneway: f.properties.oneway === 'yes',
               busway: detail === 'busway',
-              bridge: f.properties.is_bridge === true
+              bridge: f.properties.is_bridge === true,
+              motorway: detail === 'motorway'
             })
           }
         }

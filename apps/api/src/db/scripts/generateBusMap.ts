@@ -13,6 +13,7 @@ import {
   trimBarbs,
   type BusMapEdge,
   type CornerTally,
+  type KeptApart,
   type OrderReport,
   type StopMark
 } from './busMapBundle'
@@ -181,12 +182,26 @@ export function sampleAlong(coords: readonly LngLat[], step: number): [number, n
 
 const cellKey = (x: number, y: number): string => `${Math.floor(x / COVER_CELL_M)},${Math.floor(y / COVER_CELL_M)}`
 
-function isCovered(cells: Set<string>, [x, y]: [number, number], rings = 1): boolean {
-  const cx = Math.floor(x / COVER_CELL_M)
-  const cy = Math.floor(y / COVER_CELL_M)
+/** The points drawn so far, by cell; a point covers its neighbourhood. */
+type Cover = Map<string, [number, number][]>
+
+/**
+ * Whether [s] lies within [rings] cells of what's drawn, on its side of anything [apart] says keeps
+ * two streets apart there (a toll road between a split road's sides), for a line heading [heading].
+ */
+function isCovered(
+  cells: Cover,
+  s: [number, number],
+  rings = 1,
+  heading: [number, number] = [0, 0],
+  apart?: KeptApart
+): boolean {
+  const cx = Math.floor(s[0] / COVER_CELL_M)
+  const cy = Math.floor(s[1] / COVER_CELL_M)
   for (let dx = -rings; dx <= rings; dx++) {
     for (let dy = -rings; dy <= rings; dy++) {
-      if (cells.has(`${cx + dx},${cy + dy}`)) return true
+      const here = cells.get(`${cx + dx},${cy + dy}`)
+      if (here && (!apart || here.some(p => !apart(s, p, heading)))) return true
     }
   }
   return false
@@ -202,9 +217,22 @@ export function lengthM(coords: readonly LngLat[]): number {
   return total
 }
 
-function markCovered(cells: Set<string>, coords: readonly LngLat[]): void {
+function markCovered(cells: Cover, coords: readonly LngLat[]): void {
   // Half the sample step, so a drawn piece leaves no gap a sample could fall through.
-  for (const [x, y] of sampleAlong(coords, SAMPLE_STEP_M / 2)) cells.add(cellKey(x, y))
+  for (const [x, y] of sampleAlong(coords, SAMPLE_STEP_M / 2)) {
+    const key = cellKey(x, y)
+    const here = cells.get(key)
+    if (here) here.push([x, y])
+    else cells.set(key, [[x, y]])
+  }
+}
+
+/** The unit way from [a] to [b], in metres. */
+function headingOf(a: LngLat, b: LngLat): [number, number] {
+  const [ax, ay] = toXY(a)
+  const [bx, by] = toXY(b)
+  const l = Math.hypot(bx - ax, by - ay) || 1
+  return [(bx - ax) / l, (by - ay) / l]
 }
 
 /*
@@ -216,15 +244,21 @@ function markCovered(cells: Set<string>, coords: readonly LngLat[]): void {
  * A run carries the covered vertex on either side of it, so it joins the
  * geometry it leaves and rejoins without a gap. A run shorter than
  * MIN_PIECE_M is GPS wobble beyond the cover radius, not a street.
+ *
+ * With [apart], what lies the other side of a toll road from a pattern
+ * doesn't cover it: each side of a split road is a street of its own, drawn
+ * (10 and 12 both ways up Yos Sudarso, under the Tanjung Priok toll).
  */
-export function dedupePatterns(patterns: readonly LngLat[][]): LngLat[][] {
+export function dedupePatterns(patterns: readonly LngLat[][], apart?: KeptApart): LngLat[][] {
   const sorted = [...patterns].filter(p => p.length >= 2).sort((a, b) => lengthM(b) - lengthM(a))
-  const cells = new Set<string>()
+  const cells: Cover = new Map()
   const pieces: LngLat[][] = []
   for (const pattern of sorted) {
     // A segment is fresh when any point along it is uncovered.
-    const fresh = pattern.slice(1).map((to, i) =>
-      sampleAlong([pattern[i]!, to], SAMPLE_STEP_M).some(s => !isCovered(cells, s)))
+    const fresh = pattern.slice(1).map((to, i) => {
+      const heading = headingOf(pattern[i]!, to)
+      return sampleAlong([pattern[i]!, to], SAMPLE_STEP_M).some(s => !isCovered(cells, s, 1, heading, apart))
+    })
 
     const runs: LngLat[][] = []
     let start = -1
@@ -239,7 +273,8 @@ export function dedupePatterns(patterns: readonly LngLat[][]): LngLat[][] {
     }
     for (const run of runs) {
       if (lengthM(run) < MIN_PIECE_M) continue
-      if (sampleAlong(run, SAMPLE_STEP_M).every(s => isCovered(cells, s, CARRIAGEWAY_RINGS))) continue
+      const heading = headingOf(run[0]!, run[run.length - 1]!)
+      if (sampleAlong(run, SAMPLE_STEP_M).every(s => isCovered(cells, s, CARRIAGEWAY_RINGS, heading, apart))) continue
       pieces.push(run)
       markCovered(cells, run)
     }
@@ -393,7 +428,9 @@ async function main(): Promise<void> {
 async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: BusMap['haltes']): Promise<BusMapEdge[]> {
   const drawn = lines.filter(l => isDrawn(l.code))
   const order: OrderReport = { local: 0, exact: 0, components: 0, fallbacks: 0 }
-  const edges = await bundle(drawn.map(l => ({ code: l.code, kind: l.kind, color: l.color, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)))) })), order)
+  // A road split by a toll road between its sides is two streets, each drawn (Yos Sudarso at Walikota).
+  const keptApart = (a: [number, number], b: [number, number], heading: [number, number]): boolean => roads.motorwayBetween(a, b, heading)
+  const edges = await bundle(drawn.map(l => ({ code: l.code, kind: l.kind, color: l.color, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)), keptApart), keptApart) })), order, keptApart)
   console.log(`  line order: crossings cost ${order.exact} solved exactly (local search: ${order.local}), ${order.components} component(s)`)
   if (order.fallbacks > 0) console.warn(`  ${order.fallbacks} component(s) unsolved in time, local order kept`)
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
