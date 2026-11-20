@@ -42,10 +42,15 @@ const SNAP_M = 40
 const SNAP_COS = Math.cos((35 * Math.PI) / 180)
 
 /*
- * A line's own last few points are not a street to snap onto: every point lies
- * within SNAP_M of the one before it.
+ * A piece's own last OWN_REACH_M are not a street for it to snap onto: every
+ * point lies within SNAP_M of the one before it, and legs closing in on each
+ * other that soon are a hairpin, not two carriageways of one street. Koridor 2
+ * goes up the park road to Gambir 2, turns round and comes back down the road
+ * beside it, 40 m over; merged, those legs drew a knot. A piece going out and
+ * back for kilometres (koridor 1 up Thamrin) still merges, but for its tip.
  */
-const OWN_TAIL = Math.ceil((2 * SNAP_M) / SAMPLE_M) + 1
+const OWN_REACH_M = 500
+const OWN_TAIL = Math.ceil(OWN_REACH_M / SAMPLE_M)
 
 /** Two snapped points not yet joined are bridged along the network when it has a path this short. */
 const BRIDGE_HOPS = 6
@@ -912,62 +917,4 @@ export function dropBypasses(pieces: readonly LngLat[][]): LngLat[][] {
  */
 export function isDrawn(code: string): boolean {
   return /^\d+$/.test(code) || code === '13E' || code === 'L13E'
-}
-
-/*
- * A pirouette straightened: a line turning right through a small roundabout goes
- * three-quarters round it under left-hand traffic (Koridor 2 at Medan Merdeka
- * Timur, round a ring 20 m across), and in the overview that reads as a curl,
- * which the bundle then snaps into knots. A stretch of a piece no longer than
- * CURL_MAX_M that travels CURL_RATIO times as far as it gets (end to end) is a
- * curl; the most curled such stretch becomes a straight chord, so the turn draws
- * as the corner it is. Measured on distance, not on turning, which the feed's
- * jitter (a point a few metres back) throws. A corner is 1.4, half round
- * Bundaran HI 1.6, three-quarters round a 20 m ring 3.3; a big roundabout takes
- * longer than CURL_MAX_M to curl and stays on its ring. A tighter loop may be
- * longer (Koridor 2 again, 200 m out and round for 43 m on). Street zoom keeps it all.
- */
-const CURL_MAX_M = 150
-const CURL_RATIO = 2.2
-/** Longer, up to LOOP_MAX_M, only a stretch all but looping back on itself: three-quarters round any ring is 3.3. */
-const LOOP_MAX_M = 250
-const LOOP_RATIO = 4
-
-export function uncurl(piece: readonly LngLat[]): LngLat[] {
-  const xy = piece.map(([lng, lat]) => [lng * KX, lat * KY] as XY)
-  const along: number[] = [0]
-  for (let i = 1; i < xy.length; i++) along.push(along[i - 1]! + Math.hypot(xy[i]![0] - xy[i - 1]![0], xy[i]![1] - xy[i - 1]![1]))
-  /** How curled i..j is: path over end-to-end distance. */
-  const ratio = (i: number, j: number): number =>
-    (along[j]! - along[i]!) / Math.max(1, Math.hypot(xy[j]![0] - xy[i]![0], xy[j]![1] - xy[i]![1]))
-  const curled = (i: number, j: number): boolean => {
-    const r = ratio(i, j)
-    const m = along[j]! - along[i]!
-    return (m <= CURL_MAX_M && r >= CURL_RATIO) || (m <= LOOP_MAX_M && r >= LOOP_RATIO)
-  }
-  const keep = piece.map(() => true)
-  for (let i = 0; i < xy.length - 2; i++) {
-    // The most curled stretch from i within reach, if curled enough.
-    let j = -1
-    let best = CURL_RATIO
-    for (let k = i + 2; k < xy.length && along[k]! - along[i]! <= LOOP_MAX_M; k++) {
-      const r = ratio(i, k)
-      if (r >= best && curled(i, k)) {
-        best = r
-        j = k
-      }
-    }
-    if (j < 0) continue
-    // Then its start, tightened to the most curled stretch ending at j.
-    let start = i
-    for (let k = i + 1; k <= j - 2; k++) {
-      if (ratio(k, j) >= best && curled(k, j)) {
-        best = ratio(k, j)
-        start = k
-      }
-    }
-    for (let k = start + 1; k < j; k++) keep[k] = false
-    i = j - 1
-  }
-  return keep.every(Boolean) ? [...piece] : piece.filter((_, k) => keep[k])
 }
