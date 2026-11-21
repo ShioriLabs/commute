@@ -25,6 +25,12 @@ const CACHE_DIR = path.join(__dirname, '../../../.cache/shirase-roads')
 /** Roads at z14: every street a bus takes, at well under a metre's precision. */
 const TILE_ZOOM = 14
 
+/**
+ * TransJakarta's own lanes (OSM highway=busway) start at z15: at z14 the tiles carry 4 km of them,
+ * where z15 has the koridors' medians. Busways are read from z15 then, the rest from z14.
+ */
+const BUSWAY_ZOOM = 15
+
 /** A point every SAMPLE_M along a line, matched to a road within SNAP_M of it. */
 const SAMPLE_M = 8
 const SNAP_M = 30
@@ -36,10 +42,12 @@ const HEADING_COS = Math.cos((40 * Math.PI) / 180)
  * Preferences, in metres off a road's distance: keep to the road the last
  * point was on (the feed's wobble shouldn't hop lanes), BRT on a busway, and
  * off a flyover unless the shape is clearly on it (Kuningan's runs over Rasuna
- * Said's busway).
+ * Said's busway). The busway's is strong: the feed's shapes often follow the
+ * general carriageway, 10-15 m off the median lane the bus runs in (1 on
+ * Sudirman, 9 on S. Parman).
  */
 const SAME_ROAD_M = 8
-const BUSWAY_M = 10
+const BUSWAY_M = 20
 const BRIDGE_M = 12
 
 /** Points matching no road between two on one road are a corner the feed cut, up to this many. */
@@ -216,15 +224,19 @@ export async function loadRoads(pieces: readonly LngLat[][]): Promise<Roads> {
     }
   }
   const roads: Road[] = []
-  const list = [...tiles]
+  // Each z14 tile, and its four z15 children for the busways.
+  const list = [...tiles].flatMap((key) => {
+    const [x, y] = key.split(',').map(Number) as [number, number]
+    const scale = 2 ** (BUSWAY_ZOOM - TILE_ZOOM)
+    const children: [number, number, number][] = []
+    for (let dx = 0; dx < scale; dx++) for (let dy = 0; dy < scale; dy++) children.push([BUSWAY_ZOOM, x * scale + dx, y * scale + dy])
+    return [[TILE_ZOOM, x, y] as [number, number, number], ...children]
+  })
   const wanted = new Set(['roads'])
   // A few at a time: shirase serves them from its edge cache, and a first run fetches some hundreds.
   for (let i = 0; i < list.length; i += 8) {
-    const batch = await Promise.all(list.slice(i, i + 8).map(async (key) => {
-      const [x, y] = key.split(',').map(Number) as [number, number]
-      return { x, y, bytes: await tileBytes(tileset, TILE_ZOOM, x, y) }
-    }))
-    for (const { x, y, bytes } of batch) {
+    const batch = await Promise.all(list.slice(i, i + 8).map(async ([z, x, y]) => ({ z, x, y, bytes: await tileBytes(tileset, z, x, y) })))
+    for (const { z, x, y, bytes } of batch) {
       if (!bytes) continue
       for (const layer of readTile(bytes, wanted)) {
         for (const f of layer.features) {
@@ -232,10 +244,11 @@ export async function loadRoads(pieces: readonly LngLat[][]): Promise<Roads> {
           const kind = String(f.properties.kind ?? '')
           const detail = String(f.properties.kind_detail ?? '')
           if (!DRIVABLE.has(kind) || NOT_DRIVABLE.has(detail)) continue
+          if ((detail === 'busway') !== (z === BUSWAY_ZOOM)) continue
           for (const part of f.geometry) {
             if (part.length < 2) continue
             roads.push({
-              xy: part.map(([px, py]) => toXY(tileLngLat(TILE_ZOOM, x, y, layer.extent, px, py))),
+              xy: part.map(([px, py]) => toXY(tileLngLat(z, x, y, layer.extent, px, py))),
               oneway: f.properties.oneway === 'yes',
               busway: detail === 'busway',
               bridge: f.properties.is_bridge === true,

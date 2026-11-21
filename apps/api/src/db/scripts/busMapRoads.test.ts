@@ -46,6 +46,13 @@ describe('snapToRoads', () => {
     for (const p of snapped) expect(Math.abs(east(p))).toBeLessThan(0.5)
   })
 
+  it('takes a median busway the feed runs 12 m off, along the general lanes', () => {
+    // Koridor 1 on Sudirman: the feed's shape follows the carriageway, the busway is in the median.
+    const roads = new Roads([road([[0, 0], [0, 1000]]), road([[12, 0], [12, 1000]], { busway: true })])
+    const snapped = snapToRoads([at(0, 0), at(0, 1000)], roads, { brt: true })
+    for (const p of snapped) expect(east(p)).toBeCloseTo(12, 0)
+  })
+
   it('steps across a divided road drawn as one line rather than round its far end', () => {
     // Both carriageways and the roundabout joining them as one road: up 12 m east, round at 1200 m,
     // back down 12 m west. The line crosses from nearer the east one to nearer the west halfway.
