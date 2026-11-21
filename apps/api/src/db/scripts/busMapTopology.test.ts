@@ -145,6 +145,19 @@ describe('alignToTopology', () => {
     expect(passesBy(nine, ...at(0, 0))).toBe(false)
   })
 
+  it('carries on from the pass the last leg went round to, not back to an earlier one beside it', () => {
+    // 8 at Grogol Reformasi (G): up Kyai Tapa, grazing the halte, round the corner onto S. Parman
+    // past it again 68 m on, and away south. The leg into G goes round to the second pass; the
+    // next leg starts there, not back at the first to go round the corner twice.
+    const gHaltes = { A: halte('A', -49, -500), G: halte('G', 0, 0), C: halte('C', 200, -600) }
+    const junction = run([-49, -500], [-49, 10], [-55, 40], [30, 40], [30, 100], [200, 100], [200, -600])
+    const track = junction.slice(1).reduce((s, q, i) => s + Math.hypot((q[0] - junction[i]![0]) * 110_670, (q[1] - junction[i]![1]) * 110_574), 0)
+    const aligned = alignToTopology([{ code: '8', pieces: [junction] }], gHaltes, [{ code: '8', runs: [['A', 'G', 'C']] }])
+    const length = aligned.pieces.get('8')!.flatMap(p => p.slice(1).map((q, i) => Math.hypot((q[0] - p[i]![0]) * 110_670, (q[1] - p[i]![1]) * 110_574)))
+      .reduce((s, m) => s + m, 0)
+    expect(length).toBeLessThan(track + 5)
+  })
+
   it('draws straight only when no street at all runs between two haltes', () => {
     const aligned = alignToTopology([{ code: '1', pieces: [run([0, 0], [0, 300])] }], haltes, [{ code: '1', runs: [['A', 'C']] }])
     expect(aligned.straight).toEqual(['1 A->C'])

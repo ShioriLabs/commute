@@ -173,8 +173,11 @@ function stretch(
     // to: 9 from Pluit runs up the feed's round trip backwards to Jembatan Besi, and held to that pass,
     // Kali Grogol Arah Selatan was only reached back round by Cawang, 34 km, not 1 km on down the other
     // carriageway.
+    // Of those passes from just before where it ended on, the nearest: a leg that went round a hairpin
+    // to [a]'s second pass (8 at Grogol Reformasi, grazing it on Kyai Tapa, then past it on S. Parman
+    // 93 m on) carries on from there, not back at the first to go round the corner twice.
     const carried = after?.track === t && after.forward ? fromA.filter(m => m >= after.at - 2 * NEAR_M) : []
-    const starts = carried.length > 0 ? [Math.min(...carried)] : fromA
+    const starts = carried.length > 0 ? [carried.reduce((p, q) => (Math.abs(q - after!.at) < Math.abs(p - after!.at) ? q : p))] : fromA
     for (const from of starts) {
       for (const to of toB) {
         const length = Math.abs(to - from)
