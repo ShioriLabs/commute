@@ -30,6 +30,7 @@
     "generate:trips": "tsx ./src/db/scripts/generateTrips.ts",
     "graft:shape-dist": "tsx ./src/db/scripts/graftShapeDist.ts",
     "generate:tj-topology": "tsx ./src/db/scripts/generateTJTopology.ts",
+    "fill:tj-shape-dist": "tsx ./src/db/scripts/fillShapeDist.ts",
     "generate:tj": "tsx ./src/db/scripts/generateTJSQL.ts",
     "generate:tj-transfers": "tsx ./src/db/scripts/generateTJTransferInternalizeSQL.ts",
     "generate:station-scores": "tsx ./src/db/scripts/generateStationScoresSQL.ts",

@@ -9,7 +9,6 @@ import { Line } from 'models/line'
 export const LINES: readonly Line[] = [
   { name: 'Blok M - Kota', lineCode: '1', colorCode: '#D62126' },
   { name: 'Tanjung Priok - PGC', lineCode: '10', colorCode: '#9b1f21' },
-  { name: 'Pelabuhan Tanjung Priok - Tanjung Priok', lineCode: '10C', colorCode: '#9B474A' },
   { name: 'Tanjung Priok - Bundaran Senayan', lineCode: '10H', colorCode: '#9B1F21' },
   { name: 'Pulo Gebang - Kampung Melayu', lineCode: '11', colorCode: '#312F92' },
   { name: 'Pulo Gebang - Pulo Gadung via PIK', lineCode: '11D', colorCode: '#504F92' },
@@ -32,7 +31,6 @@ export const LINES: readonly Line[] = [
   { name: 'Stasiun Palmerah - Bundaran Senayan', lineCode: '1F', colorCode: '#D65E62' },
   { name: 'Tanah Abang - Stasiun Gondangdia', lineCode: '1H', colorCode: '#D65E62' },
   { name: 'Meruya - Blok M', lineCode: '1M', colorCode: '#D65E62' },
-  { name: 'Tanah Abang - Blok M', lineCode: '1N', colorCode: '#D65E62' },
   { name: 'Senen - Blok M', lineCode: '1P', colorCode: '#D65E62' },
   { name: 'Rempoa - Blok M', lineCode: '1Q', colorCode: '#D65E62' },
   { name: 'Senen - Tanah Abang', lineCode: '1R', colorCode: '#D65E62' },
@@ -40,7 +38,6 @@ export const LINES: readonly Line[] = [
   { name: 'Pulo Gadung - Monumen Nasional', lineCode: '2', colorCode: '#2F489C' },
   { name: 'Pulo Gadung - Rawa Buaya via Balai Kota', lineCode: '2A', colorCode: '#2F489C' },
   { name: 'Harapan Indah - Pulo Gadung', lineCode: '2B', colorCode: '#54659C' },
-  { name: 'Balai Kota - JIEXPO', lineCode: '2C', colorCode: '#2F489C' },
   { name: 'Stasiun Gondangdia - Pasar Senen', lineCode: '2P', colorCode: '#54659C' },
   { name: 'Gondangdia - Balai Kota', lineCode: '2Q', colorCode: '#54659C' },
   { name: 'Kalideres - Monumen Nasional via Veteran', lineCode: '3', colorCode: '#FDCB1C' },
@@ -55,6 +52,7 @@ export const LINES: readonly Line[] = [
   { name: 'Pinang Ranti - Pulo Gadung', lineCode: '4F', colorCode: '#553C62' },
   { name: 'Pulo Gadung - Kejaksaan Agung', lineCode: '4K', colorCode: '#512C62' },
   { name: 'Kampung Melayu - Ancol', lineCode: '5', colorCode: '#D46425' },
+  { name: 'Shuttle HBKB Ancol', lineCode: '51ST', colorCode: '#D46425' },
   { name: 'Stasiun Tebet - Bidara Cina', lineCode: '5B', colorCode: '#D48961' },
   { name: 'Cililitan - Juanda', lineCode: '5C', colorCode: '#D46425' },
   { name: 'Kampung Melayu - Tanah Abang', lineCode: '5F', colorCode: '#D48961' },
@@ -74,26 +72,13 @@ export const LINES: readonly Line[] = [
   { name: 'Blok M - Pasar Minggu', lineCode: '6U', colorCode: '#4CAC67' },
   { name: 'Ragunan - Senayan Bank Jakarta', lineCode: '6V', colorCode: '#1BAC47' },
   { name: 'Duren Tiga - Blok M via Bangka Raya', lineCode: '6W', colorCode: '#4CAC67' },
-  /*
-   * Koridor 7 is PINK, not the brown the GTFS feed gives it.
-   *
-   * routes.txt has 914900 for both 7 and 7F, but TransJakarta's own roundel and
-   * the poster both draw them #F71752, and the schematic inks all 27 of their
-   * plotted stops in it. The feed is the name->code dictionary here; the map is
-   * authoritative for how a koridor looks (docs/fdtj-map-points.md).
-   *
-   * Leaving the brown in place made the map tracer elect the pink from the
-   * artwork and then draw the line brown over it, and pushed koridor 5's
-   * #CD4411 — only 60 channels from the brown, against the pink's 102 — inside
-   * the colour gate, so 7F was traced along koridor 5 through the Monas loop.
-   */
-  { name: 'Kampung Rambutan - Kampung Melayu', lineCode: '7', colorCode: '#F71752' },
+  { name: 'Kampung Rambutan - Kampung Melayu', lineCode: '7', colorCode: '#E2285A' },
   { name: 'Kampung Rambutan - Lebak Bulus', lineCode: '7A', colorCode: '#916131' },
   { name: 'Kampung Rambutan - Blok M', lineCode: '7B', colorCode: '#916131' },
   { name: 'Cibubur - Cawang Cililitan', lineCode: '7C', colorCode: '#916131' },
   { name: 'TMII - Pancoran', lineCode: '7D', colorCode: '#916131' },
   { name: 'Kampung Rambutan - Ragunan', lineCode: '7E', colorCode: '#916131' },
-  { name: 'Kampung Rambutan - Juanda via Cempaka Putih', lineCode: '7F', colorCode: '#F71752' },
+  { name: 'Kampung Rambutan - Juanda via Cempaka Putih', lineCode: '7F', colorCode: '#E2285A' },
   { name: 'Pondok Kelapa - Cawang Cililitan', lineCode: '7P', colorCode: '#916131' },
   { name: 'Blok M - Cawang Cililitan', lineCode: '7Q', colorCode: '#916131' },
   { name: 'Cibubur - Pluit', lineCode: '7R', colorCode: '#916131' },
@@ -102,7 +87,6 @@ export const LINES: readonly Line[] = [
   { name: 'Cibubur - Kampung Rambutan', lineCode: '7V', colorCode: '#916131' },
   { name: 'Cawang - St. Kereta Cepat Halim', lineCode: '7W', colorCode: '#916131' },
   { name: 'Lebak Bulus - Pasar Baru', lineCode: '8', colorCode: '#DD3393' },
-  { name: 'Jelambar - Juanda', lineCode: '8A', colorCode: '#DD3393' },
   { name: 'Kebayoran - Tanah Abang', lineCode: '8C', colorCode: '#DD6AAB' },
   { name: 'Joglo - Blok M via Meruya Selatan', lineCode: '8D', colorCode: '#DD6AAB' },
   { name: 'Bintaro - Blok M', lineCode: '8E', colorCode: '#DD6AAB' },
@@ -116,7 +100,6 @@ export const LINES: readonly Line[] = [
   { name: 'Kebayoran Lama - Jelambar', lineCode: '9E', colorCode: '#66A4A0' },
   { name: 'Cipedak - Pasar Minggu', lineCode: '9H', colorCode: '#66A4A0' },
   { name: 'Pinang Ranti - Simpang Cawang', lineCode: '9N', colorCode: '#66a4a0' },
-  { name: 'Puri Beta - Flyover Kuningan (Express)', lineCode: 'L13E', colorCode: '#7A357B' },
-  { name: 'Kampung Melayu - JIEXPO Kemayoran', lineCode: 'PRJ2', colorCode: '#D48961' },
-  { name: 'Pulo Gadung - JIEXPO Kemayoran', lineCode: 'PRJ3', colorCode: '#54659C' }
+  { name: 'Grogol Reformasi - Roxy', lineCode: '9ST', colorCode: '#45A49E' },
+  { name: 'Puri Beta - Flyover Kuningan (Express)', lineCode: 'L13E', colorCode: '#7A357B' }
 ] as const
