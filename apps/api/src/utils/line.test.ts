@@ -67,11 +67,11 @@ describe('line searchability', () => {
   it('splits TJ into searchable BRT corridors and hidden feeders', () => {
     const tj = ALL_LINES.TJ
     // The dictionary still carries all of them — only the flag differs.
-    // 99/30 rather than 100/31 since corridor 10D was retired out of the feed.
-    expect(tj.length).toBe(99)
+    // 95 after the 2026-11 feed dropped 10C, 1N, 2C, 8A, PRJ2, PRJ3 (and 10D earlier); added 51ST, 9ST.
+    expect(tj.length).toBe(95)
     expect(tj.filter(l => l.searchable).length).toBe(30)
     expect(getLineByOperator('TJ', '1')?.searchable).toBe(true)
-    expect(getLineByOperator('TJ', '2C')?.searchable).toBe(false)
+    expect(getLineByOperator('TJ', '6M')?.searchable).toBe(false)
   })
 })
 

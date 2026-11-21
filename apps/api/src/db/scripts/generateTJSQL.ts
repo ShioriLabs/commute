@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
 import { haversineMeters } from '../../utils/geo'
+import { TJ_COLOR_OVERRIDES, TJ_STOP_FOLD } from './tjStopFold'
 
 /*
  * TransJakarta GTFS importer. Reads the static feed (extracted under
@@ -93,7 +94,8 @@ const tripRoute = new Map(scopeTrips.map(t => [t.trip_id, t.route_id]))
 const stopById = new Map(stops.map(s => [s.stop_id, s]))
 function collapse(id: string): string {
   const s = stopById.get(id)
-  return (s && s.parent_station) ? s.parent_station : id
+  const parent = (s && s.parent_station) ? s.parent_station : id
+  return TJ_STOP_FOLD[parent] ?? parent
 }
 
 // ── build per-trip ordered, collapsed stop sequences from stop_times ─────────
@@ -180,7 +182,7 @@ const lineEntries = scopeRoutes
   .sort((a, b) => a.route_short_name.localeCompare(b.route_short_name))
   .map((r) => {
     const name = r.route_long_name.replace(/'/g, '\\\'')
-    return `  { name: '${name}', lineCode: '${r.route_short_name.replace(/'/g, '\\\'')}', colorCode: '#${r.route_color}' }`
+    return `  { name: '${name}', lineCode: '${r.route_short_name.replace(/'/g, '\\\'')}', colorCode: '#${TJ_COLOR_OVERRIDES[r.route_short_name] ?? r.route_color}' }`
   })
 
 const linesTS
