@@ -4,6 +4,7 @@ import {
   bundle,
   bundleOrder,
   dropBypasses,
+  dropRetraces,
   dropShortLoops,
   loadSolver,
   orderCost,
@@ -490,5 +491,25 @@ describe('dropBypasses', () => {
     const main = run([0, 0], [0, 2000])
     const branch = run([0, 1000], [800, 1000], [800, 1800])
     expect(dropBypasses([main, branch])).toEqual([main, branch])
+  })
+})
+
+describe('dropRetraces', () => {
+  const at = (eastM: number, northM: number): LngLat => [LNG + eastM / M_LNG, LAT + northM / M_LAT]
+  // North 600 m, but 170 m down a side street and back on the way, the other carriageway 8 m over (9 past Cawang).
+  const outAndBack = [...north(0, 300), at(60, 300), at(170, 300), at(170, 308), at(60, 308), ...north(308, 600)]
+
+  it('takes out a bus going down a street and straight back with no halte on it', () => {
+    const drawn = dropRetraces(outAndBack)
+    expect(Math.max(...drawn.map(p => (p[0] - LNG) * M_LNG))).toBeLessThan(5)
+    expect(drawn[0]).toEqual(outAndBack[0])
+    expect(drawn[drawn.length - 1]).toEqual(outAndBack[outAndBack.length - 1])
+  })
+
+  it('keeps one with a halte the line calls at on it, and a loop round a block', () => {
+    expect(dropRetraces(outAndBack, [at(120, 300)])).toEqual(outAndBack)
+    // A terminus loop: up the street, round a block and back down it.
+    const block = [...north(0, 300), at(80, 300), at(80, 380), at(0, 380), ...north(300, 0)]
+    expect(dropRetraces(block)).toEqual(block)
   })
 })

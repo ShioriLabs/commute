@@ -1459,6 +1459,66 @@ const END_BARB_TURN_COS = Math.cos((110 * Math.PI) / 180)
 const KEEP_NEAR_HALTE_M = 25
 
 /** [path] without its barbs (see above); its ends stay put, and its points by any of [haltes]. */
+/*
+ * A line on its own streets going out and straight back along itself: koridor
+ * 9's way north past Cawang ran 170 m south down MT Haryono and back, after a
+ * short-turn pattern's U-turn there, with no halte where it turned. An
+ * excursion from a point back to within RETRACE_CLOSE_M of it, reaching up to
+ * RETRACE_MAX_M away, whose way back keeps within RETRACE_THIN_M of its way out,
+ * is taken out when no halte the line calls at lies along it: a bus turning
+ * round where no one gets on or off. One with a halte on it (a terminus up a
+ * spur, 8N's) stays. A loop round a block, or a hairpin round to the next street (2 at
+ * Gambir 2), keeps its legs further apart and stays too.
+ */
+const RETRACE_CLOSE_M = 20
+const RETRACE_MAX_M = 250
+const RETRACE_THIN_M = 25
+const RETRACE_MIN_M = 60
+
+/** [path] without its out-and-back excursions (see above); its ends stay put. */
+export function dropRetraces(path: readonly LngLat[], haltes: readonly LngLat[] = []): LngLat[] {
+  const xy = toXYs(path)
+  const stops = toXYs(haltes)
+  const near = (p: XY, q: XY): number => Math.hypot(p[0] - q[0], p[1] - q[1])
+  const out: LngLat[] = []
+  let i = 0
+  while (i < xy.length) {
+    out.push(path[i]!)
+    // The first point after i, far enough round, that comes back to within RETRACE_CLOSE_M of it.
+    let walked = 0
+    let reach = 0
+    let tip = i
+    let back = -1
+    for (let j = i + 1; j < xy.length; j++) {
+      walked += near(xy[j]!, xy[j - 1]!)
+      const away = near(xy[j]!, xy[i]!)
+      if (away > reach) {
+        reach = away
+        tip = j
+      }
+      if (reach > RETRACE_MAX_M || walked > 2 * RETRACE_MAX_M + 2 * RETRACE_CLOSE_M) break
+      if (walked >= RETRACE_MIN_M && away <= RETRACE_CLOSE_M && j > tip) {
+        back = j
+        break
+      }
+    }
+    // No halte the line calls at anywhere along it: a rider is never carried there, so it's no part of
+    // the line to them. One with a halte on it (8N up its spur) is the line's.
+    const calls = (): boolean => stops.some(h => xy.slice(i, back + 1).some((q, k, way) => k > 0 && distanceTo(h, way[k - 1]!, q) <= KEEP_NEAR_HALTE_M))
+    if (back > 0 && !calls()) {
+      // Thin: every point of the way out lies near the way back.
+      const wayBack = xy.slice(tip, back + 1)
+      const thin = xy.slice(i, tip + 1).every(p => wayBack.some((q, k) => k > 0 && distanceTo(p, wayBack[k - 1]!, q) <= RETRACE_THIN_M))
+      if (thin) {
+        i = back
+        continue
+      }
+    }
+    i++
+  }
+  return out
+}
+
 export function trimBarbs(path: readonly LngLat[], haltes: readonly LngLat[] = []): LngLat[] {
   const xy = toXYs(path)
   const stops = toXYs(haltes)

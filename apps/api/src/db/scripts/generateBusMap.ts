@@ -4,6 +4,7 @@ import { TOPOLOGY } from '../data/topology'
 import {
   bundle,
   dropBypasses,
+  dropRetraces,
   easeCorners,
   filletCorners,
   isDrawn,
@@ -397,7 +398,7 @@ async function main(): Promise<void> {
   const sortedHaltes = Object.fromEntries(Object.entries(normal.haltes).sort(([a], [b]) => a.localeCompare(b)))
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
-  const onRoads = await alongRoads(normal.lines)
+  const onRoads = await alongRoads(normal.lines, sortedHaltes)
   const edges = await bundleShapes(onRoads.lines, onRoads.roads, sortedHaltes)
   const stopMarks = marksFor(edges, onRoads.lines, sortedHaltes)
   const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, stopMarks, haltes: sortedHaltes, rail }
@@ -515,13 +516,15 @@ function marksFor(edges: readonly BusMapEdge[], lines: readonly BusMapLine[], ha
  * the same shapes onto the same roads and changes nothing. The roads come back
  * too, for the network's edges.
  */
-async function alongRoads(lines: readonly BusMapLine[]): Promise<{ lines: BusMapLine[], roads: Roads }> {
+async function alongRoads(lines: readonly BusMapLine[], haltes: BusMap['haltes']): Promise<{ lines: BusMapLine[], roads: Roads }> {
   const roads = await loadRoads(lines.flatMap(l => l.shapes.map(s => decodePolyline(s))))
   return {
-    lines: lines.map(l => ({
-      ...l,
-      drawn: l.shapes.map(s => encodePolyline(simplify(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT' }), SIMPLIFY_M)))
-    })),
+    lines: lines.map((l) => {
+      // Out-and-back excursions taken out, as street zoom draws these (dropRetraces): 9 north past Cawang.
+      const stops = l.stops.flatMap(code => (haltes[code] ? [[haltes[code][1], haltes[code][2]] as LngLat] : []))
+      const lay = (s: string): string => encodePolyline(simplify(dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT' }), stops), SIMPLIFY_M))
+      return { ...l, drawn: l.shapes.map(lay) }
+    }),
     roads
   }
 }
@@ -606,7 +609,7 @@ export function alongTopology(
 async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const normal = alongTopology(map.lines, map.haltes)
-  const onRoads = await alongRoads(normal.lines)
+  const onRoads = await alongRoads(normal.lines, normal.haltes)
   const edges = await bundleShapes(onRoads.lines, onRoads.roads, normal.haltes)
   const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)
   const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: map.rail }
