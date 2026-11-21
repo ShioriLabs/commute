@@ -135,6 +135,8 @@ function slice(t: Track, from: number, to: number): [number, number][] {
 interface Cursor {
   track: Track
   at: number
+  /** Whether the leg ran along the track; one run back up it has no way on to keep to. */
+  forward: boolean
 }
 
 interface Picked extends Cursor {
@@ -166,8 +168,12 @@ function stretch(
     if (fromA.length === 0) continue
     const toB = passes(t, b, near)
     const avoided = avoid.flatMap(p => passes(t, p, NEAR_M))
-    // On the track the last leg ended on, only its next pass of [a]: a later one skips what's between.
-    const carried = after?.track === t ? fromA.filter(m => m >= after.at - 2 * NEAR_M) : []
+    // On the track the last leg ran along, only its next pass of [a]: a later one skips what's between.
+    // A leg run back up a track (a trip the dedupe folded into the other way) has no next pass to keep
+    // to: 9 from Pluit runs up the feed's round trip backwards to Jembatan Besi, and held to that pass,
+    // Kali Grogol Arah Selatan was only reached back round by Cawang, 34 km, not 1 km on down the other
+    // carriageway.
+    const carried = after?.track === t && after.forward ? fromA.filter(m => m >= after.at - 2 * NEAR_M) : []
     const starts = carried.length > 0 ? [Math.min(...carried)] : fromA
     for (const from of starts) {
       for (const to of toB) {
@@ -176,7 +182,7 @@ function stretch(
         if (avoided.some(m => m > Math.min(from, to) + NEAR_M && m < Math.max(from, to) - NEAR_M)) continue
         const forward = to > from
         // How far on from the last leg's end this starts; Infinity when it doesn't carry on.
-        const onward = after && after.track === t && forward && from >= after.at - 2 * NEAR_M ? Math.abs(from - after.at) : Infinity
+        const onward = after && after.track === t && after.forward && forward && from >= after.at - 2 * NEAR_M ? Math.abs(from - after.at) : Infinity
         const better = !best
           || (forward && !best.forward)
           || (forward === best.forward && onward < best.onward)
@@ -193,7 +199,7 @@ function stretch(
     const again = passes(best.track, b, near).filter(m => m > to && m - to <= HAIRPIN_M)
     if (again.length > 0) best = { ...best, to: Math.max(...again) }
   }
-  return { path: slice(best.track, best.from, best.to), track: best.track, at: best.to }
+  return { path: slice(best.track, best.from, best.to), track: best.track, at: best.to, forward: best.forward }
 }
 
 /** Points along the street graph's tracks at most this far apart, so crossing lines find each other. */

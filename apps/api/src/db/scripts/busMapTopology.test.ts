@@ -133,6 +133,18 @@ describe('alignToTopology', () => {
     expect(passesBy(aligned.pieces.get('2')!, ...at(20, 1200))).toBe(true)
   })
 
+  it('leaves the pass it carried on along for another when only the other reaches the next halte plainly', () => {
+    // 9 from Pluit (P): the feed keeps one round trip, south down the east carriageway (x 40) and
+    // back up the west (x -40). Penjaringan (N) is by the west side only, so the run starts up it
+    // backwards; Jembatan Besi (J) sits between both; Kali Grogol Arah Selatan (K) by the east only.
+    // From J, K is 200 m on down the east side, not back round the far end of the trip.
+    const nineHaltes = { P: halte('P', 0, 3000), N: halte('N', -40, 2000), J: halte('J', 0, 1000), K: halte('K', 40, 800) }
+    const roundTrip = run([0, 3000], [40, 2950], [40, 0], [-40, 0], [-40, 2950], [0, 3000])
+    const aligned = alignToTopology([{ code: '9', pieces: [roundTrip] }], nineHaltes, [{ code: '9', runs: [['P', 'N', 'J', 'K']] }])
+    const nine = aligned.pieces.get('9')!
+    expect(passesBy(nine, ...at(0, 0))).toBe(false)
+  })
+
   it('draws straight only when no street at all runs between two haltes', () => {
     const aligned = alignToTopology([{ code: '1', pieces: [run([0, 0], [0, 300])] }], haltes, [{ code: '1', runs: [['A', 'C']] }])
     expect(aligned.straight).toEqual(['1 A->C'])
