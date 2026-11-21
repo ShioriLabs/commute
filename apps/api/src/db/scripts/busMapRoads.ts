@@ -52,6 +52,15 @@ const DETOUR_SLACK_M = 50
 /** A road's point this near a match, along it, is where the line hands over to the next road. */
 const HANDOVER_M = 25
 
+/**
+ * A run of this many points or fewer (40 m) on a road that doesn't lead on from the road before it to
+ * the one after (a ramp, a busway stub beside the street) is the feed wobbling onto it, not the bus.
+ */
+const ASIDE_POINTS = 5
+
+/** A road's end this near another road's way joins it there. */
+const JOIN_M = 3
+
 /** The kinds of road a bus can drive. */
 const DRIVABLE = new Set(['highway', 'major_road', 'minor_road', 'other'])
 const NOT_DRIVABLE = new Set(['footway', 'path', 'pedestrian', 'steps', 'cycleway', 'corridor', 'sidewalk', 'crossing', 'bridleway'])
@@ -318,6 +327,7 @@ export function snapToRoads(
     matches.push(best)
     previous = best
   }
+  foldAsides(matches, points, roads)
 
   // Back to a line, made of the roads' own points only: every line along a road then has the very
   // same points there, so lines sharing it share it exactly, and where it hands over to the next
@@ -395,6 +405,73 @@ export function snapToRoads(
   if (last) push(vertexAt(last))
   for (const p of unmatched) push(p)
   return out.map(toLngLat)
+}
+
+/** Whether [road] has an end on [other]'s way, within JOIN_M: one leads on from the other there. */
+function joins(road: Road, other: Road): boolean {
+  return [road.xy[0]!, road.xy[road.xy.length - 1]!].some(([x, y]) => other.xy.some((a, i) => {
+    const b = other.xy[i + 1]
+    if (!b) return Math.hypot(x - a[0], y - a[1]) <= JOIN_M
+    const dx = b[0] - a[0]
+    const dy = b[1] - a[1]
+    const l2 = dx * dx + dy * dy || 1
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l2))
+    return Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy) <= JOIN_M
+  }))
+}
+
+/** [p] onto [road]'s nearest point, within SNAP_M; null when it's further. */
+function project(roads: Roads, r: number, [x, y]: [number, number]): Match | null {
+  const road = roads.roads[r]!
+  const at = along(road)
+  let best: Match | null = null
+  let bestD = SNAP_M
+  for (let i = 1; i < road.xy.length; i++) {
+    const [ax, ay] = road.xy[i - 1]!
+    const [bx, by] = road.xy[i]!
+    const dx = bx - ax
+    const dy = by - ay
+    const l2 = dx * dx + dy * dy
+    if (l2 === 0) continue
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2))
+    const q: [number, number] = [ax + t * dx, ay + t * dy]
+    const d = Math.hypot(x - q[0], y - q[1])
+    if (d <= bestD) {
+      bestD = d
+      best = { road: r, at: at[i - 1]! + t * Math.sqrt(l2), point: q }
+    }
+  }
+  return best
+}
+
+/**
+ * [matches] with each short hop aside taken back: a run of ASIDE_POINTS or fewer on one road, between
+ * runs on others, back onto the road it left or on a road not joining the ones either side of it (9
+ * at Grogol: onto a ramp and straight back, onto a busway stub beside the street). Its [points] go
+ * onto the nearer of the roads either side instead, or match nothing with neither near.
+ */
+function foldAsides(matches: (Match | null)[], points: readonly [number, number][], roads: Roads): void {
+  let i = 0
+  while (i < matches.length) {
+    const m = matches[i]
+    let j = i
+    while (m && j + 1 < matches.length && matches[j + 1]?.road === m.road) j++
+    const before = matches[i - 1]
+    const after = matches[j + 1]
+    if (m && before && after && j - i + 1 <= ASIDE_POINTS) {
+      const road = roads.roads[m.road]!
+      const aside = before.road === after.road || !joins(road, roads.roads[before.road]!) || !joins(road, roads.roads[after.road]!)
+      if (aside) {
+        for (let k = i; k <= j; k++) {
+          const onto = [project(roads, before.road, points[k]!), project(roads, after.road, points[k]!)]
+            .filter((q): q is Match => q !== null)
+            .sort((p, q) => Math.hypot(p.point[0] - points[k]![0], p.point[1] - points[k]![1]) - Math.hypot(q.point[0] - points[k]![0], q.point[1] - points[k]![1]))
+          matches[k] = onto[0] ?? null
+        }
+      }
+    }
+    i = j + 1
+  }
 }
 
 /**

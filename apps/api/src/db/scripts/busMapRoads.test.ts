@@ -101,4 +101,15 @@ describe('snapToRoads on a roundabout', () => {
     // Never out on the ring's west side.
     expect(Math.min(...snapped.map(east))).toBeGreaterThan(0)
   })
+
+  it('stays on its road past a few metres the feed wobbles onto a road beside it', () => {
+    // 9 southbound at Grogol: two points on a ramp 20 m east, then back on the street it was on.
+    const roads = new Roads([
+      road([[0, 0], [0, 1000]], { oneway: true }),
+      road([[20, 494], [20, 502]], { oneway: true })
+    ])
+    const line = [at(0, 0), at(0, 470), at(20, 496), at(20, 500), at(0, 526), at(0, 1000)]
+    const snapped = snapToRoads(line, roads)
+    expect(Math.max(...snapped.map(east))).toBeLessThan(10)
+  })
 })
