@@ -4,6 +4,7 @@ import {
   bundle,
   bundleOrder,
   dropBypasses,
+  dropShortLoops,
   loadSolver,
   orderCost,
   orderLinesExact,
@@ -17,6 +18,7 @@ import {
   type BusMapEdge,
   type Chain,
   type CornerTally,
+  type Network,
   type PairRule
 } from './busMapBundle'
 import { networkStats } from './busMapStats'
@@ -258,6 +260,21 @@ describe('bundle', () => {
     const three = placesOf(edges, '3').filter(p => p.of === 3).map(fromWest)
     expect(three.length).toBeGreaterThan(0)
     expect(three.every(at => at === 0)).toBe(true)
+  })
+})
+
+describe('dropShortLoops', () => {
+  // Points in metres, around a node at the origin.
+  const point = (x: number, y: number) => ({ x, y, ux: 0, uy: 1, piece: 0, index: 0 })
+  const network = (pts: [number, number][]): Network => ({ points: pts.map(([x, y]) => point(x, y)), edges: new Map(), adjacency: new Map() })
+
+  it('drops a teardrop off the network back to the node it left, keeps a loop round a block', () => {
+    // Node 0; a 70 m teardrop off it (9 toward Cawang Sentral); a 600 m loop round a block; a street on.
+    const net = network([[0, 0], [-25, 15], [-45, 0], [-25, -15], [-150, 0], [-150, 150], [0, 150], [0, 500]])
+    const teardrop: Chain = { path: [0, 1, 2, 3, 0], lines: new Set(['9']) }
+    const block: Chain = { path: [0, 4, 5, 6, 0], lines: new Set(['9']) }
+    const street: Chain = { path: [0, 7], lines: new Set(['9']) }
+    expect(dropShortLoops(net, [teardrop, block, street])).toEqual([block, street])
   })
 })
 

@@ -53,6 +53,19 @@ const SNAP_COS = Math.cos((35 * Math.PI) / 180)
 const OWN_REACH_M = 500
 const OWN_TAIL = Math.ceil(OWN_REACH_M / SAMPLE_M)
 
+/** An edge leaving a node and coming back to it shorter than this is a hook, not a loop to draw. */
+const LOOP_EDGE_MIN_M = 150
+
+/**
+ * [list] without its short loops: a chain off the network and back to the point it left, under
+ * LOOP_EDGE_MIN_M round, is no street but a short-turn pattern hooking off the road at its end (9
+ * toward Cawang Sentral, a 73 m teardrop off the bundle by Transjakarta Pintu 1, no halte on it). A
+ * terminal loop round a block runs far longer.
+ */
+export function dropShortLoops(network: Network, list: readonly Chain[]): Chain[] {
+  return list.filter(chain => chain.path[0] !== chain.path[chain.path.length - 1] || chainLength(network, chain) >= LOOP_EDGE_MIN_M)
+}
+
 /** A piece within SNAP_M of what's drawn for less than this, and off it either side, is beside it, not on it. */
 const SHARED_MIN_M = 100
 
@@ -1079,6 +1092,7 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport,
     if (smoothed) list = chains(network)
     if (!popped && !smoothed) break
   }
+  list = dropShortLoops(network, list)
   orient(network, list)
   const order = bundleOrder(lines)
   const rank = new Map(order.map((code, i) => [code, i]))
