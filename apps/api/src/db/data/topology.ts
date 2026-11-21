@@ -114,6 +114,21 @@ export const BOGUS_MEMBERSHIPS: { operator: Operator, station: string, lineCode:
 ]
 
 /*
+ * Stops that are on a line's path but are not interchanges, so the interchange
+ * count behind direction labels skips them.
+ *
+ * KA Bandara (A) calls at Bogor and Depok Baru on a few runs from 2026-12-01.
+ * It is a gated airport train, not a second line a rider changes to there, and
+ * counting it made Depok Baru read as an interchange: the cityward label at
+ * Citayam became "Depok / Depok Baru / Jakarta Kota" instead of naming
+ * Manggarai, the real interchange.
+ */
+export const NON_INTERCHANGE_MEMBERSHIPS: { operator: Operator, station: string, lineCode: string }[] = [
+  { operator: 'KCI', station: 'BOO', lineCode: 'A' }, // Bogor
+  { operator: 'KCI', station: 'DPB', lineCode: 'A' } // Depok Baru
+]
+
+/*
  * Turns that stay on one line but change vehicle.
  *
  * The Cikarang line is a lollipop: a stick running in to Jatinegara, and a loop
@@ -316,14 +331,18 @@ export const TOPOLOGY: LineTopology[] = [
     operator: 'KCI',
     lineCode: 'A',
     path: [
-      { station: 'MRI', pos: 'A01' },
-      { station: 'SUDB', pos: 'A02' },
-      { station: 'DU', pos: 'A03' },
-      { station: 'RW', pos: 'A04' },
-      { station: 'BPR', pos: 'A05' },
+      // GAPEKA 2026 (from 2026-12-01): some runs start at Bogor and stop only at
+      // Depok Baru before Manggarai, the rest of the Bogor line is run through.
+      { station: 'BOO', pos: 'A01' },
+      { station: 'DPB', pos: 'A02' },
+      { station: 'MRI', pos: 'A03' },
+      { station: 'SUDB', pos: 'A04' },
+      { station: 'DU', pos: 'A05' },
+      { station: 'RW', pos: 'A06' },
+      { station: 'BPR', pos: 'A07' },
       // Hand-added: absent from the kci.id station feed, see
       // db/scripts/kci_bst_station_insert.sql.
-      { station: 'BST', pos: 'A06' }
+      { station: 'BST', pos: 'A08' }
     ]
   },
 

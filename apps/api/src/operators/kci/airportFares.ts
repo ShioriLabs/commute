@@ -15,6 +15,9 @@
 export const AIRPORT_TERMINUS_CODE = 'BST'
 
 export const AIRPORT_FARES: Record<string, number> = {
+  // Bogor runs start 2026-12-01 at a promotional Rp85.000. Depok Baru, the one
+  // other stop on them, has no published fare yet, so it stays unpriced.
+  BOO: 85000,
   MRI: 85000,
   SUDB: 85000,
   DU: 70000,

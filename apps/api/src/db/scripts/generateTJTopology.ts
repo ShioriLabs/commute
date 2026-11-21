@@ -1,4 +1,5 @@
 import * as fs from 'node:fs'
+import { TJ_STOP_FOLD } from './tjStopFold'
 
 /*
  * TransJakarta BRT topology generator. Reads the static GTFS feed (extracted
@@ -106,7 +107,8 @@ const scopeTripIds = new Set(scopeTrips.map(t => t.trip_id))
 const stopById = new Map(stops.map(s => [s.stop_id, s]))
 const collapse = (id: string): string => {
   const s = stopById.get(id)
-  return (s && s.parent_station) ? s.parent_station : id
+  const parent = (s && s.parent_station) ? s.parent_station : id
+  return TJ_STOP_FOLD[parent] ?? parent
 }
 
 // ── per-trip ordered, collapsed halte sequences (haltes = H…) ────────────────
