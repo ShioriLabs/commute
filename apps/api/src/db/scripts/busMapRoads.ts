@@ -50,6 +50,12 @@ const SAME_ROAD_M = 8
 const BUSWAY_M = 20
 const BRIDGE_M = 12
 
+/**
+ * Off a toll road (OSM motorway), all but always: TransJakarta's koridors run on the street under it,
+ * and the feed drawn nearer the toll took 9 up onto the Tol Dalam Kota above S. Parman.
+ */
+const MOTORWAY_M = 10
+
 /** Points matching no road between two on one road are a corner the feed cut, up to this many. */
 const GAP_POINTS = 6
 
@@ -68,6 +74,39 @@ const ASIDE_POINTS = 5
 
 /** A road's end this near another road's way joins it there. */
 const JOIN_M = 3
+
+/**
+ * A run of this many points or more (48 m) on one road is where the line surely is. Between two such
+ * runs the line takes the roads' own way, routed, when the feed's goes off them: a corner cut across a
+ * junction in one straight (8 from Tomang Raya onto S. Parman) snapped to whatever lay under it.
+ */
+const SURE_POINTS = 6
+
+/** A route between two sure runs may be this much longer than the feed's way between them, and no more. */
+const ROUTE_RATIO = 1.5
+const ROUTE_SLACK_M = 40
+
+/**
+ * Nor may the feed between stray further than this from it: a corner the feed cuts or overshoots (8's V
+ * by the busway's curve at Tomang) strays tens of metres, a way the bus really goes the route would skip
+ * hundreds (11D up the spur to Gapura Rusun Pulo Jahe, 4 round Manggarai's one-way loop).
+ */
+const ROUTE_REACH_M = 80
+
+/**
+ * Nor may it take the line further from one of its haltes, near the feed between, than this beyond how
+ * near the feed came: the feed goes there to call (11D up to the Gapura Rusun Pulo Jahe terminus).
+ */
+const ROUTE_HALTE_M = 15
+const HALTE_NEAR_M = 50
+
+/** Road points this near each other are one junction: z15 busways meet z14 roads a fraction of a metre off. */
+const NODE_M = 1
+
+/** What a metre costs on a route: a BRT's busway less, a flyover or toll road more. */
+const BUSWAY_COST = 0.7
+const BRIDGE_COST = 1.5
+const MOTORWAY_COST = 3
 
 /** The kinds of road a bus can drive. */
 const DRIVABLE = new Set(['highway', 'major_road', 'minor_road', 'other'])
@@ -96,6 +135,12 @@ interface Segment {
 
 export class Roads {
   private readonly cells = new Map<string, Segment[]>()
+  private network?: RoadGraph
+
+  /** The roads as one network, for routing; built on first use. */
+  graph(): RoadGraph {
+    return (this.network ??= new RoadGraph(this))
+  }
 
   constructor(readonly roads: Road[]) {
     roads.forEach((road, r) => {
@@ -293,11 +338,11 @@ function along(road: Road): number[] {
   return out
 }
 
-/** [piece] laid onto [roads] (see the file comment); [brt] prefers a busway. */
+/** [piece] laid onto [roads] (see the file comment); [brt] prefers a busway, [stops] are the line's haltes. */
 export function snapToRoads(
   piece: readonly LngLat[],
   roads: Roads,
-  { brt = false, anyWay = false }: { brt?: boolean, anyWay?: boolean } = {}
+  { brt = false, anyWay = false, stops = [] }: { brt?: boolean, anyWay?: boolean, stops?: readonly LngLat[] } = {}
 ): LngLat[] {
   if (piece.length < 2) return [...piece]
   const points = sample(piece.map(toXY))
@@ -332,6 +377,7 @@ export function snapToRoads(
         - (previous && previous.road === r ? SAME_ROAD_M : 0)
         - (brt && road.busway ? BUSWAY_M : 0)
         + (road.bridge ? BRIDGE_M : 0)
+        + (road.motorway ? MOTORWAY_M : 0)
       if (score < bestScore) {
         bestScore = score
         best = { road: r, at: along(road)[s]! + t * l, point: [qx, qy] }
@@ -341,6 +387,7 @@ export function snapToRoads(
     previous = best
   }
   foldAsides(matches, points, roads)
+  const routes = routeBetweenSure(matches, points, roads, { brt, anyWay }, stops.map(toXY))
 
   // Back to a line, made of the roads' own points only: every line along a road then has the very
   // same points there, so lines sharing it share it exactly, and where it hands over to the next
@@ -365,11 +412,21 @@ export function snapToRoads(
     return Math.abs(at[k]! - m.at) <= HANDOVER_M ? road.xy[k]! : m.point
   }
   let last: Match | null = null
+  let lastIndex = -1
   let unmatched: [number, number][] = []
   for (let i = 0; i < points.length; i++) {
     const m = matches[i]
     if (!m) {
       unmatched.push(points[i]!)
+      continue
+    }
+    // Routed from the last sure run to this one: along the roads, whatever the feed did between.
+    const routed = routes.get(lastIndex)
+    if (last && routed?.to === i) {
+      for (const p of routed.path) push(p)
+      unmatched = []
+      last = m
+      lastIndex = i
       continue
     }
     const road = roads.roads[m.road]!
@@ -414,10 +471,314 @@ export function snapToRoads(
     }
     unmatched = []
     last = m
+    lastIndex = i
   }
   if (last) push(vertexAt(last))
   for (const p of unmatched) push(p)
   return out.map(toLngLat)
+}
+
+/**
+ * Each pair of sure runs (SURE_POINTS or more on one road) with anything else between them, or on two
+ * roads: the roads' way from the one to the other, by the index of the first's last point, and the
+ * points between matching nothing now. Only where the way is no more than ROUTE_RATIO the feed's.
+ */
+function routeBetweenSure(
+  matches: (Match | null)[],
+  points: readonly [number, number][],
+  roads: Roads,
+  options: { brt: boolean, anyWay: boolean },
+  stops: readonly [number, number][]
+): Map<number, { to: number, path: [number, number][] }> {
+  const runs: { road: number, from: number, to: number }[] = []
+  matches.forEach((m, i) => {
+    if (!m) return
+    const run = runs[runs.length - 1]
+    if (run && run.road === m.road && i - run.to <= GAP_POINTS + 1) run.to = i
+    else runs.push({ road: m.road, from: i, to: i })
+  })
+  const out = new Map<number, { to: number, path: [number, number][] }>()
+  let previous = -1
+  runs.forEach((run, k) => {
+    if (run.to - run.from + 1 < SURE_POINTS) return
+    const before = runs[previous]
+    const adjacent = previous === k - 1
+    previous = k
+    if (!before) return
+    // The same road straight on: joined along it as it is.
+    if (before.road === run.road && adjacent) return
+    let feed = 0
+    for (let j = before.to + 1; j <= run.from; j++) feed += Math.hypot(points[j]![0] - points[j - 1]![0], points[j]![1] - points[j - 1]![1])
+    const path = roads.graph().route(matches[before.to]!, matches[run.from]!, { ...options, limit: feed * ROUTE_RATIO + ROUTE_SLACK_M })
+    if (!path) return
+    const between = points.slice(before.to, run.from + 1)
+    if (between.some(p => distanceTo(path, p) > ROUTE_REACH_M)) return
+    for (const stop of stops) {
+      const fed = distanceTo(between, stop)
+      if (fed <= HALTE_NEAR_M && distanceTo(path, stop) > fed + ROUTE_HALTE_M) return
+    }
+    out.set(before.to, { to: run.from, path })
+    for (let j = before.to + 1; j < run.from; j++) matches[j] = null
+  })
+  return out
+}
+
+/** How far [p] is from [path]. */
+function distanceTo(path: readonly [number, number][], [x, y]: [number, number]): number {
+  let best = Infinity
+  for (let i = 1; i < path.length; i++) {
+    const [ax, ay] = path[i - 1]!
+    const [bx, by] = path[i]!
+    const dx = bx - ax
+    const dy = by - ay
+    const l2 = dx * dx + dy * dy || 1
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2))
+    best = Math.min(best, Math.hypot(x - ax - t * dx, y - ay - t * dy))
+  }
+  return best
+}
+
+/** Metres along [path]. */
+function lengthOf(path: readonly [number, number][]): number {
+  return path.slice(1).reduce((sum, p, i) => sum + Math.hypot(p[0] - path[i]![0], p[1] - path[i]![1]), 0)
+}
+
+interface Link {
+  to: number
+  m: number
+  /** The road it runs along; -1 for a step between two roads' points at one junction. */
+  road: number
+  /** Against a one-way road's direction: only for a bundle, which carries both ways. */
+  against: boolean
+}
+
+/** A small binary heap of [cost, node], cheapest first. */
+class Queue {
+  private readonly items: [number, number][] = []
+
+  get size(): number {
+    return this.items.length
+  }
+
+  push(item: [number, number]): void {
+    const items = this.items
+    items.push(item)
+    let i = items.length - 1
+    while (i > 0) {
+      const up = (i - 1) >> 1
+      if (items[up]![0] <= items[i]![0]) break
+      const swap = items[up]!
+      items[up] = items[i]!
+      items[i] = swap
+      i = up
+    }
+  }
+
+  pop(): [number, number] {
+    const items = this.items
+    const top = items[0]!
+    const end = items.pop()!
+    if (items.length > 0) {
+      items[0] = end
+      let i = 0
+      for (;;) {
+        const l = 2 * i + 1
+        const r = l + 1
+        let least = i
+        if (l < items.length && items[l]![0] < items[least]![0]) least = l
+        if (r < items.length && items[r]![0] < items[least]![0]) least = r
+        if (least === i) break
+        const swap = items[least]!
+        items[least] = items[i]!
+        items[i] = swap
+        i = least
+      }
+    }
+    return top
+  }
+}
+
+/**
+ * The roads as one network: each road's points as nodes along it (one way only on a one-way road),
+ * points of two roads within NODE_M joined as one junction, and a road's end within JOIN_M of another
+ * road's way joined onto it there, that way split at the point (a road clipped at a tile's edge, a
+ * busway's end on the street, a side street's end part-way along a long straight).
+ */
+export class RoadGraph {
+  /** Each road's points, split where another road's end joins it, and the node of its first. */
+  private readonly points: [number, number][][] = []
+  private readonly alongs: number[][] = []
+  private readonly base: number[] = []
+  private readonly roadOf: number[] = []
+  private readonly xy: [number, number][] = []
+  private readonly next: Link[][] = []
+
+  constructor(private readonly roads: Roads) {
+    const list = roads.roads
+    // Where each road's ends join another road's way: that way's segment, how far along it, the point.
+    const splits = list.map(() => new Map<number, { t: number, point: [number, number], end: [number, number] }[]>())
+    list.forEach((road, r) => {
+      for (const end of [road.xy[0]!, road.xy[road.xy.length - 1]!]) {
+        const [x, y] = end
+        for (const s of roads.near(x, y)) {
+          if (s.road === r) continue
+          const [ax, ay] = list[s.road]!.xy[s.i]!
+          const [bx, by] = list[s.road]!.xy[s.i + 1]!
+          const dx = bx - ax
+          const dy = by - ay
+          const l2 = dx * dx + dy * dy
+          if (l2 === 0) continue
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2))
+          const point: [number, number] = [ax + t * dx, ay + t * dy]
+          if (Math.hypot(x - point[0], y - point[1]) > JOIN_M) continue
+          const at = splits[s.road]!.get(s.i) ?? []
+          at.push({ t, point, end })
+          splits[s.road]!.set(s.i, at)
+        }
+      }
+    })
+    list.forEach((road, r) => {
+      const points: [number, number][] = []
+      road.xy.forEach((p, k) => {
+        points.push(p)
+        for (const split of (splits[r]!.get(k) ?? []).sort((a, b) => a.t - b.t)) points.push(split.point)
+      })
+      const at = [0]
+      for (let k = 1; k < points.length; k++) at.push(at[k - 1]! + Math.hypot(points[k]![0] - points[k - 1]![0], points[k]![1] - points[k - 1]![1]))
+      this.points.push(points)
+      this.alongs.push(at)
+      this.base.push(this.xy.length)
+      for (const p of points) {
+        this.xy.push(p)
+        this.roadOf.push(r)
+        this.next.push([])
+      }
+    })
+    const link = (a: number, b: number, road: number, against: boolean): void => {
+      this.next[a]!.push({ to: b, m: Math.hypot(this.xy[b]![0] - this.xy[a]![0], this.xy[b]![1] - this.xy[a]![1]), road, against })
+    }
+    list.forEach((road, r) => {
+      for (let k = 1; k < this.points[r]!.length; k++) {
+        const a = this.base[r]! + k - 1
+        link(a, a + 1, r, false)
+        link(a + 1, a, r, road.oneway)
+      }
+    })
+    // Points of two roads at one junction, a road's end and the split it joins at among them.
+    const cells = new Map<string, number[]>()
+    const cellOf = (x: number, y: number): [number, number] => [Math.floor(x / JOIN_M), Math.floor(y / JOIN_M)]
+    this.xy.forEach(([x, y], id) => {
+      const [cx, cy] = cellOf(x, y)
+      const key = `${cx},${cy}`
+      const ids = cells.get(key)
+      if (ids) ids.push(id)
+      else cells.set(key, [id])
+    })
+    const ends = new Set(list.flatMap((road, r) => [this.base[r]!, this.base[r]! + this.points[r]!.length - 1]))
+    const splitPoints = new Set(splits.flatMap(m => [...m.values()].flat().map(s => `${s.point[0]},${s.point[1]}`)))
+    this.xy.forEach(([x, y], id) => {
+      const [cx, cy] = cellOf(x, y)
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (const other of cells.get(`${cx + dx},${cy + dy}`) ?? []) {
+            if (other <= id || this.roadOf[other] === this.roadOf[id]) continue
+            const d = Math.hypot(this.xy[other]![0] - x, this.xy[other]![1] - y)
+            // Within NODE_M, one junction; within JOIN_M, a road's end and the split it joins.
+            const joined = d <= NODE_M || (d <= JOIN_M && (
+              (ends.has(id) && splitPoints.has(`${this.xy[other]![0]},${this.xy[other]![1]}`))
+              || (ends.has(other) && splitPoints.has(`${x},${y}`))
+            ))
+            if (!joined) continue
+            link(id, other, -1, false)
+            link(other, id, -1, false)
+          }
+        }
+      }
+    })
+  }
+
+  private cost(road: number, brt: boolean): number {
+    if (road < 0) return 1
+    const r = this.roads.roads[road]!
+    return (brt && r.busway ? BUSWAY_COST : 1) * (r.bridge ? BRIDGE_COST : 1) * (r.motorway ? MOTORWAY_COST : 1)
+  }
+
+  /**
+   * The roads' way from match [from] to match [to], each on its road, no more than [limit] metres; null
+   * when there's none. One-way roads only their way, unless [anyWay].
+   */
+  route(from: Match, to: Match, { brt, anyWay, limit }: { brt: boolean, anyWay: boolean, limit: number }): [number, number][] | null {
+    const segmentOf = (m: Match): number => {
+      const at = this.alongs[m.road]!
+      let k = 0
+      while (k < at.length - 2 && at[k + 1]! <= m.at) k++
+      return k
+    }
+    const fromRoad = this.roads.roads[from.road]!
+    const toRoad = this.roads.roads[to.road]!
+    const fromAt = this.alongs[from.road]!
+    const toAt = this.alongs[to.road]!
+    const fk = segmentOf(from)
+    const tk = segmentOf(to)
+    const fw = this.cost(from.road, brt)
+    const tw = this.cost(to.road, brt)
+    let best = Infinity
+    let path: [number, number][] | null = null
+    // Along the one road, when both are on it and it runs that way.
+    if (from.road === to.road && (to.at >= from.at || !fromRoad.oneway || anyWay)) {
+      const lo = Math.min(from.at, to.at)
+      const hi = Math.max(from.at, to.at)
+      const between = this.points[from.road]!.filter((_, k) => fromAt[k]! > lo && fromAt[k]! < hi)
+      best = (hi - lo) * fw
+      path = [from.point, ...(from.at <= to.at ? between : between.reverse()), to.point]
+    }
+    const goals = new Map<number, number>()
+    goals.set(this.base[to.road]! + tk, (to.at - toAt[tk]!) * tw)
+    if (!toRoad.oneway || anyWay) goals.set(this.base[to.road]! + tk + 1, (toAt[tk + 1]! - to.at) * tw)
+    const cost = new Map<number, number>()
+    const previous = new Map<number, number>()
+    const queue = new Queue()
+    const seed = (id: number, c: number): void => {
+      if (c < (cost.get(id) ?? Infinity)) {
+        cost.set(id, c)
+        queue.push([c, id])
+      }
+    }
+    seed(this.base[from.road]! + fk + 1, (fromAt[fk + 1]! - from.at) * fw)
+    if (!fromRoad.oneway || anyWay) seed(this.base[from.road]! + fk, (from.at - fromAt[fk]!) * fw)
+    // Costs run below metres only on a busway: a route over [limit] metres costs at least this.
+    const bound = limit * BUSWAY_COST
+    let reached = -1
+    while (queue.size > 0) {
+      const [c, id] = queue.pop()
+      if (c > (cost.get(id) ?? Infinity)) continue
+      if (c >= best || c > bound) break
+      const goal = goals.get(id)
+      if (goal !== undefined && c + goal < best) {
+        best = c + goal
+        reached = id
+      }
+      for (const l of this.next[id]!) {
+        if (l.against && !anyWay) continue
+        const through = c + l.m * this.cost(l.road, brt)
+        if (through < (cost.get(l.to) ?? Infinity)) {
+          cost.set(l.to, through)
+          previous.set(l.to, id)
+          queue.push([through, l.to])
+        }
+      }
+    }
+    if (reached >= 0) {
+      const nodes: [number, number][] = []
+      let walk: number | undefined = reached
+      while (walk !== undefined) {
+        nodes.push(this.xy[walk]!)
+        walk = previous.get(walk)
+      }
+      path = [from.point, ...nodes.reverse(), to.point]
+    }
+    return path && lengthOf(path) <= limit ? path : null
+  }
 }
 
 /** Whether [road] has an end on [other]'s way, within JOIN_M: one leads on from the other there. */

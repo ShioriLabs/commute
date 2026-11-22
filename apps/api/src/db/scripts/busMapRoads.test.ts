@@ -10,6 +10,7 @@ const Y0 = -6.18 * KY
 const xy = (east: number, north: number): [number, number] => [X0 + east, Y0 + north]
 const at = (east: number, north: number): LngLat => [(X0 + east) / KX, (Y0 + north) / KY]
 const east = ([lng]: LngLat): number => lng * KX - X0
+const north = ([, lat]: LngLat): number => lat * KY - Y0
 
 const road = (points: [number, number][], { oneway = false, busway = false, bridge = false, motorway = false } = {}) =>
   ({ xy: points.map(([e, n]) => xy(e, n)), oneway, busway, bridge, motorway })
@@ -44,6 +45,13 @@ describe('snapToRoads', () => {
     const roads = new Roads([road([[0, 0], [0, 1000]], { busway: true }), road([[12, 0], [12, 1000]])])
     const snapped = snapToRoads([at(8, 0), at(8, 1000)], roads, { brt: true })
     for (const p of snapped) expect(Math.abs(east(p))).toBeLessThan(0.5)
+  })
+
+  it('keeps to the street under a toll road, even where the feed runs nearer the toll', () => {
+    // 9 on S. Parman under the Tol Dalam Kota: the toll 3 m from the feed, the street 20 m.
+    const roads = new Roads([road([[20, 0], [20, 1000]]), road([[3, 0], [3, 1000]], { oneway: true, bridge: true, motorway: true })])
+    const snapped = snapToRoads([at(0, 0), at(0, 1000)], roads, { brt: true })
+    for (const p of snapped) expect(east(p)).toBeCloseTo(20, 0)
   })
 
   it('takes a median busway the feed runs 12 m off, along the general lanes', () => {
@@ -118,5 +126,34 @@ describe('snapToRoads on a roundabout', () => {
     const line = [at(0, 0), at(0, 470), at(20, 496), at(20, 500), at(0, 526), at(0, 1000)]
     const snapped = snapToRoads(line, roads)
     expect(Math.max(...snapped.map(east))).toBeLessThan(10)
+  })
+
+  it('takes the roads round a junction the feed cuts across in one straight', () => {
+    // 8 from Tomang Raya (west along y 0) onto S. Parman (north up x 0) by the busway's curve; the
+    // feed draws one straight from 150 m along Tomang Raya to 150 m up S. Parman.
+    const roads = new Roads([
+      road([[600, 0], [100, 0], [60, 10], [30, 40], [10, 60], [0, 100]], { oneway: true, busway: true }),
+      road([[0, 100], [0, 600]], { oneway: true })
+    ])
+    const snapped = snapToRoads([at(600, 0), at(150, 0), at(0, 150), at(0, 600)], roads, { brt: true })
+    const near = (e: number, n: number): number => Math.min(...snapped.map(p => Math.hypot(east(p) - e, north(p) - n)))
+    expect(near(75, 75)).toBeGreaterThan(40)
+    expect(near(30, 40)).toBeLessThan(1)
+  })
+
+  it('keeps a way the feed goes off the roads to call at a halte, rather than routing past it', () => {
+    // 11D to the Gapura Rusun Pulo Jahe terminus, 40 m off the end of the street the roads have.
+    const roads = new Roads([road([[0, 0], [0, 500]], { oneway: true }), road([[0, 500], [0, 1000]], { oneway: true })])
+    const halte = at(-40, 500)
+    const snapped = snapToRoads([at(0, 0), at(0, 470), halte, at(0, 530), at(0, 1000)], roads, { stops: [halte] })
+    expect(Math.min(...snapped.map(p => Math.hypot(east(p) + 40, north(p) - 500)))).toBeLessThan(5)
+  })
+
+  it('keeps a way the feed goes far off the roads, rather than routing straight past it', () => {
+    // 11D up the spur to Gapura Rusun Pulo Jahe, 150 m off the street, on no road the tiles carry:
+    // the street's two ways either side join where the spur leaves, but the bus goes up the spur.
+    const roads = new Roads([road([[0, 0], [0, 500]], { oneway: true }), road([[0, 500], [0, 1000]], { oneway: true })])
+    const snapped = snapToRoads([at(0, 0), at(0, 470), at(150, 500), at(0, 530), at(0, 1000)], roads)
+    expect(Math.max(...snapped.map(east))).toBeGreaterThan(100)
   })
 })

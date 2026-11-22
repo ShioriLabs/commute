@@ -522,7 +522,7 @@ async function alongRoads(lines: readonly BusMapLine[], haltes: BusMap['haltes']
     lines: lines.map((l) => {
       // Out-and-back excursions taken out, as street zoom draws these (dropRetraces): 9 north past Cawang.
       const stops = l.stops.flatMap(code => (haltes[code] ? [[haltes[code][1], haltes[code][2]] as LngLat] : []))
-      const lay = (s: string): string => encodePolyline(simplify(dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT' }), stops), SIMPLIFY_M))
+      const lay = (s: string): string => encodePolyline(simplify(dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops }), stops), SIMPLIFY_M))
       return { ...l, drawn: l.shapes.map(lay) }
     }),
     roads
