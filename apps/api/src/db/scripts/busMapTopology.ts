@@ -38,6 +38,52 @@ const FAR_M = 150
 /** A run that starts within this of where the one before it ended is driven on to from there. */
 const TERMINAL_LINK_M = 1000
 
+/**
+ * A trip starting or ending within FAR_M of a terminus, and within this along it of where the line
+ * there is, starts or ends where the buses wait: its way between is the line's, a loop to turn included.
+ */
+const TERMINAL_EXTRA_M = 300
+
+/** Shorter than this, the way from where a trip starts or ends is the feed shuffling about a bay (2 at Pulo Gadung). */
+const TERMINAL_MIN_M = 20
+
+/** A run ending this near where the next starts is joined on to it. */
+const TERMINAL_JOIN_M = 50
+
+/**
+ * The way a bus comes out from where it waits at terminus [h] to [p] on the line: the start of a trip
+ * starting within FAR_M of [h], to where it first passes [p], within TERMINAL_EXTRA_M. Null when none.
+ */
+function lead(trips: readonly Track[], h: [number, number], p: [number, number]): [number, number][] | null {
+  let best: [number, number][] | null = null
+  for (const t of trips) {
+    if (Math.hypot(t.xy[0]![0] - h[0], t.xy[0]![1] - h[1]) > FAR_M) continue
+    const at = passes(t, p, NEAR_M).find(m => m <= TERMINAL_EXTRA_M)
+    if (at === undefined || at < 1) continue
+    const way = slice(t, 0, at)
+    if (lengthOf(way) >= TERMINAL_MIN_M && (!best || lengthOf(way) > lengthOf(best))) best = way
+  }
+  if (best) best[best.length - 1] = p
+  return best
+}
+
+/** The way a bus goes on from [p] on the line to where it waits at terminus [h]: lead, the other way. */
+function tail(trips: readonly Track[], h: [number, number], p: [number, number]): [number, number][] | null {
+  let best: [number, number][] | null = null
+  for (const t of trips) {
+    const end = t.at[t.at.length - 1]!
+    if (Math.hypot(t.xy[t.xy.length - 1]![0] - h[0], t.xy[t.xy.length - 1]![1] - h[1]) > FAR_M) continue
+    const ats = passes(t, p, NEAR_M).filter(m => end - m <= TERMINAL_EXTRA_M)
+    if (ats.length === 0) continue
+    const at = ats[ats.length - 1]!
+    if (end - at < 1) continue
+    const way = slice(t, at, end)
+    if (lengthOf(way) >= TERMINAL_MIN_M && (!best || lengthOf(way) > lengthOf(best))) best = way
+  }
+  if (best) best[0] = p
+  return best
+}
+
 const KX = Math.cos((-6.2 * Math.PI) / 180) * 111_320
 const KY = 110_574
 
@@ -513,12 +559,15 @@ export function alignToTopology(
             straight.push(`${line.code} ${placed[i - 1]}->${placed[i]}`)
             piece = [a, b]
           }
-          // Into a terminus, on to where the track it came along ends, near past the halte: 9 on past
-          // Pluit to Pluit 1, where its buses wait and start out from again.
-          if (pick?.forward && i === placed.length - 1 && k === stops.length - 1) {
-            const t = pick.track
-            const end = t.at[t.at.length - 1]!
-            if (end > pick.at && end - pick.at <= FAR_M) piece = [...piece, ...slice(t, pick.at, end).slice(1)]
+          // At a terminus, the way its buses go on to where they wait, or come from it: 9 on past Pluit to
+          // Pluit 1; 6 on past Ragunan, and back out round its loop.
+          if (i === placed.length - 1 && k === stops.length - 1) {
+            const on = tail(trips, b, piece[piece.length - 1]!)
+            if (on) piece = [...piece, ...on.slice(1)]
+          }
+          if (i === 1 && k === 1) {
+            const out = lead(trips, a, piece[0]!)
+            if (out) piece = [...out.slice(0, -1), ...piece]
           }
           const last = path[path.length - 1]
           // A way found from the halte itself (a graph route, a straight line) starts at its
@@ -530,6 +579,16 @@ export function alignToTopology(
       }
       const clean = despike(path)
       if (clean.length >= 2) drawn.push(clean.map(toLngLat))
+    }
+    // A run ending just short of where the next starts (6 in to Ragunan, out from its loop 25 m on) goes on to it.
+    if (drawn.length >= 2) {
+      drawn.forEach((piece, r) => {
+        const next = drawn[(r + 1) % drawn.length]![0]!
+        const [ex, ey] = toXY(piece[piece.length - 1]!)
+        const [nx, ny] = toXY(next)
+        const gap = Math.hypot(nx - ex, ny - ey)
+        if (gap > 0.5 && gap <= TERMINAL_JOIN_M) piece.push([...next] as LngLat)
+      })
     }
     pieces.set(line.code, drawn.length > 0 ? drawn : line.pieces.map(p => [...p]))
     stops.set(line.code, calls)

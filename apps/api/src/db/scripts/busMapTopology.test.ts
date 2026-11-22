@@ -158,6 +158,22 @@ describe('alignToTopology', () => {
     expect(passesBy([outbound!], ...at(0, -500))).toBe(false)
   })
 
+  it('goes round the loop a terminus turns by, between where its trips end and start', () => {
+    // 6 at Ragunan (R): in, its trips end 60 m on past the halte; out, they start 85 m on and go
+    // round a loop north before heading back past it.
+    const rHaltes = { A: halte('A', 1000, 0), R: halte('R', 0, 0) }
+    const arriving = run([1000, 0], [0, 0], [-60, 0])
+    const leaving = run([-85, 0], [-110, 20], [-90, 45], [-50, 30], [40, 10], [1000, 10])
+    const aligned = alignToTopology(
+      [{ code: '6', pieces: [arriving, leaving], feed: [arriving, leaving] }],
+      rHaltes,
+      [{ code: '6', runs: [['A', 'R'], ['R', 'A']] }]
+    )
+    const [inbound, outbound] = aligned.pieces.get('6')!
+    expect(passesBy([inbound!], ...at(-55, 0))).toBe(true)
+    expect(passesBy([outbound!], ...at(-100, 40))).toBe(true)
+  })
+
   it('drives from where one run ends on to where the next starts, near it', () => {
     // 14 at Senen: in to T, round by S 300 m on to turn, and back out past T.
     const sHaltes = { J: halte('J', 0, -1000), T: halte('T', 0, 0), S: halte('S', -300, 0) }
