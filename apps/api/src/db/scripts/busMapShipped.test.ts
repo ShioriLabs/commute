@@ -28,6 +28,9 @@ import { decodePolyline, type LngLat } from '../../utils/polyline'
  * - 3's turn at Monumen Nasional is round the Arjuna Wijaya fountain's busway ring, which only its
  *   round trips run in the feed: a waypoint (generateBusMap.ts VIA), per the user. 2 passes Monas
  *   on round onto Medan Merdeka Selatan for Gambir; it doesn't turn there.
+ * - A way in can be long: 4's trips pass Pulo Gadung's halte on the busway, go round by Bekasi
+ *   Raya and back into the terminal from the north, 500 m, to a bay; out, they leave from another
+ *   bay and back past where they came in. Drawn to where its trips end, then out from where they pass.
  * - An elevated busway is a bridge, kept off by the road matcher (a flyover over a koridor's own lane),
  *   but it is the 13 family's own way: westbound they came down to the street under it past Velbak.
  *   Only a koridor's own, by the busway's name: 13's past Blok M runs over 1's lane at Palatehan.
@@ -107,8 +110,7 @@ describe('Peta Bus as shipped, at the termini', () => {
       return pieces.some(p => Math.min(...pieces.map(q => dist(p[p.length - 1]!, q[0]!))) > 50)
     })
     // 13: its way back runs past CBD Ciledug on to Puri Beta 1.
-    // 4: in along the busway to Pulo Gadung's halte, out of a bay 61 m off; no trip joins the two.
-    expect(open).toEqual(['4', '13'])
+    expect(open).toEqual(['13'])
   })
 
   it('starts and ends every trunk piece without a hook', () => {
@@ -206,5 +208,10 @@ describe('Peta Bus as shipped, on the streets round them', () => {
     expect(distanceTo(drawn('3'), west)).toBeLessThan(6)
     expect(distanceTo(drawn('2'), south)).toBeGreaterThan(20)
     expect(distanceTo(drawn('2'), west)).toBeGreaterThan(20)
+  })
+
+  it('takes 4 into Pulo Gadung round by Bekasi Raya and the terminal’s north road, as its trips go', () => {
+    const north = offset(halte('Pulo Gadung'), -3, 174)
+    expect(distanceTo(drawn('4'), north)).toBeLessThan(10)
   })
 })

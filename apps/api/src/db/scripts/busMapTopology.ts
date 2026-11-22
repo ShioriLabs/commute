@@ -42,7 +42,19 @@ const TERMINAL_LINK_M = 1000
  * A trip starting or ending within FAR_M of a terminus, and within this along it of where the line
  * there is, starts or ends where the buses wait: its way between is the line's, a loop to turn included.
  */
-const TERMINAL_EXTRA_M = 300
+const TERMINAL_EXTRA_M = 600
+
+/** A run's start passing this near where the one before it ended starts there. */
+const TERMINAL_MEET_M = 10
+
+/** How far [p] is from segment [a]-[b]. */
+function distanceToSegment([px, py]: [number, number], [ax, ay]: [number, number], [bx, by]: [number, number]): number {
+  const dx = bx - ax
+  const dy = by - ay
+  const l2 = dx * dx + dy * dy || 1
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2))
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy)
+}
 
 /** Shorter than this, the way from where a trip starts or ends is the feed shuffling about a bay (2 at Pulo Gadung). */
 const TERMINAL_MIN_M = 20
@@ -599,6 +611,23 @@ export function alignToTopology(
     // A run ending just short of where the next starts, on ahead (6 in to Ragunan, out from its loop 25 m
     // on), goes on to it. One beside it (1's out of Blok M's bay, 12 m off the street) is left.
     if (drawn.length >= 2) {
+      // A run starting from a bay off where the last ended, and coming back past there on its way out
+      // (4 at Pulo Gadung, in to one bay, out of another 35 m off), starts there instead: no stub.
+      drawn.forEach((piece, r) => {
+        const r2 = (r + 1) % drawn.length
+        const next = drawn[r2]!
+        const end = toXY(piece[piece.length - 1]!)
+        let walked = 0
+        for (let i = 1; i < next.length && walked <= TERMINAL_EXTRA_M / 6; i++) {
+          const a = toXY(next[i - 1]!)
+          const b = toXY(next[i]!)
+          walked += Math.hypot(b[0] - a[0], b[1] - a[1])
+          if (i > 1 && distanceToSegment(end, a, b) <= TERMINAL_MEET_M) {
+            drawn[r2] = [piece[piece.length - 1]!, ...next.slice(i)]
+            break
+          }
+        }
+      })
       drawn.forEach((piece, r) => {
         const next = drawn[(r + 1) % drawn.length]![0]!
         const [ex, ey] = toXY(piece[piece.length - 1]!)
