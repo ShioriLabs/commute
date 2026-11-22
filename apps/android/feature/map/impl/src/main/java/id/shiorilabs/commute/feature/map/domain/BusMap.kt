@@ -30,7 +30,10 @@ data class BusMap(
     val stopMarks: List<JsonArray> = emptyList(),
     /** Halte code → `[name, lng, lat]`. `TJ-$code` is the API's station id. */
     val haltes: Map<String, JsonArray>,
-    /** Rail stations, as dots for bearings: `[station id, lng, lat]`. */
+    /**
+     * Rail stations: `[station id, lng, lat, numbers]`, the numbers `[line key, station number]` a
+     * line apiece (`["KCI:C", "C12"]`), for its roundels. An older file has no numbers.
+     */
     val rail: List<JsonArray>,
 )
 
@@ -151,13 +154,47 @@ fun BusMap.linesByHalte(): Map<String, List<String>> {
     return out
 }
 
+/**
+ * Rail stations closed for good, left off the map. The file keeps them, as the coordinate CSV does,
+ * for the record. Karet (`KCI-KAT`) is closed.
+ */
+val CLOSED_RAIL_STATIONS = setOf("KCI-KAT")
+
+/** The rail stations the map draws: the file's, less [CLOSED_RAIL_STATIONS]. */
+val BusMap.openRail: List<JsonArray>
+    get() = rail.filter { it[0].jsonPrimitive.content !in CLOSED_RAIL_STATIONS }
+
+/** A rail station's number on one of its lines: [lineKey] `KCI:C`, [number] `C12`. */
+data class RailNumber(val lineKey: String, val number: String)
+
+/** A rail station's numbers, a line apiece in the topology's order; none for an unnumbered one. */
+fun railNumbersOf(entry: JsonArray): List<RailNumber> =
+    (entry.getOrNull(3) as? JsonArray).orEmpty().mapNotNull { pair ->
+        val both = pair as? JsonArray ?: return@mapNotNull null
+        if (both.size < 2) return@mapNotNull null
+        RailNumber(both[0].jsonPrimitive.content, both[1].jsonPrimitive.content)
+    }
+
+/** The image a rail station's roundels are drawn from: one per set of numbers, shared by none else. */
+fun railRoundelImage(numbers: List<RailNumber>): String =
+    if (numbers.isEmpty()) RAIL_PLAIN_IMAGE else RAIL_ROUNDEL_IMAGE + numbers.joinToString("+") { it.number }
+
+/** Every rail roundel image the stations need, each with the numbers it draws. */
+fun BusMap.railRoundels(): Map<String, List<RailNumber>> =
+    openRail.map(::railNumbersOf).associateBy(::railRoundelImage)
+
+private const val RAIL_ROUNDEL_IMAGE = "rail-roundel-"
+
+/** An unnumbered station's mark: a plain ring. */
+const val RAIL_PLAIN_IMAGE = "rail-plain"
+
 /** A station the streets layer draws a dot for: a halte, or a rail station. */
 data class GeoStop(val stationId: String, val lat: Double, val lng: Double)
 
 /** Every dot the streets layer draws, haltes kept by [tappable] as [toGeoJson] keeps them. */
 fun BusMap.stops(tappable: ((stationId: String) -> Boolean)? = null): List<GeoStop> =
     haltes().filter { tappable == null || tappable(it.stationId) }.map { GeoStop(it.stationId, it.lat, it.lng) } +
-        rail.map { GeoStop(it[0].jsonPrimitive.content, it[2].jsonPrimitive.double, it[1].jsonPrimitive.double) }
+        openRail.map { GeoStop(it[0].jsonPrimitive.content, it[2].jsonPrimitive.double, it[1].jsonPrimitive.double) }
 
 /**
  * What "Sekitar" lists for the streets layer: the [stops] inside the box [south]..[north] by
@@ -201,6 +238,9 @@ data class BusMapGeoJson(
     val processed: String = "",
 )
 
+/** shirase's POI kind for a rail station (its `pois` layer, apps/shirase/src/pois.json). */
+const val RAIL_POI_KIND = "station"
+
 /** GeoJSON properties the streets layer's style expressions and taps read. */
 object BusMapProps {
     const val COLOR = "color"
@@ -209,6 +249,9 @@ object BusMapProps {
     const val STATION_ID = "id"
     const val NAME = "name"
     const val LINES = "lines"
+
+    /** A rail station's roundel image ([railRoundelImage]). */
+    const val ICON = "icon"
 
     /** A line stretch's place across its street, in line widths to the right of its direction. */
     const val SLOT = "slot"
@@ -228,9 +271,14 @@ object BusMapProps {
  * [BusMap] as GeoJSON: a LineString per shape piece, a Point per halte and per rail station.
  * [tappable] keeps a halte only if its station id has a page to open: some haltes are routing-only
  * stops the station directory leaves out, and a tap on one would open nothing. With it null, every
- * halte is kept.
+ * halte is kept. A rail station is named from [railNames] by its station id, carries its roundels'
+ * image ([railRoundelImage]), and shirase's own POI kind for one ([RAIL_POI_KIND]), so the
+ * basemap's label colour for a station fits it.
  */
-fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMapGeoJson {
+fun BusMap.toGeoJson(
+    tappable: ((stationId: String) -> Boolean)? = null,
+    railNames: Map<String, String> = emptyMap(),
+): BusMapGeoJson {
     // Every edge once per stroke on it (a colour's lines are one: 13, 13E and L13E), each at its slot
     // across the street, carrying its lines for a tap to ask which; a trunk stroke also at its slot
     // among the trunks alone, closed up for when the others aren't drawn.
@@ -283,11 +331,20 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
         }
     }
     val railFeatures = buildJsonArray {
-        for (entry in rail) {
+        for (entry in openRail) {
+            val stationId = entry[0].jsonPrimitive.content
             add(
                 feature(
                     geometry = point(entry[1].jsonPrimitive.double, entry[2].jsonPrimitive.double),
-                    properties = buildJsonObject { put(BusMapProps.STATION_ID, entry[0].jsonPrimitive.content) },
+                    properties = buildJsonObject {
+                        put(BusMapProps.STATION_ID, stationId)
+                        put(BusMapProps.KIND, RAIL_POI_KIND)
+                        val numbers = railNumbersOf(entry)
+                        put(BusMapProps.ICON, railRoundelImage(numbers))
+                        // How many roundels across, for the name to clear them all.
+                        put(BusMapProps.COUNT, numbers.size)
+                        railNames[stationId]?.let { put(BusMapProps.NAME, it) }
+                    },
                 ),
             )
         }

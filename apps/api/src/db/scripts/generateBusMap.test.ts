@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, type LngLat } from '../../utils/polyline'
-import { dedupePatterns, feedShapes, lengthM, parseRailCoords, sampleAlong } from './generateBusMap'
+import { dedupePatterns, feedShapes, lengthM, parseRailCoords, railNumbers, sampleAlong } from './generateBusMap'
 
 /*
  * Synthetic streets near Monas. Metres to degrees at -6.2: one degree of
@@ -76,6 +76,19 @@ describe('parseRailCoords', () => {
       ''
     ].join('\n')
     expect(parseRailCoords(csv)).toEqual([['KCI-MRI', 106.8502, -6.2099]])
+  })
+})
+
+describe('railNumbers', () => {
+  it('numbers a station once per line, in the lines\' order, TJ left out', () => {
+    const numbers = railNumbers([
+      { operator: 'KCI', lineCode: 'C', path: [{ station: 'SUD', pos: 'C12' }, { station: 'MRI', pos: 'C13' }] },
+      { operator: 'KCI', lineCode: 'B', path: [{ station: 'MRI', pos: 'B13' }], branches: [{ fromStation: 'MRI', path: [{ station: 'MRI', pos: 'B99' }] }] },
+      { operator: 'TJ', lineCode: '1', path: [{ station: 'H1', pos: '1-1' }] }
+    ])
+    expect(numbers.get('KCI-SUD')).toEqual([['KCI:C', 'C12']])
+    expect(numbers.get('KCI-MRI')).toEqual([['KCI:C', 'C13'], ['KCI:B', 'B13']])
+    expect(numbers.has('TJ-H1')).toBe(false)
   })
 })
 

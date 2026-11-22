@@ -21,6 +21,7 @@ import id.shiorilabs.commute.feature.map.domain.feedGeoJson
 import id.shiorilabs.commute.feature.map.domain.BusMapGeoJson
 import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.lineInfo
+import id.shiorilabs.commute.feature.map.domain.railRoundels
 import id.shiorilabs.commute.feature.map.domain.GeoStop
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.stops
@@ -289,13 +290,21 @@ class MapViewModel @Inject constructor(
             val layer = runCatching {
                 withContext(Dispatchers.Default) {
                     val map = busMapJson.decodeFromString(BusMap.serializer(), storage.bundled(BUS_MAP_FILE))
-                    val known = stationDirectory.stored()?.mapTo(HashSet()) { it.id }
+                    val stations = stationDirectory.stored()
+                    val known = stations?.mapTo(HashSet()) { it.id }
                     val tappable: ((String) -> Boolean)? = known?.let { ids -> { id -> id in ids } }
+                    val dictionary = lineRepository.dictionary.value.ifEmpty { lineRepository.lines().getOrNull().orEmpty() }
                     BusMapLayer(
-                        geoJson = map.toGeoJson(tappable),
+                        geoJson = map.toGeoJson(tappable, railNames = stations.orEmpty().associate { it.id to it.name }),
                         attribution = map.attribution,
                         stops = map.stops(tappable),
                         lines = map.lineInfo(),
+                        railRoundels = map.railRoundels().mapValues { (_, numbers) ->
+                            numbers.map { n ->
+                                val line = dictionary[n.lineKey]
+                                RailRoundel(n.number, line?.colorCode ?: RAIL_UNKNOWN_COLOR, line?.operator ?: n.lineKey.substringBefore(':'))
+                            }
+                        },
                     )
                 }
             }.getOrNull()
@@ -318,7 +327,15 @@ data class BusMapLayer(
     val stops: List<GeoStop>,
     /** Each line by code: for one picked on the map, its name and how far it reaches. */
     val lines: Map<String, BusMapLineInfo>,
+    /** Each rail roundel image ([railRoundelImage]) and the roundels it draws, left to right. */
+    val railRoundels: Map<String, List<RailRoundel>> = emptyMap(),
 )
+
+/** One station roundel on the streets layer: [number] `C12` in its line's [color] (`#RRGGBB`), by [operator]. */
+data class RailRoundel(val number: String, val color: String, val operator: String)
+
+/** A line the dictionary hasn't loaded yet: a neutral ring. */
+private const val RAIL_UNKNOWN_COLOR = "#64748B"
 
 /**
  * The route over the map: OTW's [pair], the [journey] open in its sheet (null on the options), and

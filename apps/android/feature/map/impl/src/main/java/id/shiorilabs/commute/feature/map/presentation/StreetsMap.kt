@@ -9,6 +9,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
+import android.graphics.Typeface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -23,13 +24,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import id.shiorilabs.commute.core.font.R as FontR
+import id.shiorilabs.commute.core.ui.components.RoundelSize
+import id.shiorilabs.commute.core.ui.components.splitStationNumber
 import id.shiorilabs.commute.feature.map.domain.BUS_LINE_W_15_DP
 import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.BusMapProps
 import id.shiorilabs.commute.feature.map.domain.GeoStop
+import id.shiorilabs.commute.feature.map.domain.RAIL_POI_KIND
 import id.shiorilabs.commute.feature.map.domain.stopsInView
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -46,9 +52,12 @@ import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.BackgroundLayer
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.Layer
+import org.maplibre.android.style.layers.LayoutPropertyValue
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.PaintPropertyValue
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.PropertyValue
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import kotlin.math.roundToInt
@@ -81,6 +90,8 @@ fun StreetsMap(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val screenDensity = LocalDensity.current.density
+    // The roundels' face, as core/ui's: PT Sans Narrow Bold.
+    val roundelFace = remember(context) { runCatching { ResourcesCompat.getFont(context, FontR.font.pt_sans_narrow_bold) }.getOrNull() }
     val tapSlop = TAP_SLOP_DP * screenDensity
     val onStation by rememberUpdatedState(onStationTap)
     val onAnyTap by rememberUpdatedState(onTap)
@@ -174,7 +185,7 @@ fun StreetsMap(
     LaunchedEffect(state.style, busMap, dark) {
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
-        addBusMap(style, busMap, dark, screenDensity)
+        addBusMap(style, busMap, dark, screenDensity, roundelFace)
     }
     // As it shows, or raw or processed, and a line alone: the rest faded under it, it over them.
     LaunchedEffect(state.style, busMap, dark, isolated, lines, feed) {
@@ -332,7 +343,7 @@ private fun hasLocation(context: Context): Boolean =
  * the haltes' names up close go over everything. Replaces what an earlier call added, for a theme
  * change.
  */
-private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float) {
+private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float, typeface: Typeface?) {
     for (id in LINE_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, DEBUG_LAYER, DEBUG_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
     for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, DEBUG_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE)) style.removeSource(id)
 
@@ -434,12 +445,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         PropertyFactory.textHaloWidth(1.5f),
         PropertyFactory.textOptional(true),
     ).apply { minZoom = HALTE_NAME_MIN_ZOOM }
-    val rail = CircleLayer(RAIL_LAYER, RAIL_SOURCE).withProperties(
-        PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, 2.5f), Expression.stop(14, 5f), Expression.stop(18, 8f))),
-        PropertyFactory.circleColor(if (dark) RAIL_FILL_DARK else RAIL_FILL),
-        PropertyFactory.circleStrokeColor(if (dark) RAIL_STROKE_DARK else RAIL_STROKE),
-        PropertyFactory.circleStrokeWidth(2f),
-    )
+    val rail = railStations(style, busMap.railRoundels, density, typeface)
     // A wash over the basemap first, as Transit lays a white overlay: its streets and fills step back
     // behind the lines, its labels (over the slot) stay sharp.
     val wash = BackgroundLayer(WASH_LAYER).withProperties(
@@ -476,13 +482,139 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         minZoom = MARKS_MIN_ZOOM
         maxZoom = STREET_ZOOM
     }
-    for (layer: Layer in listOf(wash, trunks, aui, brt, auiRoutes, brtRoutes, debugLines, alone, debugAlone, dots, bars, haltes, rail)) {
+    for (layer: Layer in listOf(wash, trunks, aui, brt, auiRoutes, brtRoutes, debugLines, alone, debugAlone, dots, bars, haltes)) {
         if (style.getLayer(OVERLAY_SLOT) != null) style.addLayerBelow(layer, OVERLAY_SLOT) else style.addLayer(layer)
     }
     // Halte names over the whole style: under the basemap's labels they lost every collision to a
-    // road's name, and a halte's name is what the layer is for.
+    // road's name, and a halte's name is what the layer is for. The rail stations over those, as
+    // the basemap drew its own over every other place.
     style.addLayer(names)
+    style.addLayer(rail)
 }
+
+/**
+ * The rail stations: each one's roundels, the app's station roundel a line apiece (white face, the
+ * line's ring, `C` over `12`) as Singapore's map badges its stations, its name beside them in the
+ * basemap's own look for a station, read off shirase's `pois` layer as served (a theme's colours
+ * with it). shirase's own stations are hidden: OSM's point beside ours drew Sudirman twice.
+ */
+private fun railStations(style: Style, roundels: Map<String, List<RailRoundel>>, density: Float, typeface: Typeface?): SymbolLayer {
+    for ((image, faces) in roundels) style.addImage(image, roundelImage(faces, density, typeface))
+    val rail = SymbolLayer(RAIL_LAYER, RAIL_SOURCE)
+    val pois = style.getLayer(BASEMAP_POIS_LAYER) as? SymbolLayer
+    if (pois != null) {
+        val notStations = Expression.neq(Expression.get(BusMapProps.KIND), Expression.literal(RAIL_POI_KIND))
+        pois.setFilter(pois.filter?.let { Expression.all(it, notStations) } ?: notStations)
+        fun <T> value(property: PropertyValue<T>): Any? = if (property.isExpression) property.expression else property.value
+        val layout = with(pois) { listOf(textFont, textMaxWidth, textLetterSpacing, textTransform) }
+        val paint = with(pois) { listOf(textOpacity, textColor, textHaloColor, textHaloWidth, textHaloBlur) }
+        rail.setProperties(
+            *layout.mapNotNull { p -> value(p)?.let { LayoutPropertyValue(p.name, it) } }.toTypedArray(),
+            *paint.mapNotNull { p -> value(p)?.let { PaintPropertyValue(p.name, it) } }.toTypedArray(),
+        )
+    } else {
+        rail.setProperties(PropertyFactory.textFont(arrayOf(LABEL_FONT)))
+    }
+    val zoom = Expression.zoom()
+    rail.setProperties(
+        PropertyFactory.iconImage(Expression.get(BusMapProps.ICON)),
+        PropertyFactory.iconSize(
+            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, ROUNDEL_SCALE_10), Expression.stop(13, ROUNDEL_SCALE_13), Expression.stop(15, 1f)),
+        ),
+        PropertyFactory.textField(Expression.get(BusMapProps.NAME)),
+        PropertyFactory.textSize(RAIL_NAME_SIZE),
+        // Right of the roundels, or left of them where that has no room; the roundels kept where neither has.
+        PropertyFactory.textVariableAnchor(arrayOf(Property.TEXT_ANCHOR_LEFT, Property.TEXT_ANCHOR_RIGHT)),
+        PropertyFactory.textJustify(Property.TEXT_JUSTIFY_AUTO),
+        PropertyFactory.textRadialOffset(
+            Expression.interpolate(
+                Expression.linear(), zoom,
+                Expression.stop(10, railNameOffset(ROUNDEL_SCALE_10)),
+                Expression.stop(13, railNameOffset(ROUNDEL_SCALE_13)),
+                Expression.stop(15, railNameOffset(1f)),
+            ),
+        ),
+        PropertyFactory.textOptional(true),
+    )
+    return rail
+}
+
+/**
+ * How far a station's name sits from its roundels' middle, in ems, with them drawn at [scale]: half
+ * the row they make (as many as [BusMapProps.COUNT], or none for the plain ring) and a little.
+ */
+private fun railNameOffset(scale: Float): Expression {
+    val count = Expression.toNumber(Expression.get(BusMapProps.COUNT))
+    fun em(dp: Float) = Expression.literal(dp / RAIL_NAME_SIZE)
+    return Expression.switchCase(
+        Expression.eq(count, Expression.literal(0)),
+        em(ROUNDEL_DP * PLAIN_SCALE / 2 * scale + RAIL_NAME_GAP_DP),
+        // A row of n is n roundels and n - 1 gaps across.
+        Expression.sum(
+            Expression.product(count, em((ROUNDEL_DP + ROUNDEL_GAP_DP) / 2 * scale)),
+            em(-ROUNDEL_GAP_DP / 2 * scale + RAIL_NAME_GAP_DP),
+        ),
+    )
+}
+
+/**
+ * [faces] side by side as one image, each the app's station roundel at its small size
+ * (core/ui's `LineRoundel` with `station`, [RoundelSize.SM]): a white face, the line's ring, the
+ * line's prefix stacked over the stop's position. None is an unnumbered station's plain ring.
+ */
+private fun roundelImage(faces: List<RailRoundel>, density: Float, typeface: Typeface?): Bitmap {
+    val diameter = ROUNDEL_DP * density
+    val gap = ROUNDEL_GAP_DP * density
+    val count = faces.size.coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(
+        (count * diameter + (count - 1) * gap).roundToInt().coerceAtLeast(1),
+        diameter.roundToInt().coerceAtLeast(1),
+        Bitmap.Config.ARGB_8888,
+    )
+    val canvas = Canvas(bitmap)
+    val ring = ROUNDEL_RING_DP * density
+    val face = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+    val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = ring
+    }
+    val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ROUNDEL_INK
+        textAlign = Paint.Align.CENTER
+        this.typeface = typeface ?: Typeface.DEFAULT_BOLD
+    }
+    val r = diameter / 2
+    val plain = faces.isEmpty()
+    for (i in 0 until count) {
+        val cx = r + i * (diameter + gap)
+        val cy = r
+        val radius = if (plain) r * PLAIN_SCALE else r
+        canvas.drawCircle(cx, cy, radius, face)
+        stroke.color = if (plain) ROUNDEL_INK else parseColor(faces[i].color)
+        canvas.drawCircle(cx, cy, radius - ring / 2, stroke)
+        if (plain) continue
+        // Each line laid out as tall as its cap height, the digits' too, the gap between them alone.
+        val (prefix, position) = splitStationNumber(faces[i].number)
+        val prefixSize = ROUNDEL_PREFIX_DP * density
+        val positionSize = ROUNDEL_POSITION_DP * density
+        val prefixHeight = if (prefix.isEmpty()) 0f else prefixSize * CAP_SHARE
+        val positionHeight = positionSize * CAP_SHARE
+        val stackGap = if (prefix.isEmpty()) 0f else ROUNDEL_STACK_GAP_DP * density
+        var top = cy - (prefixHeight + stackGap + positionHeight) / 2
+        if (prefix.isNotEmpty()) {
+            ink.textSize = prefixSize
+            canvas.drawText(prefix, cx, top + prefixHeight, ink)
+            top += prefixHeight + stackGap
+        }
+        ink.textSize = positionSize
+        canvas.drawText(position, cx, top + positionHeight, ink)
+    }
+    return bitmap
+}
+
+/** `#RRGGBB` as a colour int; the roundel ink for one that doesn't parse. */
+private fun parseColor(hex: String): Int =
+    runCatching { android.graphics.Color.parseColor(hex) }.getOrDefault(ROUNDEL_INK)
 
 /**
  * The network as it shows, or with [debug] the debug panel's lines in its place, the bundles' halte
@@ -505,6 +637,39 @@ private fun showLines(style: Style, debug: Boolean, code: String?) {
 
 /** shirase's empty layer, just under the basemap's first label: where an app's overlays go. */
 private const val OVERLAY_SLOT = "commute-overlay"
+
+/** shirase's landmarks, its stations among them ([RAIL_POI_KIND]). */
+private const val BASEMAP_POIS_LAYER = "pois"
+
+/** The map's roundels against core/ui's [RoundelSize.SM]: smaller, the streets' names their size. */
+private const val ROUNDEL_SHRINK = 0.8f
+
+/** A station roundel, as core/ui's [RoundelSize.SM] shrunk: across, its ring, its number's two lines and the gap between. */
+private const val ROUNDEL_DP = 24f * ROUNDEL_SHRINK
+private const val ROUNDEL_RING_DP = 3f * ROUNDEL_SHRINK
+private const val ROUNDEL_PREFIX_DP = 6.5f * ROUNDEL_SHRINK
+private const val ROUNDEL_POSITION_DP = 9f * ROUNDEL_SHRINK
+private const val ROUNDEL_STACK_GAP_DP = 1.25f * ROUNDEL_SHRINK
+
+/** Between an interchange's roundels. */
+private const val ROUNDEL_GAP_DP = 1.5f
+
+/** PT Sans's cap height, its digits' too, as a share of its size: core/ui's STACKED_LINE_SHARE. */
+private const val CAP_SHARE = 0.7f
+
+/** core/ui's roundel ink, on the white face. */
+private const val ROUNDEL_INK = 0xFF0F172A.toInt()
+
+/** An unnumbered station's ring, smaller than a numbered one's. */
+private const val PLAIN_SCALE = 0.6f
+
+/** The roundels zoomed out, as a share of their size from z15. */
+private const val ROUNDEL_SCALE_10 = 0.55f
+private const val ROUNDEL_SCALE_13 = 0.8f
+
+/** A station's name, and the room between it and its roundels. */
+private const val RAIL_NAME_SIZE = 12f
+private const val RAIL_NAME_GAP_DP = 3f
 
 private const val LINES_SOURCE = "peta-bus-lines"
 private const val ROUTES_SOURCE = "peta-bus-routes"
@@ -594,10 +759,6 @@ private const val HALTE_FILL_DARK = "#1E293B"
 private const val HALTE_STROKE_DARK = "#E2E8F0"
 private const val HALTE_TEXT_DARK = "#E2E8F0"
 private const val HALTE_HALO_DARK = "#0F172A"
-private const val RAIL_FILL = "#0F172A"
-private const val RAIL_STROKE = "#FFFFFF"
-private const val RAIL_FILL_DARK = "#F1F5F9"
-private const val RAIL_STROKE_DARK = "#0F172A"
 
 /** A finger's reach around a tap, in dp, for a halte's small dot. */
 private const val TAP_SLOP_DP = 16f

@@ -59,8 +59,8 @@ export interface BusMap {
   stopMarks: [string, number, number, number, number, string, number?][]
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
-  /** Rail stations, as dots for bearings: [station id, lng, lat]. */
-  rail: [string, number, number][]
+  /** Rail stations: [station id, lng, lat, [line key, station number][]]; the numbers for Android's roundels. */
+  rail: [string, number, number, [string, string][]?][]
 }
 
 export type LngLat = [number, number]

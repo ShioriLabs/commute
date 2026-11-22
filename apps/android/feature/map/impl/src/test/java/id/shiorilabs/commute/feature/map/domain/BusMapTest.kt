@@ -128,7 +128,7 @@ class BusMapTest {
     fun `the streets' dots are the haltes kept and every rail station`() {
         val keep = busMap.haltes.keys.take(3).map { "TJ-$it" }.toSet()
         val stops = busMap.stops(tappable = { it in keep })
-        assertEquals(keep.size + busMap.rail.size, stops.size)
+        assertEquals(keep.size + busMap.openRail.size, stops.size)
         assertTrue(stops.all { it.lat in -6.8..-5.85 && it.lng in 105.9..107.3 })
     }
 
@@ -251,7 +251,41 @@ class BusMapTest {
     @Test
     fun `rail stations keep their API ids`() {
         val rail = features(busMap.toGeoJson().rail)
-        assertEquals(busMap.rail.size, rail.size)
+        assertEquals(busMap.openRail.size, rail.size)
         assertTrue(rail.all { it.prop(BusMapProps.STATION_ID).contains('-') })
+    }
+
+    @Test
+    fun `a closed rail station stays in the file but off the map`() {
+        assertTrue(busMap.rail.any { it[0].jsonPrimitive.content == "KCI-KAT" })
+        assertTrue(features(busMap.toGeoJson().rail).none { it.prop(BusMapProps.STATION_ID) == "KCI-KAT" })
+        assertTrue(busMap.stops().none { it.stationId == "KCI-KAT" })
+    }
+
+    @Test
+    fun `rail stations are shirase's station kind, named from the directory where it knows them`() {
+        val named = busMap.openRail.first()[0].jsonPrimitive.content
+        val rail = features(busMap.toGeoJson(railNames = mapOf(named to "Sudirman")).rail)
+        assertTrue(rail.all { it.prop(BusMapProps.KIND) == RAIL_POI_KIND })
+        val (withName, without) = rail.partition { it["properties"]!!.jsonObject.containsKey(BusMapProps.NAME) }
+        assertEquals(listOf(named), withName.map { it.prop(BusMapProps.STATION_ID) })
+        assertEquals("Sudirman", withName.single().prop(BusMapProps.NAME))
+        assertEquals(busMap.openRail.size - 1, without.size)
+    }
+
+    @Test
+    fun `a rail station's roundels are its numbers, a line apiece, one image per set`() {
+        val manggarai = busMap.rail.single { it[0].jsonPrimitive.content == "KCI-MRI" }
+        assertEquals(
+            listOf(RailNumber("KCI:C", "C13"), RailNumber("KCI:B", "B09"), RailNumber("KCI:A", "A03")),
+            railNumbersOf(manggarai),
+        )
+        val rail = features(busMap.toGeoJson().rail).associateBy { it.prop(BusMapProps.STATION_ID) }
+        assertEquals(railRoundelImage(railNumbersOf(manggarai)), rail.getValue("KCI-MRI").prop(BusMapProps.ICON))
+        assertEquals("3", rail.getValue("KCI-MRI").prop(BusMapProps.COUNT))
+        val roundels = busMap.railRoundels()
+        assertTrue(rail.values.all { it.prop(BusMapProps.ICON) in roundels })
+        assertEquals(emptyList<RailNumber>(), railNumbersOf(JsonArray(manggarai.take(3))))
+        assertEquals(RAIL_PLAIN_IMAGE, railRoundelImage(emptyList()))
     }
 }

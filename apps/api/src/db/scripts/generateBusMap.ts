@@ -66,6 +66,8 @@ import { parseCSV } from './gtfs'
  *   pnpm --filter api generate:bus-map
  * After a change to the bundling alone, from the file as it is:
  *   pnpm --filter api generate:bus-map --rebundle
+ * After a station coordinate or numbering change alone:
+ *   pnpm --filter api generate:bus-map --rail
  */
 
 const FEED_DIR = `${__dirname}/file_gtfs`
@@ -216,9 +218,15 @@ export interface BusMap {
   stopMarks: StopMark[]
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
-  /** Rail stations for bearings: [station id, lng, lat]. */
-  rail: [string, number, number][]
+  /**
+   * Rail stations: [station id, lng, lat, its numbers], the numbers as
+   * [line key, station number] (`['KCI:C', 'C12']`), a line apiece in
+   * TOPOLOGY's order, for the station's roundels.
+   */
+  rail: RailStation[]
 }
+
+export type RailStation = [string, number, number, [string, string][]]
 
 // ── geometry ────────────────────────────────────────────────────────────────
 
@@ -379,6 +387,32 @@ export function parseRailCoords(text: string): [string, number, number][] {
   return out.sort((a, b) => a[0].localeCompare(b[0]))
 }
 
+/**
+ * Each station's numbers from [topology], as [line key, station number] in the
+ * lines' order, a line once; TransJakarta's left out, its haltes being drawn
+ * apart from the rail stations.
+ */
+export function railNumbers(topology: typeof TOPOLOGY): Map<string, [string, string][]> {
+  const out = new Map<string, [string, string][]>()
+  for (const line of topology) {
+    if (line.operator === 'TJ') continue
+    const key = `${line.operator}:${line.lineCode}`
+    for (const stop of [...line.path, ...(line.branches ?? []).flatMap(b => b.path)]) {
+      const numbers = out.get(`${line.operator}-${stop.station}`) ?? []
+      if (numbers.some(([k]) => k === key)) continue
+      numbers.push([key, stop.pos])
+      out.set(`${line.operator}-${stop.station}`, numbers)
+    }
+  }
+  return out
+}
+
+/** The rail stations as the file has them: the coordinate CSV's, numbered from the topology. */
+function railStations(): RailStation[] {
+  const numbers = railNumbers(TOPOLOGY)
+  return parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8')).map(([id, lng, lat]) => [id, lng, lat, numbers.get(id) ?? []])
+}
+
 // ── build ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -489,7 +523,7 @@ async function main(): Promise<void> {
   lines.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }))
   const normal = alongTopology(lines, haltes, tripsOf(feed))
   const sortedHaltes = Object.fromEntries(Object.entries(normal.haltes).sort(([a], [b]) => a.localeCompare(b)))
-  const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
+  const rail = railStations()
 
   const onRoads = await alongRoads(normal.lines, sortedHaltes, platformsOf(feed))
   const edges = await bundleShapes(onRoads.lines, onRoads.roads, sortedHaltes)
@@ -721,14 +755,22 @@ async function rebundle(): Promise<void> {
   const onRoads = await alongRoads(normal.lines, normal.haltes, platformsOf(feed))
   const edges = await bundleShapes(onRoads.lines, onRoads.roads, normal.haltes)
   const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)
-  const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: map.rail }
+  const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: railStations() }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
   console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
   console.log(`  haltes:   ${Object.keys(normal.haltes).length} (was ${Object.keys(map.haltes).length})`)
 }
 
+/** `--rail`: the rail stations alone rewritten, from the coordinate CSV and the topology. */
+async function rewriteRail(): Promise<void> {
+  const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
+  const rail = railStations()
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify({ ...map, rail }) + '\n')
+  console.log(`Rewrote ${OUTPUT_PATH}'s rail: ${rail.length} stations, ${rail.filter(r => r[3].length > 0).length} numbered`)
+}
+
 if (require.main === module) {
-  const run = process.argv.includes('--rebundle') ? rebundle : main
+  const run = process.argv.includes('--rebundle') ? rebundle : process.argv.includes('--rail') ? rewriteRail : main
   run().catch((e: unknown) => {
     console.error(e)
     process.exit(1)

@@ -93,6 +93,8 @@ dependencies {
     implementation(project(":core:navigation"))
     // CommuteIcons, CommuteIconButton, page transitions.
     implementation(project(":core:ui"))
+    // PT Sans Narrow Bold, the station roundels' face on the streets layer.
+    implementation(project(":core:font"))
     // DeveloperPreferencesRepository: the debug hitbox overlay's switch.
     implementation(project(":core:datastore"))
     // MapHome: home on the map, which this module draws.
