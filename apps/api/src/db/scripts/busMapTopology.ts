@@ -35,6 +35,9 @@ const HAIRPIN_M = 400
 /** A halte set back from every shape (a temporary halte, a B-code) is looked for this far out. */
 const FAR_M = 150
 
+/** A run that starts within this of where the one before it ended is driven on to from there. */
+const TERMINAL_LINK_M = 1000
+
 const KX = Math.cos((-6.2 * Math.PI) / 180) * 111_320
 const KY = 110_574
 
@@ -421,9 +424,22 @@ export function alignToTopology(
       .map(code => toXY([haltes[code]![1], haltes[code]![2]]))
     const drawn: LngLat[][] = []
     const calls: string[] = []
-    for (const run of topo.runs) {
-      const placed = run.filter(code => haltes[code])
-      for (const code of placed) if (!calls.includes(code)) calls.push(code)
+    const runs = topo.runs.map(run => run.filter(code => haltes[code]))
+    for (const placed of runs) for (const code of placed) if (!calls.includes(code)) calls.push(code)
+    // A run starting near but not where the one before it ended (round from the last to the first):
+    // the bus drives on from the one to the other to turn, 14 from Senen TOYOTA Rangga round by Senen
+    // Raya. That leg goes at the start of the run.
+    const linked = runs.map((placed, r) => {
+      const before = runs[(r + runs.length - 1) % runs.length]!
+      const end = before[before.length - 1]
+      if (runs.length < 2 || !end || !placed[0] || end === placed[0]) return placed
+      const [, eLng, eLat] = haltes[end]!
+      const [, sLng, sLat] = haltes[placed[0]]!
+      const [ex, ey] = toXY([eLng, eLat])
+      const [sx, sy] = toXY([sLng, sLat])
+      return Math.hypot(sx - ex, sy - ey) <= TERMINAL_LINK_M ? [end, ...placed] : placed
+    })
+    for (const placed of linked) {
       const path: [number, number][] = []
       // Where the last leg left the koridor's own track, for the next to carry on from.
       let cursor: Cursor | null = null
@@ -436,13 +452,21 @@ export function alignToTopology(
         for (let k = 1; k < stops.length; k++) {
           const a = stops[k - 1]!
           const b = stops[k]!
+          // What the leg was found along, when it was one track: the next leg's to carry on from.
+          let pick: Picked | null = null
           // One of its trips, the way it runs, from [a] to [b] calling at no halte the posters dropped
           // nor any other of the run's: the bus's own way, a loop to turn included (4 round by Manggarai).
           const trip = (): [number, number][] | null => {
             const between = placed.filter((_, j) => j !== i - 1 && j !== i).map(code => toXY([haltes[code]![1], haltes[code]![2]]))
-            const found = stretch(trips, a, b, { detours: true, avoid: [...dropped, ...between] })
-            if (!found?.forward || lengthOf(found.path) > Math.hypot(b[0] - a[0], b[1] - a[1]) * OWN_REACH + 2 * FAR_M) return null
-            return found.path
+            const find = (near: number): Picked | null => {
+              const found = stretch(trips, a, b, { near, detours: true, avoid: [...dropped, ...between] })
+              return found?.forward && lengthOf(found.path) <= Math.hypot(b[0] - a[0], b[1] - a[1]) * OWN_REACH + 2 * FAR_M ? found : null
+            }
+            // Out of a terminus, its trips may start off from the halte, where the buses wait: 9's at
+            // Pluit 1, 97 m on past Pluit.
+            const found = find(NEAR_M) ?? (i === 1 && k === 1 ? find(FAR_M) : null)
+            if (found) pick = found
+            return found?.path ?? null
           }
           const elsewhere = (way: [number, number][] | null | undefined): [number, number][] | null => {
             if (way) cursor = null
@@ -458,7 +482,10 @@ export function alignToTopology(
               const way = trip()
               if (way) return elsewhere(way)
             }
-            if (picked) cursor = picked
+            if (picked) {
+              cursor = picked
+              pick = picked
+            }
             return picked?.path ?? null
           }
           let piece = ownWay()
@@ -485,6 +512,13 @@ export function alignToTopology(
           if (!piece) {
             straight.push(`${line.code} ${placed[i - 1]}->${placed[i]}`)
             piece = [a, b]
+          }
+          // Into a terminus, on to where the track it came along ends, near past the halte: 9 on past
+          // Pluit to Pluit 1, where its buses wait and start out from again.
+          if (pick?.forward && i === placed.length - 1 && k === stops.length - 1) {
+            const t = pick.track
+            const end = t.at[t.at.length - 1]!
+            if (end > pick.at && end - pick.at <= FAR_M) piece = [...piece, ...slice(t, pick.at, end).slice(1)]
           }
           const last = path[path.length - 1]
           // A way found from the halte itself (a graph route, a straight line) starts at its

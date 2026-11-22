@@ -141,6 +141,37 @@ describe('alignToTopology', () => {
     expect(passesBy([southbound!], ...at(60, 1000))).toBe(false)
   })
 
+  it('starts out from where the buses at a terminus wait, past its halte, and runs on to it', () => {
+    // 9 at Pluit (P): its trips end and start at Pluit 1, 100 m on; out, they go on east and down
+    // another street (x 300) to A.
+    const pHaltes = { A: halte('A', 0, -1000), P: halte('P', 0, 0) }
+    const arriving = run([0, -1000], [0, 0], [100, 0])
+    const leaving = run([100, 0], [300, 0], [300, -1000], [0, -1000])
+    const aligned = alignToTopology(
+      [{ code: '9', pieces: [arriving], feed: [arriving, leaving] }],
+      pHaltes,
+      [{ code: '9', runs: [['A', 'P'], ['P', 'A']] }]
+    )
+    const [inbound, outbound] = aligned.pieces.get('9')!
+    expect(passesBy([inbound!], ...at(95, 0))).toBe(true)
+    expect(passesBy([outbound!], ...at(300, -500))).toBe(true)
+    expect(passesBy([outbound!], ...at(0, -500))).toBe(false)
+  })
+
+  it('drives from where one run ends on to where the next starts, near it', () => {
+    // 14 at Senen: in to T, round by S 300 m on to turn, and back out past T.
+    const sHaltes = { J: halte('J', 0, -1000), T: halte('T', 0, 0), S: halte('S', -300, 0) }
+    const inbound = run([0, -1000], [0, 0])
+    const turning = run([0, 0], [-300, 0], [-300, 300], [20, 300], [20, -1000])
+    const aligned = alignToTopology(
+      [{ code: '14', pieces: [inbound, turning], feed: [inbound, turning] }],
+      sHaltes,
+      [{ code: '14', runs: [['J', 'T'], ['S', 'J']] }]
+    )
+    const [, outbound] = aligned.pieces.get('14')!
+    expect(passesBy([outbound!], ...at(-150, 0))).toBe(true)
+  })
+
   it('goes round a hairpin at a halte, even when the next leg starts on another piece', () => {
     // Koridor 2 at Gambir 2 (H): up one road, round at the halte, back down the road 40 m
     // beside it, where the feed's piece ends; another piece carries on east to E.
