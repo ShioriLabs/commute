@@ -59,7 +59,7 @@ data class BusMapLine(
     val color: String,
     /** Encoded polylines (Google, precision 5): the pieces that together draw the line once, as the feed has them. */
     val shapes: List<String>,
-    /** [shapes] laid onto the roads themselves: what the line is drawn with. */
+    /** [shapes] laid onto the roads themselves: what the line is drawn with. Precision 6 ([DRAWN_PRECISION]). */
     val drawn: List<String> = emptyList(),
     /** Halte codes the line calls at. */
     val stops: List<String>,
@@ -320,11 +320,11 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
     return BusMapGeoJson(
         lines = collection(lineFeatures).toString(),
         // Every line on its own geometry, one LineString per piece: laid on the roads, and as the feed has it.
-        routes = collection(pieceFeatures(lines.map { it to it.drawnShapes })).toString(),
+        routes = collection(pieceFeatures(lines.map { it to it.drawnPieces })).toString(),
         marks = collection(markFeatures).toString(),
         haltes = collection(halteFeatures).toString(),
         rail = collection(railFeatures).toString(),
-        processed = collection(pieceFeatures(lines.map { it to it.shapes })).toString(),
+        processed = collection(pieceFeatures(lines.map { line -> line to line.shapes.map { decodePolyline(it) } })).toString(),
     )
 }
 
@@ -334,15 +334,14 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
  */
 fun BusMap.feedGeoJson(feed: BusMapFeed): String {
     val byCode = lines.associateBy { it.code }
-    return collection(pieceFeatures(feed.lines.mapNotNull { fed -> byCode[fed.code]?.let { it to fed.shapes } })).toString()
+    return collection(pieceFeatures(feed.lines.mapNotNull { fed -> byCode[fed.code]?.let { line -> line to fed.shapes.map { decodePolyline(it) } } })).toString()
 }
 
 /** Each trunk line's pieces, a LineString apiece carrying its code, kind and colour. */
-private fun pieceFeatures(pieces: List<Pair<BusMapLine, List<String>>>): JsonArray = buildJsonArray {
+private fun pieceFeatures(pieces: List<Pair<BusMapLine, List<List<GeoPoint>>>>): JsonArray = buildJsonArray {
     for ((line, shapes) in pieces) {
         if (!isTrunk(line.code)) continue
-        for (shape in shapes) {
-            val points = decodePolyline(shape)
+        for (points in shapes) {
             if (points.size < 2) continue
             add(
                 feature(
@@ -399,8 +398,8 @@ fun BusMap.lineInfo(): Map<String, BusMapLineInfo> = lines.associate { line ->
     var west = Double.MAX_VALUE
     var north = -Double.MAX_VALUE
     var east = -Double.MAX_VALUE
-    for (shape in line.drawnShapes) {
-        for (p in decodePolyline(shape)) {
+    for (piece in line.drawnPieces) {
+        for (p in piece) {
             south = minOf(south, p.latitude)
             north = maxOf(north, p.latitude)
             west = minOf(west, p.longitude)
@@ -410,5 +409,9 @@ fun BusMap.lineInfo(): Map<String, BusMapLineInfo> = lines.associate { line ->
     line.code to BusMapLineInfo(line.code, line.name, line.color, south, west, north, east)
 }
 
-/** The pieces the line is drawn with: on the roads when the file has them, else as the feed has them. */
-val BusMapLine.drawnShapes: List<String> get() = drawn.ifEmpty { shapes }
+/** The pieces the line is drawn with, decoded: on the roads when the file has them, else as the feed has them. */
+val BusMapLine.drawnPieces: List<List<GeoPoint>>
+    get() = if (drawn.isNotEmpty()) drawn.map { decodePolyline(it, DRAWN_PRECISION) } else shapes.map { decodePolyline(it) }
+
+/** [BusMapLine.drawn]'s encoding: the generator's DRAWN_PRECISION, finer than the feed's 5 so a bend stays a curve. */
+const val DRAWN_PRECISION = 6

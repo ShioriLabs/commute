@@ -53,6 +53,19 @@ class BusMapTest {
     }
 
     @Test
+    fun `street zoom draws each trunk line laid on the roads, read at its own precision`() {
+        val routes = features(busMap.toGeoJson().routes)
+        assertEquals(busMap.lines.filter { isTrunk(it.code) }.sumOf { line -> line.drawn.size }, routes.size)
+        for (route in routes) {
+            for (c in route["geometry"]!!.jsonObject["coordinates"]!!.jsonArray) {
+                val (lng, lat) = (c as JsonArray).map { it.jsonPrimitive.double }
+                assertTrue("lng $lng", lng in 105.9..107.3)
+                assertTrue("lat $lat", lat in -6.8..-5.85)
+            }
+        }
+    }
+
+    @Test
     fun `processed draws each trunk line's shapes, not its pieces laid on the roads`() {
         val processed = features(busMap.toGeoJson().processed)
         val trunks = busMap.lines.filter { isTrunk(it.code) }

@@ -7,6 +7,7 @@ import {
   dropRetraces,
   easeCorners,
   filletCorners,
+  simplifyBends,
   smoothPath,
   isDrawn,
   placeStops,
@@ -111,10 +112,23 @@ const SIMPLIFY_M = 4
 const DRAWN_SMOOTH_M = 6
 
 /**
- * And then simplified to this: there a metre is a few pixels, and SIMPLIFY_M would cut the curve
- * back into chords. Finer kept the smoothing's last flutters on the straights.
+ * And then simplified (simplifyBends) to this where it runs straight: finer kept the smoothing's
+ * last flutters on the straights.
  */
 const DRAWN_SIMPLIFY_M = 0.6
+
+/**
+ * But to this where a step heads more than DRAWN_BEND_DEG off its span's chord: at z19 a metre is
+ * about 7 dp, and 0.6 m left 2's hairpin by Gambir 2 as 5-10 m chords turning 15-30 degrees each.
+ */
+const DRAWN_BEND_M = 0.05
+const DRAWN_BEND_DEG = 2
+
+/**
+ * And encoded to this many decimals: precision 5 is a 1.1 m grid, which alone bends a 5 m chord
+ * by up to 12 degrees. [BusMapLine.drawn] says so to clients.
+ */
+export const DRAWN_PRECISION = 6
 
 /** An edge laid onto the roads longer than this times its own length, and this much more, went onto a road beside it. */
 const LAID_STRETCH = 1.5
@@ -163,7 +177,10 @@ export interface BusMapLine {
    * generator works from; what clients draw is [drawn].
    */
   shapes: string[]
-  /** [shapes] laid onto the roads themselves, piece for piece: what a client draws the line with. */
+  /**
+   * [shapes] laid onto the roads themselves, piece for piece: what a client draws the line with.
+   * Encoded at precision 6 (DRAWN_PRECISION), not 5: it is drawn down to a fraction of a metre.
+   */
   drawn: string[]
   /** Halte codes the line calls at, in the order of its longest pattern first. */
   stops: string[]
@@ -563,7 +580,8 @@ async function alongRoads(lines: readonly BusMapLine[], haltes: BusMap['haltes']
       const stops = l.stops.flatMap(code => (haltes[code] ? [[haltes[code][1], haltes[code][2]] as LngLat] : []))
       const lay = (s: string): string => {
         const laid = dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops }), stops)
-        return encodePolyline(simplify(smoothPath(laid, DRAWN_SMOOTH_M), DRAWN_SIMPLIFY_M))
+        const smooth = smoothPath(laid, DRAWN_SMOOTH_M)
+        return encodePolyline(simplifyBends(smooth, DRAWN_SIMPLIFY_M, DRAWN_BEND_M, DRAWN_BEND_DEG), DRAWN_PRECISION)
       }
       return { ...l, drawn: l.shapes.map(lay) }
     }),

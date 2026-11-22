@@ -1423,6 +1423,54 @@ export function smoothPath(path: readonly LngLat[], sigmaM: number): LngLat[] {
 }
 
 /**
+ * [path] simplified (Douglas-Peucker) to within [flatM] where a span runs
+ * straight, but to within [bendM] where it bends: where a step of the path heads
+ * more than [bendDeg] off the span's chord. A smoothed bend stays a curve at
+ * street zoom (2's hairpin by Gambir 2 had gone back to 15-30 degree chords),
+ * while a straight's sub-flatM flutter is still flattened. Both ends are kept.
+ */
+export function simplifyBends(path: readonly LngLat[], flatM: number, bendM: number, bendDeg: number): LngLat[] {
+  if (path.length < 3) return [...path]
+  const xy = toXYs(path)
+  const bend = Math.cos((bendDeg * Math.PI) / 180)
+  const keep = new Array<boolean>(xy.length).fill(false)
+  keep[0] = true
+  keep[xy.length - 1] = true
+  const stack: [number, number][] = [[0, xy.length - 1]]
+  while (stack.length > 0) {
+    const [a, b] = stack.pop()!
+    if (b - a < 2) continue
+    const [ax, ay] = xy[a]!
+    const [bx, by] = xy[b]!
+    const dx = bx - ax
+    const dy = by - ay
+    const length = Math.hypot(dx, dy)
+    let worst = 0
+    let worstAt = -1
+    let bends = false
+    for (let i = a + 1; i < b; i++) {
+      const [px, py] = xy[i]!
+      const d = length === 0 ? Math.hypot(px - ax, py - ay) : Math.abs(dy * (px - ax) - dx * (py - ay)) / length
+      if (d > worst) {
+        worst = d
+        worstAt = i
+      }
+    }
+    for (let i = a; i < b && !bends && length > 0; i++) {
+      const sx = xy[i + 1]![0] - xy[i]![0]
+      const sy = xy[i + 1]![1] - xy[i]![1]
+      const step = Math.hypot(sx, sy)
+      if (step > 0 && (sx * dx + sy * dy) / (step * length) < bend) bends = true
+    }
+    if (worst > flatM || (worst > bendM && bends)) {
+      keep[worstAt] = true
+      stack.push([a, worstAt], [worstAt, b])
+    }
+  }
+  return path.filter((_, i) => keep[i])
+}
+
+/**
  * [path] with each corner turning between ARC_MIN_TURN and ARC_MAX_TURN rounded
  * off for a bundle of [lines]; its ends stay put. Each leg goes to the corners at
  * its two ends (share), all of it to one whose neighbour isn't rounded (a path

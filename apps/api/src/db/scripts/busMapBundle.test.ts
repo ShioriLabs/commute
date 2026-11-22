@@ -13,6 +13,7 @@ import {
   placeStops,
   roundCorners,
   roundJunctions,
+  simplifyBends,
   smoothPath,
   strokeCount,
   strokeKeys,
@@ -532,5 +533,31 @@ describe('smoothPath', () => {
     const smooth = smoothPath(wobbly, 6).map(metres)
     const inner = smooth.filter(([, y]) => y > 30 && y < 270)
     expect(Math.max(...inner.map(([x]) => Math.abs(x)))).toBeLessThan(0.3)
+  })
+})
+
+describe('simplifyBends', () => {
+  const metres = (p: LngLat): [number, number] => [(p[0] - LNG) * M_LNG, (p[1] - LAT) * M_LAT]
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+
+  it('keeps a hairpin a curve, not chords', () => {
+    // A 12 m radius half turn, as smoothPath leaves 2's by Gambir 2: a point every half metre.
+    const hairpin: LngLat[] = []
+    for (let k = 0; k <= 75; k++) hairpin.push(at(12 * Math.cos((Math.PI * k) / 75), 12 * Math.sin((Math.PI * k) / 75)))
+    const kept = simplifyBends(hairpin, 0.6, 0.1, 4).map(metres)
+    const turns = kept.slice(1, -1).map(([x, y], i) => {
+      const [ax, ay] = kept[i]!
+      const [bx, by] = kept[i + 2]!
+      return Math.abs(Math.atan2(x - ax, y - ay) - Math.atan2(bx - x, by - y)) * 180 / Math.PI
+    })
+    expect(Math.max(...turns.map(t => Math.min(t, 360 - t)))).toBeLessThan(16)
+    expect(kept[0]).toEqual(metres(hairpin[0]!))
+    expect(kept[kept.length - 1]).toEqual(metres(hairpin[hairpin.length - 1]!))
+  })
+
+  it('still flattens the flutter on a straight', () => {
+    const flutter: LngLat[] = []
+    for (let y = 0; y <= 200; y += 2) flutter.push(at(0.3 * Math.sin(y / 15), y))
+    expect(simplifyBends(flutter, 0.6, 0.1, 4)).toHaveLength(2)
   })
 })
