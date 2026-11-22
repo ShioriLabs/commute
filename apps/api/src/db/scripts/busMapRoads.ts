@@ -116,6 +116,17 @@ const PLATFORM_SLACK_M = 5
 /** Platforms this near each other are one halte's, and say what they say together. */
 const PLATFORM_HALTE_M = 30
 
+/**
+ * A halte of the line's within YARD_M of where a piece starts or ends, and further than YARD_HALTE_M
+ * from every road, stands in a yard the tiles don't draw the lanes of: a terminal (Ragunan's halte is
+ * 23 m off the road round it). Within YARD_M of it, a point
+ * goes onto a road only within YARD_SNAP_M; the rest keep where the feed has them, the buses' way
+ * through, past the halte and round the loop they turn by.
+ */
+const YARD_HALTE_M = 12
+const YARD_M = 150
+const YARD_SNAP_M = 8
+
 /** Road points this near each other are one junction: z15 busways meet z14 roads a fraction of a metre off. */
 const NODE_M = 1
 
@@ -366,6 +377,15 @@ export function snapToRoads(
   if (piece.length < 2) return [...piece]
   const points = sample(piece.map(toXY))
   const sides = platforms.map(toXY)
+  // Haltes at its ends the tiles draw no road by: a terminal's own lanes (Ragunan's), where the feed is
+  // the way. Along the way, a halte off the roads is one beside a street the tiles leave out.
+  const [fx, fy] = toXY(piece[0]!)
+  const [lx, ly] = toXY(piece[piece.length - 1]!)
+  const atEnd = ([hx, hy]: [number, number]): boolean => Math.min(Math.hypot(hx - fx, hy - fy), Math.hypot(hx - lx, hy - ly)) <= YARD_M
+  const yards = stops.map(toXY).filter(atEnd).filter(([hx, hy]) => roads.near(hx, hy).every(({ road: r, i: s }) => {
+    const xy = roads.roads[r]!.xy
+    return distanceTo([xy[s]!, xy[s + 1]!], [hx, hy]) > YARD_HALTE_M
+  }))
   // Each platform's halte: the platforms within PLATFORM_HALTE_M of it, itself among them.
   const together = sides.map(([ax, ay]) => sides.flatMap(([bx, by], k) => (Math.hypot(bx - ax, by - ay) <= PLATFORM_HALTE_M ? [k] : [])))
   // How far each road passes from each platform, as asked.
@@ -389,6 +409,7 @@ export function snapToRoads(
     const hx = (nx - px) / hl
     const hy = (ny - py) / hl
     const candidates: { score: number, match: Match }[] = []
+    const reach = yards.some(([hx, hy]) => Math.hypot(hx - x, hy - y) <= YARD_M) ? YARD_SNAP_M : SNAP_M
     for (const { road: r, i: s } of roads.near(x, y)) {
       const road = roads.roads[r]!
       const [ax, ay] = road.xy[s]!
@@ -404,7 +425,7 @@ export function snapToRoads(
       const qx = ax + t * dx
       const qy = ay + t * dy
       const d = Math.hypot(x - qx, y - qy)
-      if (d > SNAP_M) continue
+      if (d > reach) continue
       const score = d
         - (previous && previous.road === r ? SAME_ROAD_M : 0)
         - (brt && road.busway ? BUSWAY_M : 0)

@@ -30,6 +30,17 @@ describe('snapToRoads', () => {
     expect(either).toEqual(snapToRoads(line, roads, { brt: true }))
   })
 
+  it('keeps the way through a terminal the tiles draw no lanes of, past its halte', () => {
+    // Ragunan: the road runs 23 m north of the halte; the buses run through the terminal past it.
+    const roads = new Roads([road([[-500, 23], [500, 23]])])
+    const inbound = [at(400, 23), at(150, 23), at(100, 0), at(0, 0), at(-60, 0)]
+    const laid = snapToRoads(inbound, roads, { stops: [at(0, 0)] })
+    expect(laid.some(p => Math.abs(east(p)) < 10 && Math.abs(north(p)) < 3)).toBe(true)
+    // A halte off the road along the way, not at an end, is beside a street the tiles leave out.
+    const through = [at(-400, 0), at(400, 0)]
+    for (const p of snapToRoads(through, roads, { stops: [at(0, 0)] })) expect(north(p)).toBeCloseTo(23, 0)
+  })
+
   it('lays a loose line onto its road', () => {
     const roads = new Roads([road([[0, 0], [0, 1000]])])
     // The feed's points wander 8-12 m off the road.
