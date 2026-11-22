@@ -163,6 +163,12 @@ export function bundleOrder(lines: readonly Pick<BundleLine, 'code' | 'kind'>[])
     .map(l => l.code)
 }
 
+/**
+ * A rail line's width against a bus line's, as clients draw it (Android's RAIL_LINE_WEIGHT in
+ * BusMap.kt; change them together): a halte's bar is placed across the strokes by these widths.
+ */
+export const RAIL_WEIGHT = 1.5
+
 /** A rail line's code: its line key, `KCI:C`; no bus code has a colon. */
 export function isRailCode(code: string): boolean {
   return code.includes(':')
@@ -1258,10 +1264,15 @@ export function placeStops(
       else strokes.push({ key, first: line, passes: passesBy(line) })
     }
     // Only from the first stroke it crosses to the last: a rail line at the bundle's side runs past.
+    // Each as wide as clients draw it (a rail line RAIL_WEIGHT), the bar's middle theirs.
     const from = Math.max(0, strokes.findIndex(st => !st.passes))
     const to = strokes.length - 1 - Math.max(0, [...strokes].reverse().findIndex(st => !st.passes))
     const count = Math.max(1, to - from + 1)
-    const moved = (shift ?? 0) + (from + to) / 2 - (strokes.length - 1) / 2
+    const widths = strokes.map(st => (isRailCode(st.first) ? RAIL_WEIGHT : 1))
+    const total = widths.reduce((a, b) => a + b, 0)
+    const before = (k: number): number => widths.slice(0, k).reduce((a, b) => a + b, 0)
+    const middle = (before(from) + before(to + 1)) / 2 - total / 2
+    const moved = Math.round(((shift ?? 0) + middle) * 1e3) / 1e3
     const mark: StopMark = [stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), count, count === 1 ? strokes[from]?.first ?? lines[0]! : '']
     if (moved) mark.push(moved)
     out.push(mark)

@@ -145,6 +145,14 @@ class BusMapTest {
         assertEquals(0.0, edgeSlot(0, 1), 0.0)
         assertEquals(listOf(-1.0, 0.0, 1.0), (0 until 3).map { edgeSlot(it, 3) })
         assertEquals(listOf(-0.5, 0.5), (0 until 2).map { edgeSlot(it, 2) })
+        // A rail line takes RAIL_LINE_WEIGHT of the room: 1 (1.0 wide) at -0.75, M (1.5) at 0.5 beside it.
+        val lines = listOf(
+            BusMapLine(code = "1", name = "", kind = "BRT", color = "#D62126", shapes = emptyList(), stops = emptyList()),
+            BusMapLine(code = "MRTJ:M", name = "", kind = "RAIL", color = "#CA2A51", shapes = emptyList(), stops = emptyList()),
+        ).associateBy { it.code }
+        val strokes = strokesOf(listOf("1", "MRTJ:M"), 0.0, lines)
+        assertEquals(listOf(-0.75, 0.5), strokes.map { it.slot })
+        assertEquals(listOf(1.0, RAIL_LINE_WEIGHT), strokes.map { it.weight })
     }
 
     @Test

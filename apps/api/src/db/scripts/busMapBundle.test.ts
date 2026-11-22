@@ -463,8 +463,8 @@ describe('placeStops', () => {
     const [, , , , count, only, shift] = marks[0]!
     expect(count).toBe(2)
     expect(only).toBe('')
-    // Strokes at -1, 0 and 1: the bar over the first two, centred half a width left.
-    expect(shift).toBe(-0.5)
+    // Strokes 1, 1 and a rail line's 1.5 wide: the bar over the first two, centred 0.75 left.
+    expect(shift).toBe(-0.75)
   })
 
   it('leaves out a halte with none of its lines near', () => {

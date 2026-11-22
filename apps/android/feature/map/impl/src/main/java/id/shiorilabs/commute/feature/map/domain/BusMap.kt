@@ -95,7 +95,14 @@ fun edgeSlot(index: Int, count: Int): Double = index - (count - 1) / 2.0
  * York's A, C and E as one blue (13, 13E and L13E, one purple, along the Ciledug busway), at [slot]
  * line widths right of the edge's way, its bundle's shift added.
  */
-data class BusMapStroke(val codes: List<String>, val color: String, val kind: String, val slot: Double)
+data class BusMapStroke(val codes: List<String>, val color: String, val kind: String, val slot: Double, val weight: Double = 1.0)
+
+/**
+ * A rail line's width against a bus line's: drawn heavier, as Transit draws a metro over a bus, and
+ * given that much room across a bundle. The generator's RAIL_WEIGHT (busMapBundle.ts) places halte
+ * bars by it; change them together.
+ */
+const val RAIL_LINE_WEIGHT = 1.5
 
 /**
  * [codes]' strokes left to right, each run of one colour in them drawn once (the generator puts a
@@ -109,12 +116,18 @@ fun strokesOf(codes: List<String>, shift: Double, byCode: Map<String, BusMapLine
         val run = runs.lastOrNull()
         if (run != null && run.first().color.equals(line.color, ignoreCase = true)) run += line else runs += mutableListOf(line)
     }
+    // Each stroke as wide as its weight (a rail line's heavier), side by side across the bundle's middle.
+    val kinds = runs.map { run -> if (run.any { it.kind == "BRT" }) "BRT" else run.first().kind }
+    val weights = kinds.map { if (it == "RAIL") RAIL_LINE_WEIGHT else 1.0 }
+    var edge = -weights.sum() / 2
+    val centres = weights.map { w -> (edge + w / 2).also { edge += w } }
     return runs.mapIndexed { i, run ->
         BusMapStroke(
             codes = run.map { it.code },
             color = run.first().color,
-            kind = if (run.any { it.kind == "BRT" }) "BRT" else run.first().kind,
-            slot = edgeSlot(i, runs.size) + shift,
+            kind = kinds[i],
+            slot = centres[i] + shift,
+            weight = weights[i],
         )
     }
 }
@@ -269,6 +282,9 @@ object BusMapProps {
     /** A rail station kept zoomed out: an interchange or a line's end ([isMajorRail]). */
     const val MAJOR = "major"
 
+    /** A stroke's width, in bus line widths: [RAIL_LINE_WEIGHT] for a rail line's. */
+    const val WEIGHT = "weight"
+
     /** A line stretch's place across its street, in line widths to the right of its direction. */
     const val SLOT = "slot"
 
@@ -323,6 +339,7 @@ fun BusMap.toGeoJson(
                             put(BusMapProps.KIND, stroke.kind)
                             put(BusMapProps.COLOR, stroke.color)
                             put(BusMapProps.SLOT, stroke.slot)
+                            put(BusMapProps.WEIGHT, stroke.weight)
                             if (trunkStroke != null) put(BusMapProps.TRUNK_SLOT, trunkStroke.slot)
                         },
                     ),

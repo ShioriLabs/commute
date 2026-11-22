@@ -35,6 +35,7 @@ import id.shiorilabs.commute.feature.map.domain.BUS_LINE_W_15_DP
 import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.BusMapProps
 import id.shiorilabs.commute.feature.map.domain.GeoStop
+import id.shiorilabs.commute.feature.map.domain.RAIL_LINE_WEIGHT
 import id.shiorilabs.commute.feature.map.domain.RAIL_POI_KIND
 import id.shiorilabs.commute.feature.map.domain.stopsInView
 import org.maplibre.android.MapLibre
@@ -357,7 +358,7 @@ private fun hasLocation(context: Context): Boolean =
  * change.
  */
 private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float, typeface: Typeface?) {
-    for (id in LINE_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, DEBUG_LAYER, DEBUG_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
+    for (id in LINE_LAYERS + CASING_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, DEBUG_LAYER, DEBUG_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
     for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, DEBUG_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE)) style.removeSource(id)
 
     style.addSource(GeoJsonSource(LINES_SOURCE, busMap.geoJson.lines))
@@ -374,12 +375,38 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("RAIL")),
     )
     // One width for every line, and each stretch that many widths across from where it runs, so lines
-    // sharing a street lie side by side as Transit draws them. [scale] widens the lot.
-    fun width(scale: Float) = Expression.interpolate(
+    // sharing a street lie side by side as Transit draws them. [scale] widens the lot. Each drawn a
+    // little narrower than its place ([LINE_FILL]) over a casing in the ground's colour a place wide
+    // and [CASING_DP] more either side, as Transit cases its lines: a hairline between the stripes of
+    // a bundle, an edge round it, the road and the line beside it kept apart.
+    // A stroke as wide as its weight: a rail line's heavier ([RAIL_LINE_WEIGHT]).
+    val weight = Expression.coalesce(Expression.get(BusMapProps.WEIGHT), Expression.literal(1.0))
+    fun weighed(w: Float, casing: Float) = Expression.sum(Expression.product(weight, Expression.literal(w)), Expression.literal(2 * casing))
+    fun width(scale: Float, fill: Float = LINE_FILL, casing: Float = 0f) = Expression.interpolate(
         Expression.linear(), zoom,
-        Expression.stop(10, LINE_W_10 * scale), Expression.stop(13, LINE_W_13 * scale),
-        Expression.stop(15, LINE_W_15 * scale), Expression.stop(18, LINE_W_18 * scale),
+        Expression.stop(10, weighed(LINE_W_10 * scale * fill, casing)), Expression.stop(13, weighed(LINE_W_13 * scale * fill, casing)),
+        Expression.stop(15, weighed(LINE_W_15 * scale * fill, casing)), Expression.stop(18, weighed(LINE_W_18 * scale * fill, casing)),
     )
+    // A line on its own geometry, by its kind: a rail line [RAIL_LINE_WEIGHT] a bus line's width.
+    val isRail = Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("RAIL"))
+    fun byKind(w: Float, casing: Float = 0f) = Expression.switchCase(
+        isRail, Expression.literal(w * RAIL_LINE_WEIGHT.toFloat() + 2 * casing),
+        Expression.literal(w + 2 * casing),
+    )
+    val casingColor = if (dark) CASING_DARK else CASING_LIGHT
+    // A line layer's casing, under every line: its ground-coloured outline, [width] wide.
+    fun casing(line: LineLayer, width: Expression, offset: Expression? = null) = LineLayer(line.id + CASING_SUFFIX, line.sourceId).withProperties(
+        PropertyFactory.lineColor(casingColor),
+        PropertyFactory.lineWidth(width),
+        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+    ).apply {
+        if (offset != null) setProperties(PropertyFactory.lineOffset(offset))
+        line.filter?.let { setFilter(it) }
+        minZoom = line.minZoom
+        maxZoom = line.maxZoom
+        setProperties(PropertyFactory.visibility(line.visibility.value ?: Property.VISIBLE))
+    }
     fun offset(property: String, scale: Float): Expression {
         val slot = Expression.get(property)
         return Expression.interpolate(
@@ -417,17 +444,21 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     // there, and a bundle drawn into a junction's one point (Bundaran HI) jumps off them.
     fun routes(id: String, kinds: Expression) = LineLayer(id, ROUTES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
-        PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(STREET_ZOOM, ROUTE_W_16), Expression.stop(18, ROUTE_W_18))),
+        PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(STREET_ZOOM, byKind(ROUTE_W_16)), Expression.stop(18, byKind(ROUTE_W_18)))),
         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
     ).withFilter(kinds).apply { minZoom = STREET_ZOOM }
     val auiRoutes = routes(AUI_ROUTE_LAYER, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("AUI")))
     val brtRoutes = routes(BRT_ROUTE_LAYER, trunkKinds)
+    val routeCasing = Expression.interpolate(
+        Expression.linear(), zoom,
+        Expression.stop(STREET_ZOOM, byKind(ROUTE_W_16, CASING_DP)), Expression.stop(18, byKind(ROUTE_W_18, CASING_DP)),
+    )
     // A line alone, over the rest faded: on its own streets at every zoom. Hidden until one is picked.
     val alone = LineLayer(ISOLATE_LAYER, ROUTES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
         PropertyFactory.lineWidth(
-            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, ALONE_W_10), Expression.stop(14, ALONE_W_14), Expression.stop(18, ALONE_W_18)),
+            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, byKind(ALONE_W_10)), Expression.stop(14, byKind(ALONE_W_14)), Expression.stop(18, byKind(ALONE_W_18))),
         ),
         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -500,7 +531,23 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         minZoom = MARKS_MIN_ZOOM
         maxZoom = STREET_ZOOM
     }
-    for (layer: Layer in listOf(wash, trunks, aui, brt, auiRoutes, brtRoutes, debugLines, alone, debugAlone, dots, bars, haltes)) {
+    val aloneCasing = casing(
+        alone,
+        Expression.interpolate(
+            Expression.linear(), zoom,
+            Expression.stop(10, byKind(ALONE_W_10, CASING_DP)), Expression.stop(14, byKind(ALONE_W_14, CASING_DP)), Expression.stop(18, byKind(ALONE_W_18, CASING_DP)),
+        ),
+    )
+    val casings = listOf(
+        casing(trunks, width(TRUNK_SCALE, fill = 1f, casing = CASING_DP), offset(BusMapProps.TRUNK_SLOT, TRUNK_SCALE)),
+        casing(aui, width(1f, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, 1f)),
+        casing(brt, width(1f, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, 1f)),
+        casing(auiRoutes, routeCasing),
+        casing(brtRoutes, routeCasing),
+    )
+    // The casings under every line, so a line's edge never cuts the one beside it; the alone line's
+    // under it alone, over the rest faded.
+    for (layer: Layer in listOf(wash) + casings + listOf(trunks, aui, brt, auiRoutes, brtRoutes, debugLines, aloneCasing, alone, debugAlone, dots, bars, haltes)) {
         if (style.getLayer(OVERLAY_SLOT) != null) style.addLayerBelow(layer, OVERLAY_SLOT) else style.addLayer(layer)
     }
     // Halte names over the whole style: under the basemap's labels they lost every collision to a
@@ -725,10 +772,10 @@ private fun parseColor(hex: String): Int =
 private fun showLines(style: Style, debug: Boolean, code: String?) {
     fun visible(shown: Boolean) = PropertyFactory.visibility(if (shown) Property.VISIBLE else Property.NONE)
     val faded = PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f)
-    for (id in LINE_LAYERS) style.getLayer(id)?.setProperties(visible(!debug), faded)
+    for (id in LINE_LAYERS + CASING_LAYERS) style.getLayer(id)?.setProperties(visible(!debug), faded)
     for (id in listOf(BAR_LAYER, MARK_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(!debug))
     style.getLayer(DEBUG_LAYER)?.setProperties(visible(debug), faded)
-    for ((id, shown) in listOf(ISOLATE_LAYER to !debug, DEBUG_ISOLATE_LAYER to debug)) {
+    for ((id, shown) in listOf(ISOLATE_LAYER to !debug, ISOLATE_LAYER + CASING_SUFFIX to !debug, DEBUG_ISOLATE_LAYER to debug)) {
         (style.getLayer(id) as? LineLayer)?.apply {
             if (code != null) setFilter(Expression.eq(Expression.get(BusMapProps.CODE), Expression.literal(code)))
             setProperties(visible(shown && code != null))
@@ -827,6 +874,20 @@ private const val TRUNK_LAYER = "peta-bus-trunks"
 
 /** Every layer drawing lines, faded when one is drawn alone. */
 private val LINE_LAYERS = listOf(TRUNK_LAYER, AUI_LAYER, BRT_LAYER, AUI_ROUTE_LAYER, BRT_ROUTE_LAYER)
+
+/** Each line layer's casing ([LINE_FILL], [CASING_DP]), and the alone line's, its id with this after. */
+private const val CASING_SUFFIX = "-casing"
+private val CASING_LAYERS = (LINE_LAYERS + ISOLATE_LAYER).map { it + CASING_SUFFIX }
+
+/** A bundled line's share of its place across the street; the rest, a hairline of casing between. */
+private const val LINE_FILL = 0.8f
+
+/** How far a line's casing reaches past its edge, in dp. */
+private const val CASING_DP = 1f
+
+/** The casing: the ground under the wash (shirase's earth, #314256 in dark, with [WASH_DARK] over it), light and dark. */
+private const val CASING_LIGHT = "#FFFFFF"
+private const val CASING_DARK = "#253347"
 private const val HALTE_LAYER = "peta-bus-haltes"
 private const val HALTE_NAME_LAYER = "peta-bus-halte-names"
 private const val RAIL_LAYER = "peta-bus-rail"
