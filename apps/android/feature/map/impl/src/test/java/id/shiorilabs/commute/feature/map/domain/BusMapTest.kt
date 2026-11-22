@@ -159,10 +159,23 @@ class BusMapTest {
     }
 
     @Test
-    fun `the trunk koridors are the plain-number BRTs and L13E`() {
-        assertTrue(listOf("1", "9", "13", "14", "13E", "L13E").all(::isTrunk))
+    fun `the trunks are the plain-number BRTs, L13E and the rail lines`() {
+        assertTrue(listOf("1", "9", "13", "14", "13E", "L13E", "KCI:C", "MRTJ:M").all(::isTrunk))
         assertTrue(listOf("1A", "6B", "4D", "L13", "13B", "").none(::isTrunk))
-        assertTrue(busMap.lines.filter { isTrunk(it.code) }.all { it.kind == "BRT" })
+        assertTrue(busMap.lines.filter { isTrunk(it.code) }.all { it.kind == "BRT" || (it.kind == "RAIL" && isRailLine(it.code)) })
+    }
+
+    @Test
+    fun `rail lines are bundled with the koridors, MRT M beside 1 on Sudirman`() {
+        val rail = busMap.lines.filter { it.kind == "RAIL" }
+        assertTrue(rail.map { it.code }.containsAll(listOf("KCI:C", "KCI:B", "MRTJ:M", "LRTJBDB:BK", "LRTJBDB:CB")))
+        assertTrue(rail.all { it.stops.isEmpty() && it.drawn.isNotEmpty() && it.color.startsWith("#") })
+        assertTrue(busMap.edges.any { "MRTJ:M" in it.lines && "1" in it.lines })
+        val drawn = features(busMap.toGeoJson().lines).filter { it.prop(BusMapProps.KIND) == "RAIL" }
+        assertTrue(drawn.isNotEmpty())
+        assertTrue(drawn.all { it["properties"]!!.jsonObject.containsKey(BusMapProps.TRUNK_SLOT) })
+        assertEquals("TJ:1", lineKeyOf("1"))
+        assertEquals("KCI:C", lineKeyOf("KCI:C"))
     }
 
     @Test
@@ -283,6 +296,10 @@ class BusMapTest {
         val rail = features(busMap.toGeoJson().rail).associateBy { it.prop(BusMapProps.STATION_ID) }
         assertEquals(railRoundelImage(railNumbersOf(manggarai)), rail.getValue("KCI-MRI").prop(BusMapProps.ICON))
         assertEquals("3", rail.getValue("KCI-MRI").prop(BusMapProps.COUNT))
+        // Kept zoomed out: Manggarai, an interchange, and Bogor, a line's end; not Sudirman.
+        assertEquals("true", rail.getValue("KCI-MRI").prop(BusMapProps.MAJOR))
+        assertEquals("true", rail.getValue("KCI-BOO").prop(BusMapProps.MAJOR))
+        assertEquals("false", rail.getValue("KCI-SUD").prop(BusMapProps.MAJOR))
         val roundels = busMap.railRoundels()
         assertTrue(rail.values.all { it.prop(BusMapProps.ICON) in roundels })
         assertEquals(emptyList<RailNumber>(), railNumbersOf(JsonArray(manggarai.take(3))))

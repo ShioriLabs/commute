@@ -144,7 +144,7 @@ fun StreetsMap(
                 onAnyTap()
                 val p = map.projection.toScreenLocation(at)
                 val box = RectF(p.x - tapSlop, p.y - tapSlop, p.x + tapSlop, p.y + tapSlop)
-                val hit = map.queryRenderedFeatures(box, BAR_LAYER, MARK_DOT_LAYER, HALTE_LAYER, RAIL_LAYER)
+                val hit = map.queryRenderedFeatures(box, BAR_LAYER, MARK_DOT_LAYER, HALTE_LAYER, RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER)
                     .minByOrNull { feature ->
                         val point = feature.geometry() as? org.maplibre.geojson.Point ?: return@minByOrNull Float.MAX_VALUE
                         val s = map.projection.toScreenLocation(LatLng(point.latitude(), point.longitude()))
@@ -213,6 +213,10 @@ class StreetsMapState(private val initial: StreetsCamera?, private val save: (St
     var style: Style? by mutableStateOf(null)
         internal set
 
+    /** Which way the map faces, degrees clockwise from north: the north button shows while it's turned. */
+    var bearing: Double by mutableStateOf(initial?.bearing ?: 0.0)
+        private set
+
     private var riderShown = false
     private var view: MapView? = null
 
@@ -228,6 +232,9 @@ class StreetsMapState(private val initial: StreetsCamera?, private val save: (St
             .zoom(at.zoom)
             .bearing(at.bearing)
             .build()
+        bearing = map.cameraPosition.bearing
+        map.addOnCameraMoveListener { bearing = map.cameraPosition.bearing }
+        map.addOnCameraIdleListener { bearing = map.cameraPosition.bearing }
         this.map = map
     }
 
@@ -306,6 +313,12 @@ class StreetsMapState(private val initial: StreetsCamera?, private val save: (St
         )
     }
 
+    /** The map turned back to face north, where it is and as near as it is. */
+    fun northUp() {
+        val map = map ?: return
+        map.animateCamera(CameraUpdateFactory.bearingTo(0.0), RECENTER_MILLIS)
+    }
+
     /** Onto the rider if their whereabouts are known and on the map, else the whole of central Jakarta. */
     @SuppressLint("MissingPermission")
     fun recenter() {
@@ -344,7 +357,7 @@ private fun hasLocation(context: Context): Boolean =
  * change.
  */
 private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float, typeface: Typeface?) {
-    for (id in LINE_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, DEBUG_LAYER, DEBUG_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
+    for (id in LINE_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, DEBUG_LAYER, DEBUG_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
     for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, DEBUG_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE)) style.removeSource(id)
 
     style.addSource(GeoJsonSource(LINES_SOURCE, busMap.geoJson.lines))
@@ -356,6 +369,10 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
 
     val color = Expression.get(BusMapProps.COLOR)
     val zoom = Expression.zoom()
+    val trunkKinds = Expression.any(
+        Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("BRT")),
+        Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("RAIL")),
+    )
     // One width for every line, and each stretch that many widths across from where it runs, so lines
     // sharing a street lie side by side as Transit draws them. [scale] widens the lot.
     fun width(scale: Float) = Expression.interpolate(
@@ -390,21 +407,22 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
             minZoom = ALL_LINES_MIN_ZOOM
             maxZoom = STREET_ZOOM
         }
-    val brt = lines(BRT_LAYER, BusMapProps.SLOT, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("BRT")))
+    // Koridors and rail lines alike: the rail lines are bundled with them as equals.
+    val brt = lines(BRT_LAYER, BusMapProps.SLOT, trunkKinds)
         .apply {
             minZoom = ALL_LINES_MIN_ZOOM
             maxZoom = STREET_ZOOM
         }
     // At street zoom, every line on its own streets, thin and unbundled: the streets are what's read
     // there, and a bundle drawn into a junction's one point (Bundaran HI) jumps off them.
-    fun routes(id: String, kind: String) = LineLayer(id, ROUTES_SOURCE).withProperties(
+    fun routes(id: String, kinds: Expression) = LineLayer(id, ROUTES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
         PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(STREET_ZOOM, ROUTE_W_16), Expression.stop(18, ROUTE_W_18))),
         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-    ).withFilter(Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal(kind))).apply { minZoom = STREET_ZOOM }
-    val auiRoutes = routes(AUI_ROUTE_LAYER, "AUI")
-    val brtRoutes = routes(BRT_ROUTE_LAYER, "BRT")
+    ).withFilter(kinds).apply { minZoom = STREET_ZOOM }
+    val auiRoutes = routes(AUI_ROUTE_LAYER, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("AUI")))
+    val brtRoutes = routes(BRT_ROUTE_LAYER, trunkKinds)
     // A line alone, over the rest faded: on its own streets at every zoom. Hidden until one is picked.
     val alone = LineLayer(ISOLATE_LAYER, ROUTES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
@@ -489,54 +507,137 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     // road's name, and a halte's name is what the layer is for. The rail stations over those, as
     // the basemap drew its own over every other place.
     style.addLayer(names)
-    style.addLayer(rail)
+    for (layer in rail) style.addLayer(layer)
 }
 
 /**
- * The rail stations: each one's roundels, the app's station roundel a line apiece (white face, the
- * line's ring, `C` over `12`) as Singapore's map badges its stations, its name beside them in the
- * basemap's own look for a station, read off shirase's `pois` layer as served (a theme's colours
- * with it). shirase's own stations are hidden: OSM's point beside ours drew Sudirman twice.
+ * The rail stations. Zoomed out, as Transit draws them: a dot in its line's colour, white at an
+ * interchange; the major ones alone ([BusMapProps.MAJOR]: interchanges and lines' ends) furthest out
+ * and the only ones named, so the network reads rather than a carpet of badges. From
+ * [RAIL_ROUNDELS_MIN_ZOOM], every one as its roundels, the app's station roundel a line apiece
+ * (white face, the line's ring, `C` over `12`) as Singapore's map badges its stations. The name
+ * beside them in the basemap's own look for a station, read off shirase's `pois` layer as served (a
+ * theme's colours with it). shirase's own stations are hidden: OSM's point beside ours drew Sudirman
+ * twice.
  */
-private fun railStations(style: Style, roundels: Map<String, List<RailRoundel>>, density: Float, typeface: Typeface?): SymbolLayer {
-    for ((image, faces) in roundels) style.addImage(image, roundelImage(faces, density, typeface))
-    val rail = SymbolLayer(RAIL_LAYER, RAIL_SOURCE)
+private fun railStations(style: Style, roundels: Map<String, List<RailRoundel>>, density: Float, typeface: Typeface?): List<SymbolLayer> {
+    for ((image, faces) in roundels) {
+        style.addImage(image, roundelImage(faces, density, typeface))
+        style.addImage(RAIL_DOT_IMAGE + image, dotImage(faces, density))
+    }
     val pois = style.getLayer(BASEMAP_POIS_LAYER) as? SymbolLayer
     if (pois != null) {
         val notStations = Expression.neq(Expression.get(BusMapProps.KIND), Expression.literal(RAIL_POI_KIND))
         pois.setFilter(pois.filter?.let { Expression.all(it, notStations) } ?: notStations)
-        fun <T> value(property: PropertyValue<T>): Any? = if (property.isExpression) property.expression else property.value
-        val layout = with(pois) { listOf(textFont, textMaxWidth, textLetterSpacing, textTransform) }
-        val paint = with(pois) { listOf(textOpacity, textColor, textHaloColor, textHaloWidth, textHaloBlur) }
-        rail.setProperties(
-            *layout.mapNotNull { p -> value(p)?.let { LayoutPropertyValue(p.name, it) } }.toTypedArray(),
-            *paint.mapNotNull { p -> value(p)?.let { PaintPropertyValue(p.name, it) } }.toTypedArray(),
+    }
+    // The name: right of the mark, or left of it where that has no room; the mark kept where neither has.
+    fun named(id: String, offset: Expression): SymbolLayer {
+        val layer = SymbolLayer(id, RAIL_SOURCE)
+        if (pois != null) {
+            fun <T> value(property: PropertyValue<T>): Any? = if (property.isExpression) property.expression else property.value
+            val layout = with(pois) { listOf(textFont, textMaxWidth, textLetterSpacing, textTransform) }
+            val paint = with(pois) { listOf(textOpacity, textColor, textHaloColor, textHaloWidth, textHaloBlur) }
+            layer.setProperties(
+                *layout.mapNotNull { p -> value(p)?.let { LayoutPropertyValue(p.name, it) } }.toTypedArray(),
+                *paint.mapNotNull { p -> value(p)?.let { PaintPropertyValue(p.name, it) } }.toTypedArray(),
+            )
+        } else {
+            layer.setProperties(PropertyFactory.textFont(arrayOf(LABEL_FONT)))
+        }
+        layer.setProperties(
+            PropertyFactory.textField(Expression.get(BusMapProps.NAME)),
+            PropertyFactory.textSize(RAIL_NAME_SIZE),
+            PropertyFactory.textVariableAnchor(arrayOf(Property.TEXT_ANCHOR_LEFT, Property.TEXT_ANCHOR_RIGHT)),
+            PropertyFactory.textJustify(Property.TEXT_JUSTIFY_AUTO),
+            PropertyFactory.textRadialOffset(offset),
+            PropertyFactory.textOptional(true),
         )
-    } else {
-        rail.setProperties(PropertyFactory.textFont(arrayOf(LABEL_FONT)))
+        return layer
     }
     val zoom = Expression.zoom()
-    rail.setProperties(
-        PropertyFactory.iconImage(Expression.get(BusMapProps.ICON)),
-        PropertyFactory.iconSize(
-            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, ROUNDEL_SCALE_10), Expression.stop(13, ROUNDEL_SCALE_13), Expression.stop(15, 1f)),
+    val major = Expression.eq(Expression.get(BusMapProps.MAJOR), Expression.literal(true))
+    val dotImage = Expression.concat(Expression.literal(RAIL_DOT_IMAGE), Expression.get(BusMapProps.ICON))
+    val dots = named(RAIL_DOT_LAYER, railDotNameOffset()).apply {
+        setProperties(PropertyFactory.iconImage(dotImage))
+        setFilter(major)
+        maxZoom = RAIL_ROUNDELS_MIN_ZOOM
+    }
+    // The rest, nearer in: dots alone, kept where they meet another's mark, as Transit keeps its stops.
+    val minorDots = SymbolLayer(RAIL_MINOR_DOT_LAYER, RAIL_SOURCE).withProperties(
+        PropertyFactory.iconImage(dotImage),
+        PropertyFactory.iconAllowOverlap(true),
+    ).withFilter(Expression.not(major)).apply {
+        minZoom = RAIL_MINOR_DOTS_MIN_ZOOM
+        maxZoom = RAIL_ROUNDELS_MIN_ZOOM
+    }
+    val rail = named(
+        RAIL_LAYER,
+        Expression.interpolate(
+            Expression.linear(), zoom,
+            Expression.stop(RAIL_ROUNDELS_MIN_ZOOM, railNameOffset(ROUNDEL_SCALE_13)),
+            Expression.stop(15, railNameOffset(1f)),
         ),
-        PropertyFactory.textField(Expression.get(BusMapProps.NAME)),
-        PropertyFactory.textSize(RAIL_NAME_SIZE),
-        // Right of the roundels, or left of them where that has no room; the roundels kept where neither has.
-        PropertyFactory.textVariableAnchor(arrayOf(Property.TEXT_ANCHOR_LEFT, Property.TEXT_ANCHOR_RIGHT)),
-        PropertyFactory.textJustify(Property.TEXT_JUSTIFY_AUTO),
-        PropertyFactory.textRadialOffset(
-            Expression.interpolate(
-                Expression.linear(), zoom,
-                Expression.stop(10, railNameOffset(ROUNDEL_SCALE_10)),
-                Expression.stop(13, railNameOffset(ROUNDEL_SCALE_13)),
-                Expression.stop(15, railNameOffset(1f)),
+    ).apply {
+        setProperties(
+            PropertyFactory.iconImage(Expression.get(BusMapProps.ICON)),
+            PropertyFactory.iconSize(
+                Expression.interpolate(Expression.linear(), zoom, Expression.stop(RAIL_ROUNDELS_MIN_ZOOM, ROUNDEL_SCALE_13), Expression.stop(15, 1f)),
             ),
-        ),
-        PropertyFactory.textOptional(true),
+        )
+        minZoom = RAIL_ROUNDELS_MIN_ZOOM
+    }
+    return listOf(minorDots, dots, rail)
+}
+
+/**
+ * A station zoomed out: a white capsule ringed in the roundels' ink holding a bead in each of its
+ * lines' colours, left to right as its roundels go (the row of them shrunk; zooming in, the beads
+ * grow into roundels). An unnumbered station's, whose lines the map doesn't know, is a plain white dot.
+ */
+private fun dotImage(faces: List<RailRoundel>, density: Float): Bitmap {
+    val bead = RAIL_BEAD_DP * density
+    val gap = RAIL_BEAD_GAP_DP * density
+    val pad = RAIL_CAPSULE_PAD_DP * density
+    val height = bead + 2 * pad
+    val width = if (faces.isEmpty()) height else faces.size * bead + (faces.size - 1) * gap + 2 * pad
+    val bitmap = Bitmap.createBitmap(width.roundToInt().coerceAtLeast(1), height.roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val ring = RAIL_CAPSULE_RING_DP * density
+    val outer = RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat())
+    val r = outer.height() / 2
+    canvas.drawRoundRect(outer, r, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE })
+    val inset = RectF(outer).apply { inset(ring / 2, ring / 2) }
+    canvas.drawRoundRect(
+        inset,
+        inset.height() / 2,
+        inset.height() / 2,
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = ring
+            color = ROUNDEL_INK
+        },
     )
-    return rail
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    faces.forEachIndexed { i, face ->
+        fill.color = parseColor(face.color)
+        canvas.drawCircle(pad + bead / 2 + i * (bead + gap), height / 2, bead / 2, fill)
+    }
+    return bitmap
+}
+
+/** How far a major station's name sits from its capsule's middle, in ems: half the capsule ([BusMapProps.COUNT] beads) and a little. */
+private fun railDotNameOffset(): Expression {
+    val count = Expression.toNumber(Expression.get(BusMapProps.COUNT))
+    fun em(dp: Float) = Expression.literal(dp / RAIL_NAME_SIZE)
+    val height = RAIL_BEAD_DP + 2 * RAIL_CAPSULE_PAD_DP
+    return Expression.switchCase(
+        Expression.eq(count, Expression.literal(0)),
+        em(height / 2 + RAIL_NAME_GAP_DP),
+        Expression.sum(
+            Expression.product(count, em((RAIL_BEAD_DP + RAIL_BEAD_GAP_DP) / 2)),
+            em(-RAIL_BEAD_GAP_DP / 2 + RAIL_CAPSULE_PAD_DP + RAIL_NAME_GAP_DP),
+        ),
+    )
 }
 
 /**
@@ -663,8 +764,7 @@ private const val ROUNDEL_INK = 0xFF0F172A.toInt()
 /** An unnumbered station's ring, smaller than a numbered one's. */
 private const val PLAIN_SCALE = 0.6f
 
-/** The roundels zoomed out, as a share of their size from z15. */
-private const val ROUNDEL_SCALE_10 = 0.55f
+/** The roundels at [RAIL_ROUNDELS_MIN_ZOOM], as a share of their size from z15. */
 private const val ROUNDEL_SCALE_13 = 0.8f
 
 /** A station's name, and the room between it and its roundels. */
@@ -730,6 +830,23 @@ private val LINE_LAYERS = listOf(TRUNK_LAYER, AUI_LAYER, BRT_LAYER, AUI_ROUTE_LA
 private const val HALTE_LAYER = "peta-bus-haltes"
 private const val HALTE_NAME_LAYER = "peta-bus-halte-names"
 private const val RAIL_LAYER = "peta-bus-rail"
+
+/**
+ * The rail stations zoomed out, as bead capsules: the major ones, named, and the rest; each one's
+ * image is its roundels' ([BusMapProps.ICON]) after [RAIL_DOT_IMAGE]. A bead, between two, round
+ * the beads inside the capsule, and the capsule's ring.
+ */
+private const val RAIL_DOT_LAYER = "peta-bus-rail-dots"
+private const val RAIL_MINOR_DOT_LAYER = "peta-bus-rail-minor-dots"
+private const val RAIL_DOT_IMAGE = "dot-"
+private const val RAIL_BEAD_DP = 5f
+private const val RAIL_BEAD_GAP_DP = 1.5f
+private const val RAIL_CAPSULE_PAD_DP = 2f
+private const val RAIL_CAPSULE_RING_DP = 1.5f
+
+/** From here in, every rail station as its roundels; out from here, as dots, from [RAIL_MINOR_DOTS_MIN_ZOOM] the minor ones too. */
+private const val RAIL_ROUNDELS_MIN_ZOOM = 13f
+private const val RAIL_MINOR_DOTS_MIN_ZOOM = 11f
 
 /** shirase's glyphs: PT Sans, as JakLingko's wayfinding. A stack is one font. */
 private const val LABEL_FONT = "PT Sans Regular"

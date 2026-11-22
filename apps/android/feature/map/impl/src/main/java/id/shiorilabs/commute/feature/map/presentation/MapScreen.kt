@@ -67,6 +67,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Path
+import kotlin.math.abs
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.TransformOrigin
@@ -127,6 +130,7 @@ import id.shiorilabs.commute.feature.map.R
 import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.MapLine
+import id.shiorilabs.commute.feature.map.domain.lineKeyOf
 import id.shiorilabs.commute.feature.map.domain.MapSelection
 import id.shiorilabs.commute.feature.map.domain.Viewport
 import id.shiorilabs.commute.feature.map.domain.approximateSpot
@@ -312,6 +316,49 @@ private fun MapButton(icon: androidx.compose.ui.graphics.vector.ImageVector, des
         Icon(imageVector = icon, contentDescription = description, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
     }
 }
+
+/** The north button: a compass needle, red to the north, turned as the map is. */
+@Composable
+private fun NorthButton(bearing: Float, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.map_north_up)
+    CommuteIconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(44.dp)
+            .shadow(4.dp, CircleShape)
+            .background(MaterialTheme.colorScheme.surface, CircleShape)
+            .semantics { contentDescription = description },
+    ) {
+        val south = MaterialTheme.colorScheme.onSurface
+        Canvas(Modifier.size(22.dp).rotate(-bearing)) {
+            val cx = size.width / 2
+            val cy = size.height / 2
+            val half = size.width * 0.18f
+            val north = Path().apply {
+                moveTo(cx, 0f)
+                lineTo(cx + half, cy)
+                lineTo(cx - half, cy)
+                close()
+            }
+            val tail = Path().apply {
+                moveTo(cx, size.height)
+                lineTo(cx + half, cy)
+                lineTo(cx - half, cy)
+                close()
+            }
+            drawPath(north, NorthRed)
+            drawPath(tail, south)
+        }
+    }
+}
+
+private val NorthRed = Color(0xFFE11D48)
+
+/** How far off north the map turns before the north button shows. */
+private const val NORTH_SLACK_DEG = 0.5
+
+/** One button's step down the map's right column: 44 dp tall and a gap, as the layers and debug buttons sit. */
+private val BUTTON_STEP = 52.dp
 
 /** The map's credit, the web's attribution popover: whose map it is, and which edition. */
 @Composable
@@ -558,7 +605,8 @@ private fun MapWithSheet(
     // A line picked on the streets: a koridor the artwork knows opens its sheet there, as on the
     // artwork; any other is named in a pill. Either way it's drawn alone, the rest faded.
     var streetsPill by remember { mutableStateOf<String?>(null) }
-    val isolatedLine = (selection as? MapSelection.Line)?.line?.takeIf { it.operator == OPERATOR_TJ }?.code ?: streetsPill
+    // As Peta Bus codes it: a koridor by its code, a rail line by its key.
+    val isolatedLine = (selection as? MapSelection.Line)?.line?.let { if (it.operator == OPERATOR_TJ) it.code else it.key } ?: streetsPill
     LaunchedEffect(streets) {
         if (!streets) streetsPill = null
     }
@@ -567,9 +615,9 @@ private fun MapWithSheet(
         layersOpen = false
         attributionOpen = false
         // A stroke a colour's lines share (13, 13E, L13E) asks which, as a shared stroke does on the artwork.
-        if (codes.size < 2 || !controller.offerLineChoices(codes.map { "$OPERATOR_TJ:$it" })) {
+        if (codes.size < 2 || !controller.offerLineChoices(codes.map(::lineKeyOf))) {
             val code = codes.first()
-            streetsPill = if (controller.isolateLine("$OPERATOR_TJ:$code")) null else code
+            streetsPill = if (controller.isolateLine(lineKeyOf(code))) null else code
         }
     }
 
@@ -672,6 +720,28 @@ private fun MapWithSheet(
                         .align(Alignment.TopEnd)
                         .padding(top = topInset + if (home == null) DEBUG_BUTTON_TOP else DEBUG_BUTTON_TOP_HOME, end = 10.dp)
                         .chromeEnter(2),
+                )
+            }
+            // The streets turned off north: a needle turning with them, a tap turns them back.
+            val turned = streets && abs(((streetsState.bearing % 360) + 360) % 360).let { minOf(it, 360 - it) } > NORTH_SLACK_DEG
+            AnimatedVisibility(
+                visible = turned,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(
+                        top = topInset + (if (home == null) LAYERS_BUTTON_TOP else LAYERS_BUTTON_TOP_HOME) +
+                            BUTTON_STEP * ((if (layersOffered) 1 else 0) + (if (debugOffered) 1 else 0)),
+                        end = 10.dp,
+                    ),
+            ) {
+                NorthButton(
+                    bearing = streetsState.bearing.toFloat(),
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        streetsState.northUp()
+                    },
                 )
             }
         }

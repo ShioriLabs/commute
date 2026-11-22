@@ -9,12 +9,12 @@
  * only wanted the data.
  */
 
-export type BusMapLineKind = 'BRT' | 'AUI'
+export type BusMapLineKind = 'BRT' | 'AUI' | 'RAIL'
 
 export interface BusMapLine {
   code: string
   name: string
-  /** BRT koridor, or Angkutan Umum Integrasi (the non-BRT "NBRT" lines). */
+  /** BRT koridor, Angkutan Umum Integrasi (the non-BRT "NBRT" lines), or a rail line (code `KCI:C`, no stops). */
   kind: BusMapLineKind
   /** `#RRGGBB`, the feed's route_color. */
   color: string
@@ -59,8 +59,8 @@ export interface BusMap {
   stopMarks: [string, number, number, number, number, string, number?][]
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
-  /** Rail stations: [station id, lng, lat, [line key, station number][]]; the numbers for Android's roundels. */
-  rail: [string, number, number, [string, string][]?][]
+  /** Rail stations: [station id, lng, lat, [line key, station number][], major (0 | 1)]; for Android's roundels. */
+  rail: [string, number, number, [string, string][]?, (0 | 1)?][]
 }
 
 export type LngLat = [number, number]

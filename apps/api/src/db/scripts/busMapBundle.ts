@@ -70,6 +70,22 @@ export function dropShortLoops(network: Network, list: readonly Chain[]): Chain[
 const SHARED_MIN_M = 100
 
 /*
+ * A rail line and a bus line share a stretch only where they run as one, as
+ * Transit draws Metrobus 3 beside Metro 3 down Av. Universidad: the track under
+ * or over the road itself, LRT Jabodebek over Rasuna Said with 6 (6 to 10 m
+ * apart, at the middle), MRT M under Sudirman and Thamrin between koridor 1's
+ * carriageways (18 m). A track beside the road is its own way, though within
+ * SNAP_M: the Cikarang line on the canal bank by Jl. Galunggung, 21 m from 6 and
+ * 13E, drew into their bundle, and along Jl. Bekasi Timur 30 m from 11. Judged
+ * on the whole stretch, its median distance, so a viaduct edging off the median
+ * for a block doesn't break away.
+ */
+const RAIL_SHARE_M = 20
+
+/** And for this long at least: shorter, a track and a road brush past or cross (12 by Kampung Bandan, 100 m). */
+const RAIL_SHARE_MIN_M = 300
+
+/*
  * A piece coming back onto what's drawn after a stretch of its own, at a link
  * doubling back on its way (sharper than OVERSHOOT_TURN), ran past the corner it
  * turns at: koridor 1 west along Trunojoyo past Sisingamangaraja at CSW, 20 m on,
@@ -94,7 +110,8 @@ const KY = 110_574
 
 export interface BundleLine {
   code: string
-  kind: 'BRT' | 'AUI'
+  /** A koridor, an Angkutan Umum Integrasi line, or a rail line (code `KCI:C`), bundled as a koridor's equal. */
+  kind: 'BRT' | 'AUI' | 'RAIL'
   /** The line's pieces, as drawn: each a polyline. */
   pieces: LngLat[][]
   /**
@@ -132,14 +149,23 @@ export interface BusMapEdge {
   shift?: number
 }
 
-/** Koridors before the other lines, then by number: `1`, `1A`, `1B`, `2`, ... `13`. */
+/**
+ * Koridors and rail lines before the other lines, as equals, then by code: `1`, `1A`, `1B`, `2`, ...
+ * `13`, `KCI:B`, `KCI:C`, `MRTJ:M`.
+ */
 export function bundleOrder(lines: readonly Pick<BundleLine, 'code' | 'kind'>[]): string[] {
+  const first = (kind: BundleLine['kind']): boolean => kind !== 'AUI'
   return [...lines]
     .sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === 'BRT' ? -1 : 1
+      if (first(a.kind) !== first(b.kind)) return first(a.kind) ? -1 : 1
       return a.code.localeCompare(b.code, 'en', { numeric: true })
     })
     .map(l => l.code)
+}
+
+/** A rail line's code: its line key, `KCI:C`; no bus code has a colon. */
+export function isRailCode(code: string): boolean {
+  return code.includes(':')
 }
 
 interface Point {
@@ -151,6 +177,8 @@ interface Point {
   /** The piece that drew it, and how far along: its own last few points aren't snapped onto. */
   piece: number
   index: number
+  /** Drawn by a rail line: a bus line shares it only where they run as one (RAIL_SHARE_M). */
+  rail: boolean
 }
 
 /** Points every SAMPLE_M along a polyline, with every vertex kept, in metres. */
@@ -265,6 +293,7 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
   let pieceId = 0
   for (const code of order) {
     const line = byCode.get(code)!
+    const rail = line.kind === 'RAIL'
     for (const piece of line.pieces) {
       const samples = resample(piece)
       if (samples.length < 2) {
@@ -277,8 +306,12 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
         const dl = Math.hypot(nx - px, ny - py) || 1
         return [(nx - px) / dl, (ny - py) / dl]
       }
-      /** The nearest point within SNAP_M running the same way (either way) that sample [i] may snap onto. */
-      const nearest = (i: number, othersOnly: boolean): number => {
+      /**
+       * The nearest point within SNAP_M running the same way (either way) that sample [i] may snap
+       * onto; with [across], one drawn by the other kind (rail for a bus line, bus for a rail line)
+       * alone, and without, one of the other kind only where [acrossOk] lets it.
+       */
+      const nearest = (i: number, othersOnly: boolean, across = false): number => {
         const [x, y] = samples[i]!
         const [ux, uy] = heading(i)
         let best = -1
@@ -290,6 +323,7 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
             for (const id of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
               const p = points[id]!
               if (p.piece === pieceId && (othersOnly || i - p.index < OWN_TAIL)) continue
+              if (across ? p.rail === rail : p.rail !== rail && !acrossOk[i]) continue
               if (Math.abs(p.ux * ux + p.uy * uy) < SNAP_COS) continue
               // Either side of a toll road: a split road's two sides, drawn as two (Yos Sudarso).
               if (keptApart([x, y], [p.x, p.y], [ux, uy])) continue
@@ -302,6 +336,25 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
           }
         }
         return best
+      }
+      // Where it runs by the other kind's lines, each stretch as a whole: shared if, at its middle,
+      // they're as one (RAIL_SHARE_M).
+      const acrossOk = samples.map(() => true)
+      const acrossD = samples.map((_, i) => {
+        const id = nearest(i, true, true)
+        return id < 0 ? Infinity : Math.hypot(points[id]!.x - samples[i]![0], points[id]!.y - samples[i]![1])
+      })
+      for (let a = 0; a < acrossD.length;) {
+        if (acrossD[a] === Infinity) {
+          a++
+          continue
+        }
+        let b = a
+        while (b < acrossD.length && acrossD[b] !== Infinity) b++
+        const run = acrossD.slice(a, b).sort((m, n) => m - n)
+        const median = run[Math.floor(run.length / 2)]!
+        if (median > RAIL_SHARE_M || (b - a) * SAMPLE_M < RAIL_SHARE_MIN_M) for (let k = a; k < b; k++) acrossOk[k] = false
+        a = b
       }
       // The stretches where the piece would snap onto what's drawn before it, measured first: one
       // shorter than SHARED_MIN_M, the piece off it on both sides, is a street running close by, not
@@ -328,7 +381,7 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
         const [ux, uy] = heading(i)
         let best = nearest(i, false)
         if (apart[i] && best >= 0 && points[best]!.piece !== pieceId) best = -1
-        const at = best >= 0 ? best : addPoint({ x, y, ux, uy, piece: pieceId, index: i })
+        const at = best >= 0 ? best : addPoint({ x, y, ux, uy, piece: pieceId, index: i, rail })
         if (best < 0) own.push(at)
         else {
           // Back onto the network: past the corner first? Then from where it turns.
@@ -1162,7 +1215,9 @@ export interface StopIn {
 export function placeStops(
   edges: readonly BusMapEdge[],
   stops: readonly StopIn[],
-  strokeOf: ReadonlyMap<string, string> = new Map()
+  strokeOf: ReadonlyMap<string, string> = new Map(),
+  /** Lines a halte's bar doesn't cross (rail beside a busway): it spans the others' strokes alone. */
+  passesBy: (code: string) => boolean = () => false
 ): StopMark[] {
   const shapes = edges.map(e => decodePolyline(e.shape).map(([lng, lat]) => [lng * KX, lat * KY] as [number, number]))
   const out: StopMark[] = []
@@ -1194,10 +1249,21 @@ export function placeStops(
     if (!best) continue
     const { x, y, bearing, edge } = best
     const { lines, shift } = edges[edge]!
-    // Across the strokes, not the lines: 13, 13E and L13E are one.
-    const count = strokeCount(lines, strokeOf)
-    const mark: StopMark = [stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), count, count === 1 ? lines[0]! : '']
-    if (shift) mark.push(shift)
+    // Across the strokes, not the lines: 13, 13E and L13E are one. Left to right, each with its first line.
+    const strokes: { key: string, first: string, passes: boolean }[] = []
+    for (const line of lines) {
+      const key = strokeOf.get(line) ?? line
+      const last = strokes[strokes.length - 1]
+      if (last?.key === key) last.passes &&= passesBy(line)
+      else strokes.push({ key, first: line, passes: passesBy(line) })
+    }
+    // Only from the first stroke it crosses to the last: a rail line at the bundle's side runs past.
+    const from = Math.max(0, strokes.findIndex(st => !st.passes))
+    const to = strokes.length - 1 - Math.max(0, [...strokes].reverse().findIndex(st => !st.passes))
+    const count = Math.max(1, to - from + 1)
+    const moved = (shift ?? 0) + (from + to) / 2 - (strokes.length - 1) / 2
+    const mark: StopMark = [stop.code, Math.round((x / KX) * 1e5) / 1e5, Math.round((y / KY) * 1e5) / 1e5, Math.round(bearing), count, count === 1 ? strokes[from]?.first ?? lines[0]! : '']
+    if (moved) mark.push(moved)
     out.push(mark)
   }
   return out.sort((a, b) => a[0].localeCompare(b[0]))
@@ -1959,5 +2025,5 @@ export function dropBypasses(pieces: readonly LngLat[][], apart?: KeptApart): Ln
  * the map until the drawing holds up with them.
  */
 export function isDrawn(code: string): boolean {
-  return /^\d+$/.test(code) || code === '13E' || code === 'L13E'
+  return /^\d+$/.test(code) || code === '13E' || code === 'L13E' || isRailCode(code)
 }

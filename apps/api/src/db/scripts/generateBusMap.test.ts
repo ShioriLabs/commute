@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, type LngLat } from '../../utils/polyline'
-import { dedupePatterns, feedShapes, lengthM, parseRailCoords, railNumbers, sampleAlong } from './generateBusMap'
+import { dedupePatterns, feedShapes, lengthM, parseRailCoords, railLines, railMajor, railNumbers, railPieces, sampleAlong } from './generateBusMap'
 
 /*
  * Synthetic streets near Monas. Metres to degrees at -6.2: one degree of
@@ -89,6 +89,53 @@ describe('railNumbers', () => {
     expect(numbers.get('KCI-SUD')).toEqual([['KCI:C', 'C12']])
     expect(numbers.get('KCI-MRI')).toEqual([['KCI:C', 'C13'], ['KCI:B', 'B13']])
     expect(numbers.has('TJ-H1')).toBe(false)
+  })
+})
+
+describe('railPieces', () => {
+  const seg = (from: string, to: string, ...coords: [number, number][]): { from: string, to: string, lines: string[], coords: [number, number][] } =>
+    ({ from, to, lines: ['C'], coords })
+  it('chains a line\'s segments into one piece, turning one traced the other way, and breaks at a gap', () => {
+    const line = {
+      operator: 'KCI' as const,
+      lineCode: 'C',
+      path: [{ station: 'A', pos: 'C1' }, { station: 'B', pos: 'C2' }, { station: 'C', pos: 'C3' }, { station: 'D', pos: 'C4' }, { station: 'E', pos: 'C5' }]
+    }
+    const segments = [
+      seg('KCI-A', 'KCI-B', [0, 0], [1, 0]),
+      seg('KCI-C', 'KCI-B', [2, 0], [1.5, 0.5], [1, 0]),
+      seg('KCI-D', 'KCI-E', [3, 0], [4, 0])
+    ]
+    expect(railPieces(line, segments)).toEqual([
+      [[0, 0], [1, 0], [1.5, 0.5], [2, 0]],
+      [[3, 0], [4, 0]]
+    ])
+  })
+
+  it('makes a rail line its line key, its operator\'s name and colour, no stops, TJ left out', () => {
+    const lines = railLines([
+      { operator: 'KCI', lineCode: 'C', path: [{ station: 'A', pos: 'C1' }, { station: 'B', pos: 'C2' }] },
+      { operator: 'TJ', lineCode: '1', path: [{ station: 'H1', pos: '1-1' }, { station: 'H2', pos: '1-2' }] }
+    ], [seg('KCI-A', 'KCI-B', [106.8, -6.2], [106.81, -6.2])])
+    expect(lines.map(l => [l.code, l.kind, l.name, l.color, l.stops.length, l.shapes.length])).toEqual([['KCI:C', 'RAIL', 'Lin Cikarang', '#25B8EB', 0, 1]])
+  })
+})
+
+describe('railMajor', () => {
+  it('keeps interchanges and line ends, a looping branch\'s end and an unbuilt end not', () => {
+    const major = railMajor([
+      {
+        operator: 'KCI',
+        lineCode: 'C',
+        path: [{ station: 'A', pos: 'C1' }, { station: 'B', pos: 'C2' }, { station: 'C', pos: 'C3' }, { station: 'X', pos: 'C4', unbuilt: true }],
+        branches: [
+          { fromStation: 'B', path: [{ station: 'D', pos: 'C5' }] },
+          { fromStation: 'B', path: [{ station: 'E', pos: 'C6' }], closeTo: 'B' }
+        ]
+      },
+      { operator: 'KCI', lineCode: 'B', path: [{ station: 'F', pos: 'B1' }, { station: 'B', pos: 'B2' }, { station: 'G', pos: 'B3' }] }
+    ])
+    expect([...major].sort()).toEqual(['KCI-A', 'KCI-B', 'KCI-C', 'KCI-D', 'KCI-F', 'KCI-G'])
   })
 })
 

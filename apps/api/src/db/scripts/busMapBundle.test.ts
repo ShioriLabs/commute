@@ -3,6 +3,7 @@ import { decodePolyline, encodePolyline, type LngLat } from '../../utils/polylin
 import {
   bundle,
   bundleOrder,
+  buildNetwork,
   dropBypasses,
   dropRetraces,
   dropShortLoops,
@@ -423,6 +424,26 @@ describe('roundJunctions', () => {
   })
 })
 
+describe('rail beside a busway', () => {
+  const north = (east: number): [number, number][] => [[LNG + east / M_LNG, LAT], [LNG + east / M_LNG, LAT + 1500 / M_LAT]]
+  const shared = (east: number): boolean => {
+    const network = buildNetwork([
+      { code: '1', kind: 'BRT', pieces: [north(0)] },
+      { code: 'MRTJ:M', kind: 'RAIL', pieces: [north(east)] }
+    ])
+    return [...network.edges.values()].some(lines => lines.has('1') && lines.has('MRTJ:M'))
+  }
+  it('shares the street where the track runs under it', () => expect(shared(8)).toBe(true))
+  it('keeps its own way on a bank beside it', () => expect(shared(25)).toBe(false))
+  it('only crosses a road it runs with for a few dozen metres', () => {
+    const network = buildNetwork([
+      { code: '1', kind: 'BRT', pieces: [north(0)] },
+      { code: 'KCI:C', kind: 'RAIL', pieces: [[[LNG + 300 / M_LNG, LAT + 600 / M_LAT], [LNG + 5 / M_LNG, LAT + 700 / M_LAT], [LNG + 5 / M_LNG, LAT + 780 / M_LAT], [LNG - 300 / M_LNG, LAT + 880 / M_LAT]]] }
+    ])
+    expect([...network.edges.values()].some(lines => lines.has('1') && lines.has('KCI:C'))).toBe(false)
+  })
+})
+
 describe('placeStops', () => {
   it('puts a halte on the bundle carrying its lines, turned to the street', () => {
     const north = { shape: encodePolyline([[LNG, LAT], [LNG, LAT + 1000 / M_LAT]]), lines: ['1', '6A'] }
@@ -434,6 +455,16 @@ describe('placeStops', () => {
     expect(Math.abs((lng - LNG) * M_LNG)).toBeLessThan(1)
     expect(bearing).toBe(0)
     expect(count).toBe(2)
+  })
+
+  it('bars only the bus strokes, a rail line at the bundle\'s side running past', () => {
+    const shared = { shape: encodePolyline([[LNG, LAT], [LNG, LAT + 1000 / M_LAT]]), lines: ['1', '6A', 'MRTJ:M'] }
+    const marks = placeStops([shared], [{ code: 'H3', lng: LNG, lat: LAT + 500 / M_LAT, lines: ['1'] }], new Map(), code => code.includes(':'))
+    const [, , , , count, only, shift] = marks[0]!
+    expect(count).toBe(2)
+    expect(only).toBe('')
+    // Strokes at -1, 0 and 1: the bar over the first two, centred half a width left.
+    expect(shift).toBe(-0.5)
   })
 
   it('leaves out a halte with none of its lines near', () => {

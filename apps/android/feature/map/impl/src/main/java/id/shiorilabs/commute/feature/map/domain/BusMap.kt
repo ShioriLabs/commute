@@ -11,6 +11,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -31,8 +32,9 @@ data class BusMap(
     /** Halte code → `[name, lng, lat]`. `TJ-$code` is the API's station id. */
     val haltes: Map<String, JsonArray>,
     /**
-     * Rail stations: `[station id, lng, lat, numbers]`, the numbers `[line key, station number]` a
-     * line apiece (`["KCI:C", "C12"]`), for its roundels. An older file has no numbers.
+     * Rail stations: `[station id, lng, lat, numbers, major]`, the numbers `[line key, station number]`
+     * a line apiece (`["KCI:C", "C12"]`), for its roundels, and major `1` for an interchange or a
+     * line's end, kept zoomed out. An older file has neither.
      */
     val rail: List<JsonArray>,
 )
@@ -56,7 +58,7 @@ data class BusMapFeedLine(
 data class BusMapLine(
     val code: String,
     val name: String,
-    /** `BRT` for a koridor, `AUI` for Angkutan Umum Integrasi (the non-BRT lines). */
+    /** `BRT` for a koridor, `AUI` for Angkutan Umum Integrasi (the non-BRT lines), `RAIL` for a rail line (code `KCI:C`). */
     val kind: String,
     /** `#RRGGBB`, the feed's route colour. */
     val color: String,
@@ -128,10 +130,18 @@ fun BusMap.strokesOf(edge: BusMapEdge, byCode: Map<String, BusMapLine> = lines.a
 const val BUS_LINE_W_15_DP = 3.5f
 
 /**
- * A trunk koridor: a plain-number BRT (`1` … `14`), and 13E and L13E. The streets layer draws only
- * these for now, at every zoom (the generator bundles only these too: `isDrawn` in busMapBundle.ts).
+ * A trunk: a plain-number BRT koridor (`1` … `14`), 13E and L13E, and every rail line ([isRailLine]),
+ * bundled with them as their equal. The streets layer draws only these for now, at every zoom (the
+ * generator bundles only these too: `isDrawn` in busMapBundle.ts).
  */
-fun isTrunk(code: String): Boolean = code == "L13E" || code == "13E" || (code.isNotEmpty() && code.all(Char::isDigit))
+fun isTrunk(code: String): Boolean =
+    code == "L13E" || code == "13E" || (code.isNotEmpty() && code.all(Char::isDigit)) || isRailLine(code)
+
+/** A rail line on Peta Bus: its code is its line key (`KCI:C`); no bus code has a colon. */
+fun isRailLine(code: String): Boolean = ':' in code
+
+/** A line's key, `TJ:1` or `KCI:C`, from its code on Peta Bus. */
+fun lineKeyOf(code: String): String = if (isRailLine(code)) code else "TJ:$code"
 
 /** A halte: its station id (`TJ-…`), name and place. */
 data class BusMapHalte(val stationId: String, val name: String, val lng: Double, val lat: Double)
@@ -174,6 +184,9 @@ fun railNumbersOf(entry: JsonArray): List<RailNumber> =
         if (both.size < 2) return@mapNotNull null
         RailNumber(both[0].jsonPrimitive.content, both[1].jsonPrimitive.content)
     }
+
+/** Whether a rail station is major, an interchange or a line's end, as the generator ranks it (`railMajor`). */
+fun isMajorRail(entry: JsonArray): Boolean = entry.getOrNull(4)?.jsonPrimitive?.intOrNull == 1
 
 /** The image a rail station's roundels are drawn from: one per set of numbers, shared by none else. */
 fun railRoundelImage(numbers: List<RailNumber>): String =
@@ -252,6 +265,9 @@ object BusMapProps {
 
     /** A rail station's roundel image ([railRoundelImage]). */
     const val ICON = "icon"
+
+    /** A rail station kept zoomed out: an interchange or a line's end ([isMajorRail]). */
+    const val MAJOR = "major"
 
     /** A line stretch's place across its street, in line widths to the right of its direction. */
     const val SLOT = "slot"
@@ -343,6 +359,7 @@ fun BusMap.toGeoJson(
                         put(BusMapProps.ICON, railRoundelImage(numbers))
                         // How many roundels across, for the name to clear them all.
                         put(BusMapProps.COUNT, numbers.size)
+                        put(BusMapProps.MAJOR, isMajorRail(entry))
                         railNames[stationId]?.let { put(BusMapProps.NAME, it) }
                     },
                 ),

@@ -294,6 +294,8 @@ class MapViewModel @Inject constructor(
                     val known = stations?.mapTo(HashSet()) { it.id }
                     val tappable: ((String) -> Boolean)? = known?.let { ids -> { id -> id in ids } }
                     val dictionary = lineRepository.dictionary.value.ifEmpty { lineRepository.lines().getOrNull().orEmpty() }
+                    // A rail line's colour as the file draws its track, the dictionary's where it has none.
+                    val drawn = map.lines.associate { it.code to it.color }
                     BusMapLayer(
                         geoJson = map.toGeoJson(tappable, railNames = stations.orEmpty().associate { it.id to it.name }),
                         attribution = map.attribution,
@@ -302,7 +304,7 @@ class MapViewModel @Inject constructor(
                         railRoundels = map.railRoundels().mapValues { (_, numbers) ->
                             numbers.map { n ->
                                 val line = dictionary[n.lineKey]
-                                RailRoundel(n.number, line?.colorCode ?: RAIL_UNKNOWN_COLOR, line?.operator ?: n.lineKey.substringBefore(':'))
+                                RailRoundel(n.number, drawn[n.lineKey] ?: line?.colorCode ?: RAIL_UNKNOWN_COLOR, line?.operator ?: n.lineKey.substringBefore(':'))
                             }
                         },
                     )

@@ -1,6 +1,12 @@
 import * as fs from 'node:fs'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
-import { TOPOLOGY } from '../data/topology'
+import { TOPOLOGY, type LineTopology, type Stop } from '../data/topology'
+import { stopLists } from '../../utils/edgeChain'
+import { LINES as APCGK_LINES } from '../../operators/apcgk/lines'
+import { LINES as KCI_LINES } from '../../operators/kci/lines'
+import { LINES as LRTJ_LINES } from '../../operators/lrtj/lines'
+import { LINES as LRTJBDB_LINES } from '../../operators/lrtjbdb/lines'
+import { LINES as MRTJ_LINES } from '../../operators/mrtj/lines'
 import {
   bundle,
   dropBypasses,
@@ -11,6 +17,7 @@ import {
   simplifyBends,
   smoothPath,
   isDrawn,
+  isRailCode,
   placeStops,
   roundJunctions,
   strokeKeys,
@@ -182,21 +189,22 @@ const COVER_CELL_M = 20
 const CARRIAGEWAY_RINGS = 3
 const MIN_PIECE_M = 80
 
-const ATTRIBUTION = 'TransJakarta: TransJakarta GTFS. Rail stations: Commute.'
+const ATTRIBUTION = 'TransJakarta: TransJakarta GTFS. Rail stations: Commute. Rail tracks: © OpenStreetMap contributors (ODbL).'
 
 // ── output shape (mirrored by apps/web/app/lib/bus-map.ts) ──────────────────
 
-export type BusMapLineKind = 'BRT' | 'AUI'
+export type BusMapLineKind = 'BRT' | 'AUI' | 'RAIL'
 
 export interface BusMapLine {
   code: string
   name: string
   kind: BusMapLineKind
-  /** `#RRGGBB`, the feed's route_color. */
+  /** `#RRGGBB`, the feed's route_color; a rail line's, its operator's (operators/{op}/lines.ts). */
   color: string
   /**
    * Encoded polylines (Google, precision 5): the pieces that together draw the
-   * line once, from the feed (a koridor redrawn on its topology). The source the
+   * line once, from the feed (a koridor redrawn on its topology); a rail line's,
+   * its track as traced from OSM (railLines). The source the
    * generator works from; what clients draw is [drawn].
    */
   shapes: string[]
@@ -219,14 +227,15 @@ export interface BusMap {
   /** Halte code -> [name, lng, lat]. */
   haltes: Record<string, [string, number, number]>
   /**
-   * Rail stations: [station id, lng, lat, its numbers], the numbers as
+   * Rail stations: [station id, lng, lat, its numbers, major], the numbers as
    * [line key, station number] (`['KCI:C', 'C12']`), a line apiece in
-   * TOPOLOGY's order, for the station's roundels.
+   * TOPOLOGY's order, for the station's roundels; major 1 for an interchange
+   * or a line's end (railMajor), what the map keeps zoomed out, else 0.
    */
   rail: RailStation[]
 }
 
-export type RailStation = [string, number, number, [string, string][]]
+export type RailStation = [string, number, number, [string, string][], 0 | 1]
 
 // ── geometry ────────────────────────────────────────────────────────────────
 
@@ -407,10 +416,131 @@ export function railNumbers(topology: typeof TOPOLOGY): Map<string, [string, str
   return out
 }
 
-/** The rail stations as the file has them: the coordinate CSV's, numbered from the topology. */
+/**
+ * The stations worth a zoomed-out map: an interchange (two lines or more of
+ * its operator) and each line's ends, a branch's far end too unless it loops
+ * back. A stop not yet built is no end; the last built one is.
+ */
+export function railMajor(topology: typeof TOPOLOGY): Set<string> {
+  const out = new Set<string>()
+  for (const [id, numbers] of railNumbers(topology)) if (numbers.length > 1) out.add(id)
+  for (const line of topology) {
+    if (line.operator === 'TJ') continue
+    const ends = (path: Stop[], first: boolean): void => {
+      const built = path.filter(stop => !stop.unbuilt)
+      const last = built[built.length - 1]
+      if (first && built[0]) out.add(`${line.operator}-${built[0].station}`)
+      if (last) out.add(`${line.operator}-${last.station}`)
+    }
+    ends(line.path, true)
+    for (const branch of line.branches ?? []) if (!branch.closeTo) ends(branch.path, false)
+  }
+  return out
+}
+
+/*
+ * The rail lines, drawn with the koridors and bundled with them as equals
+ * (busMapBundle.ts): where a track runs with a busway, MRT M under Sudirman
+ * and Thamrin with koridor 1, the two lie side by side and the line order
+ * weighs them alike. A rail line's code is its line key (`KCI:C`), apart from
+ * any bus code by its colon; its stops are none, its stations being drawn on
+ * their own (`rail`).
+ *
+ * Its track is generateTrackGeometry's, traced from OSM, one LineString per
+ * consecutive station pair (shared track once, listing every line on it):
+ * chained along each stop list into as few pieces as it runs, so a line has no
+ * joint at every station, and left on its own way rather than laid on a road.
+ */
+const GEOMETRY_DIR = `${__dirname}/../data/geometry`
+
+/** A rail line's track between two consecutive stations, as generateTrackGeometry writes it. */
+export interface TrackSegment {
+  from: string
+  to: string
+  lines: string[]
+  coords: LngLat[]
+}
+
+/** Each operator's lines, for a rail line's name and colour. */
+const RAIL_LINE_INFO: Record<string, readonly { lineCode: string, name: string, colorCode: string }[]> = {
+  APCGK: APCGK_LINES,
+  KCI: KCI_LINES,
+  LRTJ: LRTJ_LINES,
+  LRTJBDB: LRTJBDB_LINES,
+  MRTJ: MRTJ_LINES
+}
+
+/** Every operator's traced track, from data/geometry. */
+function trackSegments(): TrackSegment[] {
+  return fs.readdirSync(GEOMETRY_DIR)
+    .filter(f => f.endsWith('.geojson'))
+    .flatMap((f) => {
+      const json = JSON.parse(fs.readFileSync(`${GEOMETRY_DIR}/${f}`, 'utf-8')) as {
+        features: { properties: { from: string, to: string, lines: string[] }, geometry: { coordinates: LngLat[] } }[]
+      }
+      return json.features.map(({ properties: { from, to, lines }, geometry }) => ({ from, to, lines, coords: geometry.coordinates }))
+    })
+}
+
+/**
+ * A line's track as pieces: each of its stop lists walked pair by pair, each
+ * pair's segment (either way round) joined onto the piece before it; a pair with
+ * no segment (a stop not yet built) ends a piece.
+ */
+export function railPieces(line: LineTopology, segments: readonly TrackSegment[]): LngLat[][] {
+  const byPair = new Map<string, TrackSegment>()
+  for (const seg of segments) byPair.set(`${seg.from}>${seg.to}`, seg)
+  const id = (stop: Stop): string => `${line.operator}-${stop.station}`
+  const pieces: LngLat[][] = []
+  for (const list of stopLists(line)) {
+    let piece: LngLat[] = []
+    const flush = (): void => {
+      if (piece.length >= 2) pieces.push(piece)
+      piece = []
+    }
+    for (let i = 1; i < list.length; i++) {
+      const a = id(list[i - 1]!)
+      const b = id(list[i]!)
+      const forward = byPair.get(`${a}>${b}`)
+      const backward = forward ? undefined : byPair.get(`${b}>${a}`)
+      const coords = forward?.coords ?? (backward ? [...backward.coords].reverse() : undefined)
+      if (!coords || coords.length < 2) {
+        flush()
+        continue
+      }
+      piece.push(...(piece.length > 0 ? coords.slice(1) : coords))
+    }
+    flush()
+  }
+  return pieces
+}
+
+/** Every rail line of [topology] with track, as a Peta Bus line. */
+export function railLines(topology: readonly LineTopology[], segments: readonly TrackSegment[]): BusMapLine[] {
+  return topology
+    .filter(line => line.operator !== 'TJ')
+    .flatMap((line): BusMapLine[] => {
+      const pieces = railPieces(line, segments)
+      if (pieces.length === 0) return []
+      const info = RAIL_LINE_INFO[line.operator]?.find(l => l.lineCode === line.lineCode)
+      return [{
+        code: `${line.operator}:${line.lineCode}`,
+        name: info?.name ?? line.lineCode,
+        kind: 'RAIL',
+        color: (info?.colorCode ?? '#64748B').toUpperCase(),
+        shapes: pieces.map(piece => encodePolyline(simplify(piece, SIMPLIFY_M))),
+        drawn: pieces.map(piece => encodePolyline(simplify(piece, DRAWN_SIMPLIFY_M), DRAWN_PRECISION)),
+        stops: []
+      }]
+    })
+}
+
+/** The rail stations as the file has them: the coordinate CSV's, numbered and ranked from the topology. */
 function railStations(): RailStation[] {
   const numbers = railNumbers(TOPOLOGY)
-  return parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8')).map(([id, lng, lat]) => [id, lng, lat, numbers.get(id) ?? []])
+  const major = railMajor(TOPOLOGY)
+  return parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
+    .map(([id, lng, lat]) => [id, lng, lat, numbers.get(id) ?? [], major.has(id) ? 1 : 0])
 }
 
 // ── build ───────────────────────────────────────────────────────────────────
@@ -526,9 +656,10 @@ async function main(): Promise<void> {
   const rail = railStations()
 
   const onRoads = await alongRoads(normal.lines, sortedHaltes, platformsOf(feed))
-  const edges = await bundleShapes(onRoads.lines, onRoads.roads, sortedHaltes)
-  const stopMarks = marksFor(edges, onRoads.lines, sortedHaltes)
-  const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, stopMarks, haltes: sortedHaltes, rail }
+  const all = [...onRoads.lines, ...railLines(TOPOLOGY, trackSegments())]
+  const edges = await bundleShapes(all, onRoads.roads, sortedHaltes)
+  const stopMarks = marksFor(edges, all, sortedHaltes)
+  const map: BusMap = { attribution: ATTRIBUTION, lines: all, edges, stopMarks, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
   feed.lines.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }))
   fs.writeFileSync(FEED_OUTPUT_PATH, JSON.stringify(feed) + '\n')
@@ -593,9 +724,22 @@ function laidOnRoads(
 ): BusMapEdge[] {
   // A bundle's width, for the radius it turns on, is its strokes, 13, 13E and L13E being one.
   const strokes = (edge: BusMapEdge): string[] => [...new Set(edge.lines.map(l => strokeOf.get(l) ?? l))]
+  const keyOf = (p: LngLat): string => `${p[0].toFixed(6)},${p[1].toFixed(6)}`
+  // A rail line's track is no road's (a viaduct, a tunnel): an edge of rail alone keeps its own way,
+  // and a node only rail edges meet stays where it is. One a bus edge meets is laid for both.
+  const railOnly = (edge: BusMapEdge): boolean => edge.lines.every(isRailCode)
+  const busNodes = new Set<string>()
+  for (const edge of edges) {
+    if (railOnly(edge)) continue
+    const pts = decodePolyline(edge.shape)
+    if (pts.length < 2) continue
+    busNodes.add(keyOf(pts[0]!))
+    busNodes.add(keyOf(pts[pts.length - 1]!))
+  }
   const nodes = new Map<string, LngLat>()
   const node = (p: LngLat): LngLat => {
-    const key = `${p[0].toFixed(6)},${p[1].toFixed(6)}`
+    const key = keyOf(p)
+    if (!busNodes.has(key)) return p
     let snapped = nodes.get(key)
     if (!snapped) {
       snapped = snapPoint(p, roads)
@@ -608,7 +752,7 @@ function laidOnRoads(
   const eased = edges.map((edge) => {
     const pts = decodePolyline(edge.shape)
     if (pts.length < 2) return pts
-    const inner = snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)), anyWay: true })
+    const inner = railOnly(edge) ? pts : snapToRoads(pts, roads, { brt: edge.lines.some(l => brt.has(l)), anyWay: true })
     const ends = [node(pts[0]!), node(pts[pts.length - 1]!)] as const
     let laid = [ends[0], ...inner.slice(1, -1), ends[1]]
     // Laid much longer than it runs is laid onto a road beside it: koridor 1's 8 m link between two
@@ -635,7 +779,7 @@ function marksFor(edges: readonly BusMapEdge[], lines: readonly BusMapLine[], ha
   for (const line of lines) {
     for (const code of line.stops) calling.set(code, [...(calling.get(code) ?? []), line.code])
   }
-  return placeStops(edges, Object.entries(haltes).map(([code, [, lng, lat]]) => ({ code, lng, lat, lines: calling.get(code) ?? [] })), strokeKeys(lines))
+  return placeStops(edges, Object.entries(haltes).map(([code, [, lng, lat]]) => ({ code, lng, lat, lines: calling.get(code) ?? [] })), strokeKeys(lines), isRailCode)
 }
 
 /**
@@ -751,11 +895,13 @@ export function alongTopology(
 async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const feed = fs.existsSync(FEED_OUTPUT_PATH) ? JSON.parse(fs.readFileSync(FEED_OUTPUT_PATH, 'utf-8')) as BusMapFeed : { lines: [] }
-  const normal = alongTopology(map.lines, map.haltes, tripsOf(feed))
+  // The rail lines drawn afresh from the track, the bus lines from the file.
+  const normal = alongTopology(map.lines.filter(l => l.kind !== 'RAIL'), map.haltes, tripsOf(feed))
   const onRoads = await alongRoads(normal.lines, normal.haltes, platformsOf(feed))
-  const edges = await bundleShapes(onRoads.lines, onRoads.roads, normal.haltes)
-  const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)
-  const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: railStations() }
+  const all = [...onRoads.lines, ...railLines(TOPOLOGY, trackSegments())]
+  const edges = await bundleShapes(all, onRoads.roads, normal.haltes)
+  const stopMarks = marksFor(edges, all, normal.haltes)
+  const out: BusMap = { attribution: ATTRIBUTION, lines: all, edges, stopMarks, haltes: normal.haltes, rail: railStations() }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
   console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
   console.log(`  haltes:   ${Object.keys(normal.haltes).length} (was ${Object.keys(map.haltes).length})`)
@@ -766,7 +912,7 @@ async function rewriteRail(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const rail = railStations()
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify({ ...map, rail }) + '\n')
-  console.log(`Rewrote ${OUTPUT_PATH}'s rail: ${rail.length} stations, ${rail.filter(r => r[3].length > 0).length} numbered`)
+  console.log(`Rewrote ${OUTPUT_PATH}'s rail: ${rail.length} stations, ${rail.filter(r => r[3].length > 0).length} numbered, ${rail.filter(r => r[4] === 1).length} major`)
 }
 
 if (require.main === module) {
