@@ -101,6 +101,20 @@ const SCOPE: Record<string, BusMapLineKind> = {
  */
 const SIMPLIFY_M = 4
 
+/**
+ * The same for a line laid on the roads, drawn alone from street zoom in: there a metre is a few
+ * pixels, and SIMPLIFY_M cut a bend's curve into chords (2 round its hairpin by Gambir 2). The
+ * roads' own points are already few on a straight, so this costs little.
+ */
+const DRAWN_SIMPLIFY_M = 0.5
+
+/**
+ * And its bends rounded: the tiles draw a curve as a few chords (shirase's roads stop at z15), each
+ * point turning DRAWN_MIN_TURN or more rounded at a bundle of none's radius, 15 m, or as much as its
+ * legs leave room for (filletCorners).
+ */
+const DRAWN_MIN_TURN = (5 * Math.PI) / 180
+
 /** An edge laid onto the roads longer than this times its own length, and this much more, went onto a road beside it. */
 const LAID_STRETCH = 1.5
 const LAID_SLACK_M = 20
@@ -546,7 +560,7 @@ async function alongRoads(lines: readonly BusMapLine[], haltes: BusMap['haltes']
     lines: lines.map((l) => {
       // Out-and-back excursions taken out, as street zoom draws these (dropRetraces): 9 north past Cawang.
       const stops = l.stops.flatMap(code => (haltes[code] ? [[haltes[code][1], haltes[code][2]] as LngLat] : []))
-      const lay = (s: string): string => encodePolyline(simplify(dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops }), stops), SIMPLIFY_M))
+      const lay = (s: string): string => encodePolyline(filletCorners(simplify(dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops }), stops), DRAWN_SIMPLIFY_M), 0, undefined, DRAWN_MIN_TURN))
       return { ...l, drawn: l.shapes.map(lay) }
     }),
     roads

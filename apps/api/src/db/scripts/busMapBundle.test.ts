@@ -6,6 +6,7 @@ import {
   dropBypasses,
   dropRetraces,
   dropShortLoops,
+  filletCorners,
   loadSolver,
   orderCost,
   orderLinesExact,
@@ -511,5 +512,40 @@ describe('dropRetraces', () => {
     // A terminus loop: up the street, round a block and back down it.
     const block = [...north(0, 300), at(80, 300), at(80, 380), at(0, 380), ...north(300, 0)]
     expect(dropRetraces(block)).toEqual(block)
+  })
+})
+
+describe('filletCorners', () => {
+  // A hairpin as the tiles draw it: chords 10 m long, each turning 15 degrees, round 180.
+  const chords = (): LngLat[] => {
+    const out: LngLat[] = [[LNG, LAT]]
+    let x = 0
+    let y = 0
+    let heading = 0
+    for (let i = 0; i < 13; i++) {
+      x += 10 * Math.sin(heading)
+      y += 10 * Math.cos(heading)
+      out.push([LNG + x / M_LNG, LAT + y / M_LAT])
+      heading += (15 * Math.PI) / 180
+    }
+    return out
+  }
+
+  const same = (a: LngLat, b: LngLat): void => {
+    expect(a[0]).toBeCloseTo(b[0], 9)
+    expect(a[1]).toBeCloseTo(b[1], 9)
+  }
+
+  it('leaves turns under 20 degrees for a bundle, as they are', () => {
+    const kept = filletCorners(chords(), 0)
+    expect(kept.length).toBe(chords().length)
+    kept.forEach((p, i) => same(p, chords()[i]!))
+  })
+
+  it('rounds a curve drawn as chords when told to round turns that gentle', () => {
+    const rounded = filletCorners(chords(), 0, undefined, (5 * Math.PI) / 180)
+    expect(rounded.length).toBeGreaterThan(chords().length)
+    same(rounded[0]!, chords()[0]!)
+    same(rounded[rounded.length - 1]!, chords()[chords().length - 1]!)
   })
 })

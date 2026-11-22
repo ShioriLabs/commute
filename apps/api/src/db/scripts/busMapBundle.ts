@@ -1370,8 +1370,8 @@ function arcPoints(p: XY, ux: number, uy: number, turn: number, tangent: number,
 }
 
 /** What a corner filletCorners rounds takes of each leg for [radius]: none for one it leaves (gentle, or a hairpin). */
-const roundedNeed = (turn: number, radius: number): number =>
-  Math.abs(turn) < ARC_MIN_TURN || Math.abs(turn) > ARC_MAX_TURN ? 0 : radius * Math.tan(Math.abs(turn) / 2)
+const roundedNeed = (turn: number, radius: number, minTurn: number = ARC_MIN_TURN): number =>
+  Math.abs(turn) < minTurn || Math.abs(turn) > ARC_MAX_TURN ? 0 : radius * Math.tan(Math.abs(turn) / 2)
 
 /**
  * How much of a leg of [length] a corner wanting [need] gets, the corner at its
@@ -1382,26 +1382,26 @@ const share = (need: number, other: number, length: number): number =>
   need + other <= length ? need : (length * need) / (need + other)
 
 /**
- * [path] with each corner turning between ARC_MIN_TURN and ARC_MAX_TURN rounded
- * off for a bundle of [lines]; its ends stay put. Each leg goes to the corners at
+ * [path] with each corner turning between [minTurn] (ARC_MIN_TURN for a bundle) and
+ * ARC_MAX_TURN rounded off for a bundle of [lines]; its ends stay put. Each leg goes to the corners at
  * its two ends (share), all of it to one whose neighbour isn't rounded (a path
  * end, an arc's own steps); a corner the legs leave short of its tangent is as
  * wide as they allow, and is tallied as squeezed.
  */
-export function filletCorners(path: readonly LngLat[], lines: number, tally?: CornerTally): LngLat[] {
+export function filletCorners(path: readonly LngLat[], lines: number, tally?: CornerTally, minTurn: number = ARC_MIN_TURN): LngLat[] {
   if (path.length < 3) return [...path]
   const radius = arcRadius(lines)
   const xy = toXYs(path)
   const out: XY[] = [xy[0]!]
   const leg = (i: number): number => Math.hypot(xy[i + 1]![0] - xy[i]![0], xy[i + 1]![1] - xy[i]![1])
-  const need = xy.map((p, i) => (i === 0 || i === xy.length - 1 ? 0 : roundedNeed(turnAt(xy[i - 1]!, p, xy[i + 1]!), radius)))
+  const need = xy.map((p, i) => (i === 0 || i === xy.length - 1 ? 0 : roundedNeed(turnAt(xy[i - 1]!, p, xy[i + 1]!), radius, minTurn)))
   for (let i = 1; i < xy.length - 1; i++) {
     const p = xy[i]!
     const inLen = leg(i - 1)
     const outLen = leg(i)
     if (inLen === 0 || outLen === 0) continue
     const turn = turnAt(xy[i - 1]!, p, xy[i + 1]!)
-    if (Math.abs(turn) < ARC_MIN_TURN || Math.abs(turn) > ARC_MAX_TURN) {
+    if (Math.abs(turn) < minTurn || Math.abs(turn) > ARC_MAX_TURN) {
       out.push(p)
       continue
     }
