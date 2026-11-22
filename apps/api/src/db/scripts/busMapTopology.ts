@@ -498,8 +498,6 @@ export function alignToTopology(
         for (let k = 1; k < stops.length; k++) {
           const a = stops[k - 1]!
           const b = stops[k]!
-          // What the leg was found along, when it was one track: the next leg's to carry on from.
-          let pick: Picked | null = null
           // One of its trips, the way it runs, from [a] to [b] calling at no halte the posters dropped
           // nor any other of the run's: the bus's own way, a loop to turn included (4 round by Manggarai).
           const trip = (): [number, number][] | null => {
@@ -510,9 +508,7 @@ export function alignToTopology(
             }
             // Out of a terminus, its trips may start off from the halte, where the buses wait: 9's at
             // Pluit 1, 97 m on past Pluit.
-            const found = find(NEAR_M) ?? (i === 1 && k === 1 ? find(FAR_M) : null)
-            if (found) pick = found
-            return found?.path ?? null
+            return (find(NEAR_M) ?? (i === 1 && k === 1 ? find(FAR_M) : null))?.path ?? null
           }
           const elsewhere = (way: [number, number][] | null | undefined): [number, number][] | null => {
             if (way) cursor = null
@@ -528,10 +524,7 @@ export function alignToTopology(
               const way = trip()
               if (way) return elsewhere(way)
             }
-            if (picked) {
-              cursor = picked
-              pick = picked
-            }
+            if (picked) cursor = picked
             return picked?.path ?? null
           }
           let piece = ownWay()
