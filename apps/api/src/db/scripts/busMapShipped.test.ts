@@ -24,6 +24,9 @@ import { decodePolyline, type LngLat } from '../../utils/polyline'
  *   Latuharhari, the slip road on the middle of Latuharhari. Taken as unjoined, 6 turned at the corner.
  * - A halte's own coordinate lies between the lanes it has: Galunggung's platforms say 6 calls on the
  *   south lane, 4 on the north.
+ * - A topology without a pathReverse runs back the same haltes: 3 was drawn Kalideres -> Monas only.
+ * - Monumen Nasional's turn is round the Arjuna Wijaya fountain's busway ring, which only 3's round
+ *   trips run in the feed: waypoints (generateBusMap.ts VIA), per the user.
  * - An elevated busway is a bridge, kept off by the road matcher (a flyover over a koridor's own lane),
  *   but it is the 13 family's own way: westbound they came down to the street under it past Velbak.
  *   Only a koridor's own, by the busway's name: 13's past Blok M runs over 1's lane at Palatehan.
@@ -102,9 +105,9 @@ describe('Peta Bus as shipped, at the termini', () => {
       const pieces = drawn(code)
       return pieces.some(p => Math.min(...pieces.map(q => dist(p[p.length - 1]!, q[0]!))) > 50)
     })
-    // 3: only Kalideres -> Monas is drawn. 13: its way back runs past CBD Ciledug on to Puri Beta 1.
+    // 13: its way back runs past CBD Ciledug on to Puri Beta 1.
     // 4: in along the busway to Pulo Gadung's halte, out of a bay 61 m off; no trip joins the two.
-    expect(open).toEqual(['3', '4', '13'])
+    expect(open).toEqual(['4', '13'])
   })
 
   it('starts and ends every trunk piece without a hook', () => {
@@ -187,5 +190,19 @@ describe('Peta Bus as shipped, on the streets round them', () => {
     const lane = offset(halte('Jln. Palatehan'), 0, 12.5)
     expect(distanceTo(drawn('1'), lane)).toBeLessThan(3)
     for (const code of ['13', '13E', 'L13E']) expect(distanceTo(drawn(code), lane)).toBeGreaterThan(5)
+  })
+
+  it('draws 3 both ways, its topology having no pathReverse', () => {
+    expect(drawn('3')).toHaveLength(2)
+    const kalideres = halte('Kalideres')
+    expect(drawn('3').filter(p => dist(p[0]!, kalideres) < 150 || dist(p[p.length - 1]!, kalideres) < 150)).toHaveLength(2)
+  })
+
+  it('turns 2 and 3 at Monumen Nasional round the Arjuna Wijaya fountain', () => {
+    const south: XY = xy([106.82289, -6.18088])
+    for (const code of ['2', '3']) expect(distanceTo(drawn(code), south)).toBeLessThan(6)
+    // 2 off the ring's west side across onto Medan Merdeka Selatan; 3 back up Medan Merdeka Barat.
+    expect(distanceTo(drawn('2'), xy([106.82263, -6.18063]))).toBeLessThan(6)
+    expect(distanceTo(drawn('3'), xy([106.82263, -6.18063]))).toBeLessThan(6)
   })
 })

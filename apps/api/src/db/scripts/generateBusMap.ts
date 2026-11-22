@@ -638,7 +638,8 @@ function tjTopology(): TopologyLine[] {
     .filter(t => t.operator === 'TJ')
     .map(t => ({
       code: t.lineCode,
-      runs: [t.path, ...(t.pathReverse ? [t.pathReverse] : [])].map(run => run.map(s => s.station)),
+      // Without a pathReverse the way back is the path run backwards, as the routing graph mirrors it (3).
+      runs: [t.path, t.pathReverse ?? [...t.path].reverse()].map(run => run.map(s => s.station)),
       via: VIA[t.lineCode]
     }))
 }
@@ -646,11 +647,23 @@ function tjTopology(): TopologyLine[] {
 /*
  * Waypoints for koridor stretches the shapes can't tell, where the way the street
  * search would take isn't the bus's. Keyed by koridor, then `from->to` halte
- * codes. Checked on the ground; add one only when you know the street. None are
- * needed now: 6 from Galunggung onto Rasuna Said by Jl. Gembira comes from its
- * feed trip that way (alongTopology's trips).
+ * codes. Checked on the ground; add one only when you know the street. (6 from
+ * Galunggung onto Rasuna Said by Jl. Gembira needs none: it comes from its feed
+ * trip that way, alongTopology's trips.)
+ *
+ * 2 and 3 turn at Monumen Nasional round the Arjuna Wijaya fountain at the foot of
+ * Medan Merdeka Barat, its busway ring (per the user, 2026-11-22): on south past
+ * the halte, round the ring's south side, and 3 back up Medan Merdeka Barat, 2 off
+ * the ring's west side across onto Medan Merdeka Selatan for Balai Kota. Only 3's
+ * round trips run it in the feed; 2's trips out turn straight onto Merdeka Selatan.
  */
-const VIA: Record<string, Record<string, LngLat[]>> = {}
+const FOUNTAIN_SOUTH: LngLat = [106.82289, -6.18088]
+const FOUNTAIN_WEST: LngLat = [106.82263, -6.18063]
+const FOUNTAIN_TO_SELATAN: LngLat = [106.82291, -6.18036]
+const VIA: Record<string, Record<string, LngLat[]>> = {
+  '2': { 'H00131P->H00006P': [FOUNTAIN_SOUTH, FOUNTAIN_WEST, FOUNTAIN_TO_SELATAN] },
+  '3': { 'H00131P->H00170P': [FOUNTAIN_SOUTH] }
+}
 
 /**
  * Each koridor with a topology redrawn along it, its reroutes gone, and its
