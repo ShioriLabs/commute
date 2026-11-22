@@ -28,6 +28,11 @@ import { decodePolyline, type LngLat } from '../../utils/polyline'
  * - 3's turn at Monumen Nasional is round the Arjuna Wijaya fountain's busway ring, which only its
  *   round trips run in the feed: a waypoint (generateBusMap.ts VIA), per the user. 2 passes Monas
  *   on round onto Medan Merdeka Selatan for Gambir; it doesn't turn there.
+ * - A turn can be only in the round trips: 3's round the Arjuna Wijaya fountain at Monumen Nasional,
+ *   13's off north-east up Cokroaminoto from CBD Ciledug to stand (per the user), past the halte and
+ *   back to it, its trips in ending and out starting at the halte (busMapTopology.ts turn). 13's way
+ *   back also runs on into its way out's first haltes in the routing (CBD Ciledug by day, Puri Beta
+ *   2 by night); drawn, it ends at CBD Ciledug. Only 13 goes there; 13B, 13E and L13E turn at Puri Beta.
  * - A way in can be long: 4's trips pass Pulo Gadung's halte on the busway, go round by Bekasi
  *   Raya and back into the terminal from the north, 500 m, to a bay; out, they leave from another
  *   bay and back past where they came in. Drawn to where its trips end, then out from where they pass.
@@ -109,8 +114,7 @@ describe('Peta Bus as shipped, at the termini', () => {
       const pieces = drawn(code)
       return pieces.some(p => Math.min(...pieces.map(q => dist(p[p.length - 1]!, q[0]!))) > 50)
     })
-    // 13: its way back runs past CBD Ciledug on to Puri Beta 1.
-    expect(open).toEqual(['13'])
+    expect(open).toEqual([])
   })
 
   it('starts and ends every trunk piece without a hook', () => {
@@ -199,6 +203,16 @@ describe('Peta Bus as shipped, on the streets round them', () => {
     expect(drawn('3')).toHaveLength(2)
     const kalideres = halte('Kalideres')
     expect(drawn('3').filter(p => dist(p[0]!, kalideres) < 150 || dist(p[p.length - 1]!, kalideres) < 150)).toHaveLength(2)
+  })
+
+  it('turns 13 at CBD Ciledug off north-east up Cokroaminoto and back; 13B, 13E and L13E at Puri Beta', () => {
+    const cbd = halte('CBD Ciledug')
+    expect(distanceTo(drawn('13'), cbd)).toBeLessThan(25)
+    expect(distanceTo(drawn('13'), offset(cbd, 96, 200))).toBeLessThan(25)
+    // Its way back ends there, not on to Puri Beta 1 as the routing's day/night topology has it.
+    const back = drawn('13').find(p => dist(p[p.length - 1]!, cbd) < 150)!
+    expect(back).toBeDefined()
+    for (const code of ['13B', '13E', 'L13E']) expect(distanceTo(drawn(code), cbd)).toBeGreaterThan(1000)
   })
 
   it('turns 3 at Monumen Nasional round the Arjuna Wijaya fountain; 2 passes on to Gambir', () => {

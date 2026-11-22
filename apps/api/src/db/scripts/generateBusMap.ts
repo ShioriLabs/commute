@@ -651,16 +651,10 @@ function tjTopology(): TopologyLine[] {
  * Galunggung onto Rasuna Said by Jl. Gembira needs none: it comes from its feed
  * trip that way, alongTopology's trips.)
  *
- * 3 turns at Monumen Nasional round the Arjuna Wijaya fountain at the foot of
- * Medan Merdeka Barat, its busway ring (per the user, 2026-11-22): on south past
- * the halte, round the ring's south side and back up Medan Merdeka Barat. Only its
- * round trips run it in the feed. 2 doesn't turn there: it passes Monas on its way
- * round onto Medan Merdeka Selatan for Balai Kota and Gambir, as its trips do.
+ * None are needed now: 3's turn at Monumen Nasional round the Arjuna Wijaya fountain,
+ * which only its round trips run, comes from those (busMapTopology.ts turn).
  */
-const FOUNTAIN_SOUTH: LngLat = [106.82289, -6.18088]
-const VIA: Record<string, Record<string, LngLat[]>> = {
-  '3': { 'H00131P->H00170P': [FOUNTAIN_SOUTH] }
-}
+const VIA: Record<string, Record<string, LngLat[]>> = {}
 
 /**
  * Each koridor with a topology redrawn along it, its reroutes gone, and its

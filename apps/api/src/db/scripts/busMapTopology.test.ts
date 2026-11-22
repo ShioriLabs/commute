@@ -188,6 +188,29 @@ describe('alignToTopology', () => {
     expect(passesBy(aligned.pieces.get('13E')!, ...at(200, 400))).toBe(true)
   })
 
+  it('turns at a terminus the way only its round trips run, when they go on out from there', () => {
+    // 13 at CBD Ciledug (T): in and out trips end and start at the halte; round trips go on past it
+    // north-east to stand, round a block, and back past it on their way out to A.
+    const tHaltes = { A: halte('A', 1000, 0), T: halte('T', 0, 0), N: halte('N', 0, 2000) }
+    const inbound = run([1000, 0], [0, 0])
+    const outbound = run([0, -10], [1000, -10])
+    const round = run([1000, 0], [0, 0], [0, 300], [100, 300], [100, 0], [0, -10], [1000, -10])
+    const aligned = alignToTopology(
+      [{ code: '13', pieces: [inbound, outbound], feed: [inbound, outbound, round] }],
+      tHaltes,
+      [{ code: '13', runs: [['A', 'T'], ['T', 'A']] }]
+    )
+    expect(passesBy(aligned.pieces.get('13')!, ...at(50, 300))).toBe(true)
+    // 2 at Monas: its round trips turn and go back north to N, but 2 goes on out to A.
+    const elsewhere = run([1000, 0], [0, 0], [0, 300], [100, 300], [100, 0], [0, -10], [0, 2000])
+    const two = alignToTopology(
+      [{ code: '2', pieces: [inbound, outbound], feed: [inbound, outbound, elsewhere] }],
+      tHaltes,
+      [{ code: '2', runs: [['A', 'T'], ['T', 'A']] }]
+    )
+    expect(passesBy(two.pieces.get('2')!, ...at(50, 300))).toBe(false)
+  })
+
   it('drives from where one run ends on to where the next starts, near it', () => {
     // 14 at Senen: in to T, round by S 300 m on to turn, and back out past T.
     const sHaltes = { J: halte('J', 0, -1000), T: halte('T', 0, 0), S: halte('S', -300, 0) }

@@ -59,6 +59,55 @@ function distanceToSegment([px, py]: [number, number], [ax, ay]: [number, number
 /** Shorter than this, the way from where a trip starts or ends is the feed shuffling about a bay (2 at Pulo Gadung). */
 const TERMINAL_MIN_M = 20
 
+/**
+ * Out of a terminus [a] to [b], the way a trip starting there goes (within FAR_M: where its buses wait
+ * may be on past the halte, 12's and 9's at Pluit 1, 97 m on), from where it passes nearest the halte
+ * on its way out, not the bay it pulls out of (1's at Blok M, 13 m off the street: a tick), calling at
+ * none of [avoid] on the way. The shortest; null when none.
+ */
+function tripOut(trips: readonly Track[], a: [number, number], b: [number, number], avoid: readonly [number, number][]): [number, number][] | null {
+  const limit = Math.hypot(b[0] - a[0], b[1] - a[1]) * OWN_REACH + 2 * FAR_M
+  let best: [number, number][] | null = null
+  for (const t of trips) {
+    if (Math.hypot(t.xy[0]![0] - a[0], t.xy[0]![1] - a[1]) > FAR_M) continue
+    const from = passes(t, a, NEAR_M)[0] ?? 0
+    const to = passes(t, b, NEAR_M).find(m => m > from + NEAR_M)
+    if (to === undefined || to - from > limit) continue
+    if (avoid.some(p => passes(t, p, NEAR_M).some(m => m > from + NEAR_M && m < to - NEAR_M))) continue
+    if (!best || to - from < lengthOf(best)) best = slice(t, from, to)
+  }
+  return best
+}
+
+/** A round trip's way round at a terminus, between passing its halte and passing it again, is this long. */
+const TURN_MIN_M = 150
+const TURN_MAX_M = 2000
+
+/**
+ * The way a round trip turns at terminus [h]: from passing it to passing it again, TURN_MIN_M to
+ * TURN_MAX_M on, when it then goes on to [next], the next halte out, plainly (no detour). The
+ * shortest such; null when none. A round trip turning elsewhere doesn't go on to [next]: 2's pass
+ * Monumen Nasional round the fountain and back north, where 2 goes on east for Balai Kota.
+ */
+function turn(trips: readonly Track[], h: [number, number], next: [number, number]): [number, number][] | null {
+  const straight = Math.hypot(next[0] - h[0], next[1] - h[1])
+  const limit = Math.max(straight * DETOUR_FACTOR, straight + DETOUR_SLACK_M)
+  let best: [number, number][] | null = null
+  let bestM = Infinity
+  for (const t of trips) {
+    const at = passes(t, h, NEAR_M)
+    for (let j = 1; j < at.length; j++) {
+      const loop = at[j]! - at[j - 1]!
+      if (loop < TURN_MIN_M || loop > TURN_MAX_M || loop >= bestM) continue
+      const on = passes(t, next, NEAR_M).find(m => m > at[j]!)
+      if (on === undefined || on - at[j]! > limit) continue
+      best = slice(t, at[j - 1]!, at[j]!)
+      bestM = loop
+    }
+  }
+  return best
+}
+
 /** A run ending this near where the next starts, within TERMINAL_JOIN_COS of straight on, is joined on to it. */
 const TERMINAL_JOIN_M = 50
 const TERMINAL_JOIN_COS = Math.cos((60 * Math.PI) / 180)
@@ -488,8 +537,18 @@ export function alignToTopology(
     // A run starting near but not where the one before it ended (round from the last to the first):
     // the bus drives on from the one to the other to turn, 14 from Senen TOYOTA Rangga round by Senen
     // Raya. That leg goes at the start of the run.
-    const linked = runs.map((placed, r) => {
-      const before = runs[(r + runs.length - 1) % runs.length]!
+    // A run running on past where the next starts, into the next's own first haltes, ends there: 13's
+    // way back, Puri Beta 2 by night and CBD Ciledug by day as the routing has it, then Puri Beta 1,
+    // which its way out calls at next.
+    const drawnRuns = runs.map((placed, r) => {
+      const next = runs[(r + 1) % runs.length]!
+      const at = runs.length < 2 || !next[0] ? -1 : placed.lastIndexOf(next[0])
+      if (at < 0 || at === placed.length - 1) return placed
+      const after = placed.slice(at)
+      return after.every((code, j) => next[j] === code) ? placed.slice(0, at + 1) : placed
+    })
+    const linked = drawnRuns.map((placed, r) => {
+      const before = drawnRuns[(r + drawnRuns.length - 1) % drawnRuns.length]!
       const end = before[before.length - 1]
       if (runs.length < 2 || !end || !placed[0] || end === placed[0]) return placed
       const [, eLng, eLat] = haltes[end]!
@@ -498,7 +557,11 @@ export function alignToTopology(
       const [sx, sy] = toXY([sLng, sLat])
       return Math.hypot(sx - ex, sy - ey) <= TERMINAL_LINK_M ? [end, ...placed] : placed
     })
-    for (const placed of linked) {
+    for (const [ri, placed] of linked.entries()) {
+      // The run after, when it starts where this one ends: a terminus the buses turn at.
+      const onward = linked.length >= 2 && linked[(ri + 1) % linked.length]![0] === placed[placed.length - 1]
+        ? linked[(ri + 1) % linked.length]!
+        : null
       const path: [number, number][] = []
       // Where the last leg left the koridor's own track, for the next to carry on from.
       let cursor: Cursor | null = null
@@ -546,20 +609,7 @@ export function alignToTopology(
           const outOf = (): [number, number][] | null => {
             if (i !== 1 || k !== 1) return null
             const between = placed.filter((_, j) => j !== i - 1 && j !== i).map(code => toXY([haltes[code]![1], haltes[code]![2]]))
-            const limit = Math.hypot(b[0] - a[0], b[1] - a[1]) * OWN_REACH + 2 * FAR_M
-            let best: [number, number][] | null = null
-            for (const t of trips) {
-              // Within FAR_M: where its buses wait may be on past the halte (12's and 9's at Pluit 1, 97 m on).
-              if (Math.hypot(t.xy[0]![0] - a[0], t.xy[0]![1] - a[1]) > FAR_M) continue
-              // From where it passes nearest the halte on its way out, not the bay it pulls out of (1's at
-              // Blok M, 13 m off the street: a tick on the map).
-              const from = passes(t, a, NEAR_M)[0] ?? 0
-              const to = passes(t, b, NEAR_M).find(m => m > from + NEAR_M)
-              if (to === undefined || to - from > limit) continue
-              if ([...dropped, ...between].some(p => passes(t, p, NEAR_M).some(m => m > from + NEAR_M && m < to - NEAR_M))) continue
-              if (!best || to - from < lengthOf(best)) best = slice(t, from, to)
-            }
-            return best
+            return tripOut(trips, a, b, [...dropped, ...between])
           }
           let piece = elsewhere(outOf())
             ?? ownWay()
@@ -592,6 +642,19 @@ export function alignToTopology(
           if (i === placed.length - 1 && k === stops.length - 1) {
             const on = tail(trips, b, piece[piece.length - 1]!)
             if (on) piece = [...piece, ...on.slice(1)]
+            // Or round the way its round trips turn there, past the halte and back to it, before going on
+            // to the next run's next halte: 13 at CBD Ciledug, off north-east up Cokroaminoto to stand
+            // and back; 3 at Monumen Nasional round the Arjuna Wijaya fountain.
+            // Not one the way out goes round anyway (13E out of Flyover Kuningan by Cokroaminoto).
+            const nextHalte = onward?.[1]
+            if (!on && nextHalte && haltes[nextHalte]) {
+              const next = toXY([haltes[nextHalte]![1], haltes[nextHalte]![2]])
+              const round = turn(trips, b, next)
+              const out = round && tripOut(trips, b, next, dropped)
+              const far = round && round.reduce((p, q) => (Math.hypot(q[0] - b[0], q[1] - b[1]) > Math.hypot(p[0] - b[0], p[1] - b[1]) ? q : p))
+              const already = out && far && passes(track(line.code, out.map(toLngLat)), far, NEAR_M).length > 0
+              if (round && !already) piece = [...piece, ...round]
+            }
           }
           if (i === 1 && k === 1) {
             const out = lead(trips, a, piece[0]!)
