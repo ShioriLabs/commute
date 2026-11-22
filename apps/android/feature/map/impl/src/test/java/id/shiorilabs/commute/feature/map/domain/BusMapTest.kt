@@ -53,16 +53,32 @@ class BusMapTest {
     }
 
     @Test
-    fun `raw GTFS draws each trunk line's feed shapes, not its pieces laid on the roads`() {
-        val raw = features(busMap.toGeoJson().raw)
+    fun `processed draws each trunk line's shapes, not its pieces laid on the roads`() {
+        val processed = features(busMap.toGeoJson().processed)
         val trunks = busMap.lines.filter { isTrunk(it.code) }
-        assertEquals(trunks.sumOf { line -> line.shapes.count { decodePolyline(it).size >= 2 } }, raw.size)
+        assertEquals(trunks.sumOf { line -> line.shapes.count { decodePolyline(it).size >= 2 } }, processed.size)
         val nine = trunks.first { it.code == "9" }
-        val first = raw.first { it.prop(BusMapProps.CODE) == "9" }["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
-        val fed = decodePolyline(nine.shapes.first())
-        assertEquals(fed.size, first.size)
-        assertEquals(fed.first().longitude, (first.first() as JsonArray)[0].jsonPrimitive.double, 1e-9)
-        assertEquals(nine.color, raw.first { it.prop(BusMapProps.CODE) == "9" }.prop(BusMapProps.COLOR))
+        val first = processed.first { it.prop(BusMapProps.CODE) == "9" }
+        val coordinates = first["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
+        val shape = decodePolyline(nine.shapes.first())
+        assertEquals(shape.size, coordinates.size)
+        assertEquals(shape.first().longitude, (coordinates.first() as JsonArray)[0].jsonPrimitive.double, 1e-9)
+        assertEquals(nine.color, first.prop(BusMapProps.COLOR))
+    }
+
+    @Test
+    fun `raw draws every feed shape of each trunk line whole, in the line's colour`() {
+        val feed = WebMapData.busMapFeed
+        val raw = features(busMap.feedGeoJson(feed))
+        val trunks = busMap.lines.filter { isTrunk(it.code) }.map { it.code }.toSet()
+        val fed = feed.lines.filter { it.code in trunks }
+        assertEquals(fed.sumOf { line -> line.shapes.count { decodePolyline(it).size >= 2 } }, raw.size)
+        // 9 runs several patterns in the feed (short turns, the Pluit loop): every one is drawn.
+        val nine = fed.first { it.code == "9" }
+        assertTrue(nine.shapes.size > busMap.lines.first { it.code == "9" }.shapes.size)
+        assertEquals(nine.shapes.size, raw.count { it.prop(BusMapProps.CODE) == "9" })
+        assertTrue(raw.all { it.prop(BusMapProps.CODE) in trunks })
+        assertEquals(busMap.lines.first { it.code == "9" }.color, raw.first { it.prop(BusMapProps.CODE) == "9" }.prop(BusMapProps.COLOR))
     }
 
     @Test

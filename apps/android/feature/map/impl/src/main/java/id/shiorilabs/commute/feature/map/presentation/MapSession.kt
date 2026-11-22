@@ -23,8 +23,20 @@ class MapSession @Inject constructor() {
     /** Where the streets layer's camera was when it last left the screen. */
     var streetsCamera: StreetsCamera? = null
 
-    /** The debug panel's pick: the streets layer's lines as the feed draws them, not as refined. */
-    val streetsRaw = MutableStateFlow(false)
+    /** The debug panel's pick: how the streets layer draws its lines. */
+    val streetsLines = MutableStateFlow(StreetsLines.ADJUSTED)
+}
+
+/** How the streets layer draws Peta Bus's lines, picked in the map's debug panel. */
+enum class StreetsLines {
+    /** Every shape the GTFS feed has, whole and untouched. */
+    RAW,
+
+    /** The generator's shapes: the feed along each koridor's route, before the roads and bundling. */
+    PROCESSED,
+
+    /** Laid on the roads and bundled: the map as it shows. */
+    ADJUSTED,
 }
 
 /** The streets layer's camera, in MapLibre's terms but free of its types. */

@@ -16,6 +16,8 @@ import id.shiorilabs.commute.core.config.Environment
 import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.data.MapStorage
 import id.shiorilabs.commute.feature.map.domain.BusMap
+import id.shiorilabs.commute.feature.map.domain.BusMapFeed
+import id.shiorilabs.commute.feature.map.domain.feedGeoJson
 import id.shiorilabs.commute.feature.map.domain.BusMapGeoJson
 import id.shiorilabs.commute.feature.map.domain.BusMapLineInfo
 import id.shiorilabs.commute.feature.map.domain.lineInfo
@@ -234,11 +236,33 @@ class MapViewModel @Inject constructor(
     val debugEnabled: StateFlow<Boolean> =
         developerPreferences.mapDebug.stateIn(viewModelScope, WhileUiSubscribed, false)
 
-    /** The streets layer's lines as the feed draws them (raw GTFS) rather than refined. */
-    val streetsRaw: StateFlow<Boolean> get() = session.streetsRaw
+    /** How the streets layer draws its lines: raw, processed or adjusted. */
+    val streetsLines: StateFlow<StreetsLines> get() = session.streetsLines
 
-    fun showRaw(raw: Boolean) {
-        session.streetsRaw.value = raw
+    fun showLines(lines: StreetsLines) {
+        session.streetsLines.value = lines
+        if (lines == StreetsLines.RAW) loadFeed()
+    }
+
+    /** The lines as the feed has them, as GeoJSON; null until [loadFeed] has read them. */
+    val feedLines: StateFlow<String?> get() = feed
+    private val feed = MutableStateFlow<String?>(null)
+    private var feedLoading = false
+
+    /** Reads the bundled feed shapes once, off the main thread, for Raw: only when it is picked. */
+    fun loadFeed() {
+        if (feedLoading) return
+        feedLoading = true
+        viewModelScope.launch {
+            val geoJson = runCatching {
+                withContext(Dispatchers.Default) {
+                    val map = busMapJson.decodeFromString(BusMap.serializer(), storage.bundled(BUS_MAP_FILE))
+                    map.feedGeoJson(busMapJson.decodeFromString(BusMapFeed.serializer(), storage.bundled(BUS_MAP_FEED_FILE)))
+                }
+            }.getOrNull()
+            if (geoJson == null) feedLoading = false
+            feed.value = geoJson
+        }
     }
 
     fun pickStreets(shown: Boolean) {
@@ -282,6 +306,7 @@ class MapViewModel @Inject constructor(
 
     private companion object {
         const val BUS_MAP_FILE = "bus-map.json"
+        const val BUS_MAP_FEED_FILE = "bus-map-feed.json"
         val busMapJson = Json { ignoreUnknownKeys = true }
     }
 }

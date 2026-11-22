@@ -70,6 +70,8 @@ val bundleMapData = tasks.register<BundleMapData>("bundleMapData") {
         webApp.file("app/data/map-corridors.json"),
         // Peta Bus: every TransJakarta line on its streets, for the streets layer.
         webApp.file("app/data/bus-map.json"),
+        // Its lines as the GTFS feed has them, for the map's debug panel.
+        webApp.file("app/data/bus-map-feed.json"),
     )
 }
 

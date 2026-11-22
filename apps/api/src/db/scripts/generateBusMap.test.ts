@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { LngLat } from '../../utils/polyline'
-import { dedupePatterns, lengthM, parseRailCoords, sampleAlong } from './generateBusMap'
+import { decodePolyline, type LngLat } from '../../utils/polyline'
+import { dedupePatterns, feedShapes, lengthM, parseRailCoords, sampleAlong } from './generateBusMap'
 
 /*
  * Synthetic streets near Monas. Metres to degrees at -6.2: one degree of
@@ -76,5 +76,16 @@ describe('parseRailCoords', () => {
       ''
     ].join('\n')
     expect(parseRailCoords(csv)).toEqual([['KCI-MRI', 106.8502, -6.2099]])
+  })
+})
+
+describe('feedShapes', () => {
+  it('keeps each shape the trips use once, whole, in the order first met', () => {
+    const a = east(0, 500)
+    const b = east(0, 300, 200)
+    const shapes = new Map<string, LngLat[]>([['a', a], ['b', b], ['dot', [a[0]!]]])
+    const out = feedShapes(['b', 'a', 'b', 'missing', 'dot', 'a'], shapes)
+    expect(out.map(s => decodePolyline(s).length)).toEqual([b.length, a.length])
+    expect(decodePolyline(out[1]!)[0]![0]).toBeCloseTo(a[0]![0], 5)
   })
 })

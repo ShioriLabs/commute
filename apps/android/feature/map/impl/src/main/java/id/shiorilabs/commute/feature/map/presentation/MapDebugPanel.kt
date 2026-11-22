@@ -29,13 +29,12 @@ import id.shiorilabs.commute.feature.map.R
 
 /**
  * "Debug Peta", Experimental "Panel Debug Peta": tools for checking Peta Bus on the streets layer,
- * one item under another. First, the route lines refined (bundled and laid on the roads, as the map
- * draws them) or raw, as the GTFS feed draws them.
+ * one item under another. First, how the route lines are drawn: [StreetsLines].
  */
 @Composable
 internal fun MapDebugPanel(
-    raw: Boolean,
-    onRaw: (Boolean) -> Unit,
+    lines: StreetsLines,
+    onLines: (StreetsLines) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val title = stringResource(R.string.map_debug_title)
@@ -51,11 +50,12 @@ internal fun MapDebugPanel(
                 Text(text = stringResource(R.string.map_debug_lines), style = MaterialTheme.typography.labelLarge)
                 Choice(
                     options = listOf(
-                        stringResource(R.string.map_debug_lines_refined) to false,
-                        stringResource(R.string.map_debug_lines_raw) to true,
+                        stringResource(R.string.map_debug_lines_raw) to StreetsLines.RAW,
+                        stringResource(R.string.map_debug_lines_processed) to StreetsLines.PROCESSED,
+                        stringResource(R.string.map_debug_lines_adjusted) to StreetsLines.ADJUSTED,
                     ),
-                    picked = raw,
-                    onPick = onRaw,
+                    picked = lines,
+                    onPick = onLines,
                 )
             }
         }

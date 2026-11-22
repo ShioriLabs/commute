@@ -14,4 +14,5 @@ object WebMapData {
     val lines: MapLines by lazy { json.decodeFromString(MapLines.serializer(), read("map-lines.json")) }
     val points: MapPoints by lazy { json.decodeFromString(MapPoints.serializer(), read("points.json")) }
     val busMap: BusMap by lazy { json.decodeFromString(BusMap.serializer(), read("bus-map.json")) }
+    val busMapFeed: BusMapFeed by lazy { json.decodeFromString(BusMapFeed.serializer(), read("bus-map-feed.json")) }
 }

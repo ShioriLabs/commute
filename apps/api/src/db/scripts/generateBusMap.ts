@@ -69,6 +69,26 @@ const FEED_DIR = `${__dirname}/file_gtfs`
 const COORDS_CSV = `${__dirname}/stations_lat_lng.csv`
 const OUTPUT_PATH = `${__dirname}/../../../../web/app/data/bus-map.json`
 
+/**
+ * Every line's shapes as the feed has them, each distinct one whole and untouched, for the Android
+ * map's debug panel (Raw). Beside Peta Bus, which the web doesn't read it with; written by a full
+ * run only, `--rebundle` having no feed.
+ */
+const FEED_OUTPUT_PATH = `${__dirname}/../../../../web/app/data/bus-map-feed.json`
+
+/** [FEED_OUTPUT_PATH]'s shape: each line's code and its feed shapes, encoded. */
+export interface BusMapFeed {
+  lines: { code: string, shapes: string[] }[]
+}
+
+/** Each of [shapeIds]' shapes once, in the order first met, encoded whole: the feed's own geometry. */
+export function feedShapes(shapeIds: readonly string[], shapes: ReadonlyMap<string, LngLat[]>): string[] {
+  return [...new Set(shapeIds)].flatMap((id) => {
+    const points = shapes.get(id)
+    return points && points.length >= 2 ? [encodePolyline(points)] : []
+  })
+}
+
 const SCOPE: Record<string, BusMapLineKind> = {
   'BRT': 'BRT',
   'Angkutan Umum Integrasi': 'AUI'
@@ -350,6 +370,7 @@ async function main(): Promise<void> {
   }
 
   const lines: BusMapLine[] = []
+  const feed: BusMapFeed = { lines: [] }
   const haltes: BusMap['haltes'] = {}
   const noShape: string[] = []
   let patternCount = 0
@@ -381,6 +402,7 @@ async function main(): Promise<void> {
       }
     }
 
+    feed.lines.push({ code: route.route_short_name!, shapes: feedShapes(trips.map(t => t.shapeId), shapes) })
     lines.push({
       code: route.route_short_name!,
       name: route.route_long_name!.trim(),
@@ -403,6 +425,8 @@ async function main(): Promise<void> {
   const stopMarks = marksFor(edges, onRoads.lines, sortedHaltes)
   const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, stopMarks, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
+  feed.lines.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }))
+  fs.writeFileSync(FEED_OUTPUT_PATH, JSON.stringify(feed) + '\n')
 
   const brt = lines.filter(l => l.kind === 'BRT').length
   console.log(`Wrote ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB`)

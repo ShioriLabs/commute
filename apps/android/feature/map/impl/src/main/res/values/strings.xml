@@ -37,6 +37,7 @@
     <string name="map_debug_open">Panel debug peta</string>
     <string name="map_debug_title">Debug Peta</string>
     <string name="map_debug_lines">Garis rute</string>
-    <string name="map_debug_lines_refined">Olahan</string>
-    <string name="map_debug_lines_raw">GTFS mentah</string>
+    <string name="map_debug_lines_raw">Raw</string>
+    <string name="map_debug_lines_processed">Processed</string>
+    <string name="map_debug_lines_adjusted">Adjusted</string>
 </resources>

@@ -431,11 +431,16 @@ private fun MapWithSheet(
     }
     // Experimental "Panel Debug Peta": a button under the layers one on the streets, opening its panel.
     val debugEnabled by viewModel.debugEnabled.collectAsStateWithLifecycle()
-    val streetsRaw by viewModel.streetsRaw.collectAsStateWithLifecycle()
+    val streetsLines by viewModel.streetsLines.collectAsStateWithLifecycle()
+    val feedLines by viewModel.feedLines.collectAsStateWithLifecycle()
     val debugOffered = streets && debugEnabled
     var debugOpen by remember { mutableStateOf(false) }
     LaunchedEffect(selection, debugOffered) {
         if (selection != null || !debugOffered) debugOpen = false
+    }
+    // Raw left picked earlier in the run: its lines read again for this map.
+    LaunchedEffect(debugOffered, streetsLines) {
+        if (debugOffered && streetsLines == StreetsLines.RAW) viewModel.loadFeed()
     }
 
     // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
@@ -605,7 +610,8 @@ private fun MapWithSheet(
                     onUserMove = { controller.onUserMove() },
                     onLineTap = openStreetsLine,
                     isolated = isolatedLine,
-                    raw = debugOffered && streetsRaw,
+                    lines = if (debugOffered) streetsLines else StreetsLines.ADJUSTED,
+                    feed = feedLines,
                 )
                 val pill = streetsPill?.let { busMap?.lines?.get(it) }
                 if (pill != null && selection == null) {
@@ -929,10 +935,10 @@ private fun MapWithSheet(
                 .padding(top = topInset + if (home == null) DEBUG_CARD_TOP else DEBUG_CARD_TOP_HOME, end = 16.dp),
         ) {
             MapDebugPanel(
-                raw = streetsRaw,
-                onRaw = { raw ->
+                lines = streetsLines,
+                onLines = { lines ->
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                    viewModel.showRaw(raw)
+                    viewModel.showLines(lines)
                 },
             )
         }
@@ -955,7 +961,8 @@ private fun StreetsLayer(
     onUserMove: () -> Unit,
     onLineTap: (List<String>) -> Unit,
     isolated: String?,
-    raw: Boolean,
+    lines: StreetsLines,
+    feed: String?,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -976,7 +983,8 @@ private fun StreetsLayer(
                 onUserMove = onUserMove,
                 onLineTap = onLineTap,
                 isolated = isolated,
-                raw = raw,
+                lines = lines,
+                feed = feed,
                 modifier = Modifier.fillMaxSize(),
             )
         }

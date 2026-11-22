@@ -34,6 +34,21 @@ data class BusMap(
     val rail: List<JsonArray>,
 )
 
+/**
+ * Every line's shapes as the GTFS feed has them, each distinct one whole and untouched: the web's
+ * `app/data/bus-map-feed.json`, for the map's debug panel (Raw). Written beside Peta Bus by the
+ * same generator run.
+ */
+@Serializable
+data class BusMapFeed(val lines: List<BusMapFeedLine>)
+
+@Serializable
+data class BusMapFeedLine(
+    val code: String,
+    /** Encoded polylines (Google, precision 5), a feed shape apiece. */
+    val shapes: List<String>,
+)
+
 @Serializable
 data class BusMapLine(
     val code: String,
@@ -174,7 +189,8 @@ fun stopsInView(
  * The streets layer's sources, as GeoJSON FeatureCollection text MapLibre reads as is: [lines] the
  * bundled network (each street once, its lines side by side), [routes] every line on its own street
  * geometry (street zoom, and a line alone), [haltes] and [rail] the dots, [marks] each halte on its
- * bundle, and [raw] every line as the feed draws it, for the map's debug panel.
+ * bundle, and [processed] every line's [BusMapLine.shapes], before they are laid on the roads and
+ * bundled, for the map's debug panel.
  */
 data class BusMapGeoJson(
     val lines: String,
@@ -182,7 +198,7 @@ data class BusMapGeoJson(
     val haltes: String,
     val rail: String,
     val marks: String = "",
-    val raw: String = "",
+    val processed: String = "",
 )
 
 /** GeoJSON properties the streets layer's style expressions and taps read. */
@@ -304,18 +320,28 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
     return BusMapGeoJson(
         lines = collection(lineFeatures).toString(),
         // Every line on its own geometry, one LineString per piece: laid on the roads, and as the feed has it.
-        routes = collection(pieceFeatures { it.drawnShapes }).toString(),
+        routes = collection(pieceFeatures(lines.map { it to it.drawnShapes })).toString(),
         marks = collection(markFeatures).toString(),
         haltes = collection(halteFeatures).toString(),
         rail = collection(railFeatures).toString(),
-        raw = collection(pieceFeatures { it.shapes }).toString(),
+        processed = collection(pieceFeatures(lines.map { it to it.shapes })).toString(),
     )
 }
 
-/** Each trunk line's [pieces], a LineString apiece carrying its code, kind and colour. */
-private fun BusMap.pieceFeatures(pieces: (BusMapLine) -> List<String>): JsonArray = buildJsonArray {
-    for (line in lines.filter { isTrunk(it.code) }) {
-        for (shape in pieces(line)) {
+/**
+ * [feed]'s shapes as GeoJSON for the streets layer: each trunk line's, a LineString apiece in the
+ * line's colour, as [BusMapGeoJson.processed] is. A line [lines] doesn't know is left out.
+ */
+fun BusMap.feedGeoJson(feed: BusMapFeed): String {
+    val byCode = lines.associateBy { it.code }
+    return collection(pieceFeatures(feed.lines.mapNotNull { fed -> byCode[fed.code]?.let { it to fed.shapes } })).toString()
+}
+
+/** Each trunk line's pieces, a LineString apiece carrying its code, kind and colour. */
+private fun pieceFeatures(pieces: List<Pair<BusMapLine, List<String>>>): JsonArray = buildJsonArray {
+    for ((line, shapes) in pieces) {
+        if (!isTrunk(line.code)) continue
+        for (shape in shapes) {
             val points = decodePolyline(shape)
             if (points.size < 2) continue
             add(
