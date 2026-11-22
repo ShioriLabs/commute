@@ -41,6 +41,20 @@ describe('snapToRoads', () => {
     for (const p of snapToRoads(through, roads, { stops: [at(0, 0)] })) expect(north(p)).toBeCloseTo(23, 0)
   })
 
+  it('takes a slip road its street ends partway along, onto the road it ends partway along', () => {
+    // 6 at Flyover Kuningan: Purworejo comes south and ends partway along its one-way slip road, which
+    // runs up from the corner (-5, 0) and back down onto Latuharhari, ending partway along that, 20 m
+    // on from the corner.
+    const roads = new Roads([
+      road([[0, 200], [0, 30]]),
+      road([[-5, 0], [-3, 15], [0, 30], [8, 15], [15, 0]], { oneway: true }),
+      road([[-5, 0], [200, 0]], { oneway: true })
+    ])
+    const laid = snapToRoads([at(0, 200), at(0, 30), at(15, 0), at(200, 0)], roads)
+    expect(laid.some(p => east(p) < -2)).toBe(false)
+    expect(laid.some(p => Math.abs(east(p) - 8) < 3 && Math.abs(north(p) - 15) < 3)).toBe(true)
+  })
+
   it('lays a loose line onto its road', () => {
     const roads = new Roads([road([[0, 0], [0, 1000]])])
     // The feed's points wander 8-12 m off the road.

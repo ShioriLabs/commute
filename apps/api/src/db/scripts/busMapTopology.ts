@@ -527,7 +527,25 @@ export function alignToTopology(
             if (picked) cursor = picked
             return picked?.path ?? null
           }
-          let piece = ownWay()
+          // Out of a terminus, the way a trip starting there goes: one passing it on the way out isn't
+          // there yet (13E from Flyover Kuningan, round by Cokroaminoto before it comes back past on the
+          // flyover, 33 m off).
+          const outOf = (): [number, number][] | null => {
+            if (i !== 1 || k !== 1) return null
+            const between = placed.filter((_, j) => j !== i - 1 && j !== i).map(code => toXY([haltes[code]![1], haltes[code]![2]]))
+            const limit = Math.hypot(b[0] - a[0], b[1] - a[1]) * OWN_REACH + 2 * FAR_M
+            let best: [number, number][] | null = null
+            for (const t of trips) {
+              if (Math.hypot(t.xy[0]![0] - a[0], t.xy[0]![1] - a[1]) > NEAR_M) continue
+              const to = passes(t, b, NEAR_M).find(m => m > NEAR_M)
+              if (to === undefined || to > limit) continue
+              if ([...dropped, ...between].some(p => passes(t, p, NEAR_M).some(m => m > NEAR_M && m < to - NEAR_M))) continue
+              if (!best || to < lengthOf(best)) best = slice(t, 0, to)
+            }
+            return best
+          }
+          let piece = elsewhere(outOf())
+            ?? ownWay()
             // Its own long way round, calling at no halte the posters dropped: a loop to turn, as 6's
             // from Flyover Kuningan by Latuharhari back down Rasuna Said to Gembira. A reroute (1 via
             // Petojo, 6 via Halimun) calls at haltes its line no longer serves, and isn't taken.

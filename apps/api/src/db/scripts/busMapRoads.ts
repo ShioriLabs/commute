@@ -539,10 +539,14 @@ export function snapToRoads(
       push(last.point)
       push(m.point)
     } else {
-      // Off one road and onto another (or back from off the roads): by their nearest points.
-      if (last) push(vertexAt(last))
+      // Off one road and onto another (or back from off the roads): by their nearest points. Where the
+      // last ends on this one's way between its points (6's slip road off Purworejo, partway along
+      // Latuharhari, 22 m on from its corner), at that point: its nearest would be back at the corner.
+      const exit = last ? vertexAt(last) : null
+      if (exit) push(exit)
       for (const p of unmatched) push(p)
-      push(vertexAt(m))
+      const onto = exit && unmatched.length === 0 ? nearestOn(roads.roads[m.road]!.xy, exit) : null
+      push(onto && Math.hypot(onto[0] - exit![0], onto[1] - exit![1]) <= JOIN_M ? onto : vertexAt(m))
     }
     unmatched = []
     last = m
@@ -596,6 +600,27 @@ function routeBetweenSure(
     for (let j = before.to + 1; j < run.from; j++) matches[j] = null
   })
   return out
+}
+
+/** The point of [path] nearest [p]. */
+function nearestOn(path: readonly [number, number][], [x, y]: [number, number]): [number, number] {
+  let best: [number, number] = path[0]!
+  let bestD = Infinity
+  for (let i = 1; i < path.length; i++) {
+    const [ax, ay] = path[i - 1]!
+    const [bx, by] = path[i]!
+    const dx = bx - ax
+    const dy = by - ay
+    const l2 = dx * dx + dy * dy || 1
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2))
+    const q: [number, number] = [ax + t * dx, ay + t * dy]
+    const d = Math.hypot(q[0] - x, q[1] - y)
+    if (d < bestD) {
+      bestD = d
+      best = q
+    }
+  }
+  return best
 }
 
 /** How far [p] is from [path]. */
@@ -856,8 +881,16 @@ export class RoadGraph {
   }
 }
 
-/** Whether [road] has an end on [other]'s way, within JOIN_M: one leads on from the other there. */
+/**
+ * Whether one of [road] and [other] has an end on the other's way, within JOIN_M: one leads on from
+ * the other there. Either way round: Purworejo ends partway along its slip road onto Latuharhari.
+ */
 function joins(road: Road, other: Road): boolean {
+  return endsOn(road, other) || endsOn(other, road)
+}
+
+/** Whether [road] has an end on [other]'s way, within JOIN_M. */
+function endsOn(road: Road, other: Road): boolean {
   return [road.xy[0]!, road.xy[road.xy.length - 1]!].some(([x, y]) => other.xy.some((a, i) => {
     const b = other.xy[i + 1]
     if (!b) return Math.hypot(x - a[0], y - a[1]) <= JOIN_M

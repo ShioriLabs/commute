@@ -174,6 +174,20 @@ describe('alignToTopology', () => {
     expect(passesBy([outbound!], ...at(-100, 40))).toBe(true)
   })
 
+  it('leaves a terminus the way its trips start out, not along a road passing it', () => {
+    // 13E at Flyover Kuningan (K): its trips start at the halte and go round by Cokroaminoto (north)
+    // before coming back south over the flyover 33 m off it, on to S.
+    const kHaltes = { K: halte('K', 0, 0), S: halte('S', 33, -800) }
+    const flyover = run([33, 600], [33, -800])
+    const out = run([0, 0], [0, 300], [200, 300], [200, 500], [33, 500], [33, -800])
+    const aligned = alignToTopology(
+      [{ code: '13E', pieces: [flyover], feed: [out] }],
+      kHaltes,
+      [{ code: '13E', runs: [['K', 'S']] }]
+    )
+    expect(passesBy(aligned.pieces.get('13E')!, ...at(200, 400))).toBe(true)
+  })
+
   it('drives from where one run ends on to where the next starts, near it', () => {
     // 14 at Senen: in to T, round by S 300 m on to turn, and back out past T.
     const sHaltes = { J: halte('J', 0, -1000), T: halte('T', 0, 0), S: halte('S', -300, 0) }
