@@ -7,6 +7,7 @@ import {
   dropRetraces,
   easeCorners,
   filletCorners,
+  cutLoops,
   simplifyBends,
   smoothPath,
   isDrawn,
@@ -83,6 +84,11 @@ export interface BusMapFeed {
   lines: { code: string, shapes: string[] }[]
 }
 
+/** Each line's feed shapes, decoded, by code: the trips a koridor's redraw may take a leg from. */
+export function tripsOf(feed: BusMapFeed): Map<string, LngLat[][]> {
+  return new Map(feed.lines.map(l => [l.code, l.shapes.map(s => decodePolyline(s))]))
+}
+
 /** Each of [shapeIds]' shapes once, in the order first met, encoded whole: the feed's own geometry. */
 export function feedShapes(shapeIds: readonly string[], shapes: ReadonlyMap<string, LngLat[]>): string[] {
   return [...new Set(shapeIds)].flatMap((id) => {
@@ -129,6 +135,9 @@ const DRAWN_BEND_DEG = 2
  * by up to 12 degrees. [BusMapLine.drawn] says so to clients.
  */
 export const DRAWN_PRECISION = 6
+
+/** A loop a laid line ties in itself this short, along it, is cut at the crossing (cutLoops). */
+const DRAWN_LOOP_M = 40
 
 /** An edge laid onto the roads longer than this times its own length, and this much more, went onto a road beside it. */
 const LAID_STRETCH = 1.5
@@ -448,7 +457,7 @@ async function main(): Promise<void> {
   }
 
   lines.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }))
-  const normal = alongTopology(lines, haltes)
+  const normal = alongTopology(lines, haltes, tripsOf(feed))
   const sortedHaltes = Object.fromEntries(Object.entries(normal.haltes).sort(([a], [b]) => a.localeCompare(b)))
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
@@ -580,7 +589,7 @@ async function alongRoads(lines: readonly BusMapLine[], haltes: BusMap['haltes']
       const stops = l.stops.flatMap(code => (haltes[code] ? [[haltes[code][1], haltes[code][2]] as LngLat] : []))
       const lay = (s: string): string => {
         const laid = dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops }), stops)
-        const smooth = smoothPath(laid, DRAWN_SMOOTH_M)
+        const smooth = smoothPath(cutLoops(laid, DRAWN_LOOP_M), DRAWN_SMOOTH_M)
         return encodePolyline(simplifyBends(smooth, DRAWN_SIMPLIFY_M, DRAWN_BEND_M, DRAWN_BEND_DEG), DRAWN_PRECISION)
       }
       return { ...l, drawn: l.shapes.map(lay) }
@@ -605,7 +614,7 @@ function tjTopology(): TopologyLine[] {
  * search would take isn't the bus's. Keyed by koridor, then `from->to` halte
  * codes. Checked on the ground; add one only when you know the street. None are
  * needed now: 6 from Galunggung onto Rasuna Said by Jl. Gembira comes from its
- * own shapes, run the other way.
+ * feed trip that way (alongTopology's trips).
  */
 const VIA: Record<string, Record<string, LngLat[]>> = {}
 
@@ -622,6 +631,7 @@ const VIA: Record<string, Record<string, LngLat[]>> = {}
 export function alongTopology(
   lines: readonly BusMapLine[],
   haltes: BusMap['haltes'],
+  trips: ReadonlyMap<string, LngLat[][]> = new Map(),
   topology: readonly TopologyLine[] = tjTopology()
 ): { lines: BusMapLine[], haltes: BusMap['haltes'] } {
   // The feed's stops, before any redraw: the ones a koridor's topology drops mark its reroutes.
@@ -629,7 +639,7 @@ export function alongTopology(
   let out: BusMapLine[] = [...lines]
   for (let pass = 0; pass < ALIGN_PASSES; pass++) {
     const aligned = alignToTopology(
-      out.map(l => ({ code: l.code, pieces: l.shapes.map(s => decodePolyline(s)), stops: feedStops.get(l.code) })),
+      out.map(l => ({ code: l.code, pieces: l.shapes.map(s => decodePolyline(s)), stops: feedStops.get(l.code), feed: trips.get(l.code) })),
       haltes,
       topology
     )
@@ -668,7 +678,8 @@ export function alongTopology(
  */
 async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
-  const normal = alongTopology(map.lines, map.haltes)
+  const feed = fs.existsSync(FEED_OUTPUT_PATH) ? JSON.parse(fs.readFileSync(FEED_OUTPUT_PATH, 'utf-8')) as BusMapFeed : { lines: [] }
+  const normal = alongTopology(map.lines, map.haltes, tripsOf(feed))
   const onRoads = await alongRoads(normal.lines, normal.haltes)
   const edges = await bundleShapes(onRoads.lines, onRoads.roads, normal.haltes)
   const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)

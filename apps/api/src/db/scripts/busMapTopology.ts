@@ -55,6 +55,11 @@ export interface AlignInput {
   pieces: LngLat[][]
   /** The haltes the feed has the line call at: the ones its topology drops mark a reroute. */
   stops?: string[]
+  /**
+   * Its trips' shapes whole, as the feed has them, each the way it runs: where [pieces] (deduped,
+   * so a street once whichever way) only run a leg backwards, the trip that runs it.
+   */
+  feed?: LngLat[][]
 }
 
 export interface Aligned {
@@ -81,6 +86,13 @@ function track(code: string, piece: readonly LngLat[]): Track {
   const at = [0]
   for (let i = 1; i < xy.length; i++) at.push(at[i - 1]! + Math.hypot(xy[i]![0] - xy[i - 1]![0], xy[i]![1] - xy[i - 1]![1]))
   return { code, xy, at }
+}
+
+/** How long [path] is, in metres. */
+function lengthOf(path: readonly [number, number][]): number {
+  let m = 0
+  for (let i = 1; i < path.length; i++) m += Math.hypot(path[i]![0] - path[i - 1]![0], path[i]![1] - path[i - 1]![1])
+  return m
 }
 
 /** Where along [t] it passes within NEAR_M of [p]: the nearest point of each pass. */
@@ -398,6 +410,7 @@ export function alignToTopology(
       continue
     }
     const own = tracksOf.get(line.code) ?? []
+    const trips = (line.feed ?? []).filter(p => p.length >= 2).map(p => track(line.code, p))
     const others = everyTrack.filter(t => t.code !== line.code)
     // The haltes the feed has it call at that its topology doesn't: where a reroute went.
     const onTopology = new Set(topo.runs.flat())
@@ -423,14 +436,30 @@ export function alignToTopology(
         for (let k = 1; k < stops.length; k++) {
           const a = stops[k - 1]!
           const b = stops[k]!
-          const ownWay = (options: Parameters<typeof stretch>[3] = {}): [number, number][] | null => {
-            const picked = stretch(own, a, b, { ...options, after: cursor })
-            if (picked) cursor = picked
-            return picked?.path ?? null
+          // One of its trips, the way it runs, from [a] to [b] calling at no halte the posters dropped
+          // nor any other of the run's: the bus's own way, a loop to turn included (4 round by Manggarai).
+          const trip = (): [number, number][] | null => {
+            const between = placed.filter((_, j) => j !== i - 1 && j !== i).map(code => toXY([haltes[code]![1], haltes[code]![2]]))
+            const found = stretch(trips, a, b, { detours: true, avoid: [...dropped, ...between] })
+            if (!found?.forward || lengthOf(found.path) > Math.hypot(b[0] - a[0], b[1] - a[1]) * OWN_REACH + 2 * FAR_M) return null
+            return found.path
           }
           const elsewhere = (way: [number, number][] | null | undefined): [number, number][] | null => {
             if (way) cursor = null
             return way ?? null
+          }
+          const ownWay = (options: Parameters<typeof stretch>[3] = {}): [number, number][] | null => {
+            const picked = stretch(own, a, b, { ...options, after: cursor })
+            // Run back up a piece: the street kept the other way by the pattern dedupe, which folds a trip
+            // into the opposite direction of the same streets. A trip running it has the bus's own turns:
+            // 6 from Galunggung down Gembira and its ramp onto Rasuna Said, not back over the bridge to
+            // the far carriageway; 4 to Pasar Rumput round its loop by Manggarai.
+            if (picked && !picked.forward) {
+              const way = trip()
+              if (way) return elsewhere(way)
+            }
+            if (picked) cursor = picked
+            return picked?.path ?? null
           }
           let piece = ownWay()
             // Its own long way round, calling at no halte the posters dropped: a loop to turn, as 6's
@@ -440,8 +469,10 @@ export function alignToTopology(
             // The same across its own pieces, each the way it runs: a loop the feed split from the
             // trunk it rejoins (6 back down Rasuna Said and into Gembira).
             ?? elsewhere((ownGraph ??= new StreetGraph(own, { directed: true })).route(a, b, { near: NEAR_M, avoid: dropped }))
-            // Its own pieces either way: a trip the pattern dedupe folded into the opposite direction of
-            // the same street (6 from Galunggung by Gembira and Rasuna Said, drawn only the other way).
+            // A trip the pattern dedupe folded into the opposite direction of the same streets, whole in
+            // the feed: 6 from Galunggung down Gembira and its ramp onto Rasuna Said.
+            ?? elsewhere(trip())
+            // Its own pieces either way: a trip folded into the other direction that no trip runs whole.
             ?? elsewhere((ownEitherWay ??= new StreetGraph(own, { own: true })).route(a, b, { near: NEAR_M, avoid: dropped }))
             ?? elsewhere(stretch(others, a, b)?.path)
             // No street runs there plainly: a halte set back from the road (FAR_M), else the line's own

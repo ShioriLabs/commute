@@ -13,6 +13,7 @@ import {
   placeStops,
   roundCorners,
   roundJunctions,
+  cutLoops,
   simplifyBends,
   smoothPath,
   strokeCount,
@@ -559,5 +560,25 @@ describe('simplifyBends', () => {
     const flutter: LngLat[] = []
     for (let y = 0; y <= 200; y += 2) flutter.push(at(0.3 * Math.sin(y / 15), y))
     expect(simplifyBends(flutter, 0.6, 0.1, 4)).toHaveLength(2)
+  })
+})
+
+describe('cutLoops', () => {
+  const metres = (p: LngLat): [number, number] => [(p[0] - LNG) * M_LNG, (p[1] - LAT) * M_LAT]
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+
+  it('cuts the knot a line ties handing over at a vertex round the corner', () => {
+    // 6 up Gembira to where it ends, over to the busway's first vertex 7 m round, and back west across its way.
+    const knotted = [at(0, 0), at(0, 100), at(5, 96), at(-100, 120)]
+    const cut = cutLoops(knotted, 40).map(metres)
+    expect(cut).toHaveLength(3)
+    expect(cut[1]![0]).toBeCloseTo(0, 6)
+    expect(cut[1]![1]).toBeGreaterThan(95)
+    expect(cut[1]![1]).toBeLessThan(100)
+  })
+
+  it('keeps a loop a bus turns round', () => {
+    const turning = [at(0, 0), at(0, 100), at(100, 100), at(100, 200), at(-50, 50), at(-100, 50)]
+    expect(cutLoops(turning, 40)).toHaveLength(turning.length)
   })
 })

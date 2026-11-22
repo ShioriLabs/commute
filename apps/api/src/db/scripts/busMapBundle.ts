@@ -1381,6 +1381,55 @@ const roundedNeed = (turn: number, radius: number): number =>
 const share = (need: number, other: number, length: number): number =>
   need + other <= length ? need : (length * need) / (need + other)
 
+/**
+ * [path] with each loop it ties in itself, crossing its own way again within
+ * [maxM] along it, cut off at the crossing. Laid onto roads the tiles don't join,
+ * a line handed over at the next road's vertex round the corner: 6 up Gembira past
+ * the end of the busway along Galunggung, and back across its own way onto it.
+ * Too short for a bus to drive; a turning loop is hundreds of metres round.
+ */
+export function cutLoops(path: readonly LngLat[], maxM: number): LngLat[] {
+  const xy = toXYs(path)
+  const out: XY[] = []
+  for (let i = 0; i < xy.length; i++) {
+    out.push(xy[i]!)
+    // The last leg drawn, against the legs before it within maxM: crossing one, the loop between goes.
+    for (let changed = true; changed && out.length >= 4;) {
+      changed = false
+      const c = out[out.length - 2]!
+      const d = out[out.length - 1]!
+      // Round the loop from [b] to [c], before the bits of the two crossing legs it takes.
+      let between = 0
+      for (let k = out.length - 3; k >= 1 && between <= maxM; k--) {
+        const a = out[k - 1]!
+        const b = out[k]!
+        between += Math.hypot(out[k + 1]![0] - b[0], out[k + 1]![1] - b[1])
+        const hit = crossing(a, b, c, d)
+        if (hit && between + Math.hypot(b[0] - hit[0], b[1] - hit[1]) + Math.hypot(c[0] - hit[0], c[1] - hit[1]) <= maxM) {
+          out.splice(k, out.length - k, hit, d)
+          changed = true
+          break
+        }
+      }
+    }
+  }
+  return toLngLats(out)
+}
+
+/** Where segment [a]-[b] crosses [c]-[d], their ends apart; null where they don't. */
+function crossing(a: XY, b: XY, c: XY, d: XY): XY | null {
+  const rx = b[0] - a[0]
+  const ry = b[1] - a[1]
+  const sx = d[0] - c[0]
+  const sy = d[1] - c[1]
+  const den = rx * sy - ry * sx
+  if (Math.abs(den) < 1e-9) return null
+  const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den
+  const u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den
+  if (t <= 0 || t >= 1 || u <= 0 || u >= 1) return null
+  return [a[0] + t * rx, a[1] + t * ry]
+}
+
 /** smoothPath resamples a line this often, in metres, before smoothing it. */
 const SMOOTH_STEP_M = 2
 

@@ -123,6 +123,24 @@ describe('alignToTopology', () => {
     expect(passesBy(six, ...at(0, 1200))).toBe(false)
   })
 
+  it('takes a trip the dedupe folded into the other way from the feed, on its own streets', () => {
+    // 6 from Galunggung (G) to Setiabudi (S): its trip leaves Gembira (x 0) by the ramp (y 1300 ->
+    // 1100) onto Rasuna Said's own side (x 180). Deduped, only the other way is left: up Rasuna
+    // Said (x 120), over the bridge at y 1000 and up Gembira. Run backwards, that crossed back over
+    // the bridge.
+    const gHaltes = { S: halte('S', 150, 0), G: halte('G', 0, 1500) }
+    const up = run([120, 0], [120, 1000], [0, 1000], [0, 1500])
+    const down = run([0, 1500], [0, 1300], [180, 1100], [180, 0])
+    const aligned = alignToTopology(
+      [{ code: '6', pieces: [up], feed: [up, down] }],
+      gHaltes,
+      [{ code: '6', runs: [['S', 'G'], ['G', 'S']] }]
+    )
+    const [, southbound] = aligned.pieces.get('6')!
+    expect(passesBy([southbound!], ...at(180, 500))).toBe(true)
+    expect(passesBy([southbound!], ...at(60, 1000))).toBe(false)
+  })
+
   it('goes round a hairpin at a halte, even when the next leg starts on another piece', () => {
     // Koridor 2 at Gambir 2 (H): up one road, round at the halte, back down the road 40 m
     // beside it, where the feed's piece ends; another piece carries on east to E.
