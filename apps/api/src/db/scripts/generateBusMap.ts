@@ -21,7 +21,7 @@ import {
   type OrderReport,
   type StopMark
 } from './busMapBundle'
-import { loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
+import { koridorOf, loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
 
@@ -622,7 +622,7 @@ async function alongRoads(
       // Out-and-back excursions taken out, as street zoom draws these (dropRetraces): 9 north past Cawang.
       const stops = l.stops.flatMap(code => (haltes[code] ? [[haltes[code][1], haltes[code][2]] as LngLat] : []))
       const lay = (s: string): string => {
-        const laid = dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops, platforms: platforms.get(l.code) }), stops)
+        const laid = dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops, platforms: platforms.get(l.code), koridor: koridorOf(l.code) }), stops)
         const smooth = smoothPath(cutLoops(laid, DRAWN_LOOP_M), DRAWN_SMOOTH_M)
         return encodePolyline(simplifyBends(smooth, DRAWN_SIMPLIFY_M, DRAWN_BEND_M, DRAWN_BEND_DEG), DRAWN_PRECISION)
       }

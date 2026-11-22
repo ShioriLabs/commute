@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LngLat } from '../../utils/polyline'
-import { Roads, snapToRoads } from './busMapRoads'
+import { koridorOf, koridorsOf, Roads, snapToRoads } from './busMapRoads'
 
 /* Metres to the generator's flat plane and back, as busMapRoads.ts projects. */
 const KX = Math.cos((-6.2 * Math.PI) / 180) * 111_320
@@ -53,6 +53,18 @@ describe('snapToRoads', () => {
     const laid = snapToRoads([at(0, 200), at(0, 30), at(15, 0), at(200, 0)], roads)
     expect(laid.some(p => east(p) < -2)).toBe(false)
     expect(laid.some(p => Math.abs(east(p) - 8) < 3 && Math.abs(north(p) - 15) < 3)).toBe(true)
+  })
+
+  it('takes a koridor up onto its own elevated busway, not another’s', () => {
+    // 13 past Velbak: the feed runs nearer the street than its elevated busway, 10 m north.
+    const roads = new Roads([
+      road([[0, 0], [1000, 0]], { oneway: true }),
+      { ...road([[0, 10], [1000, 10]], { busway: true, bridge: true }), koridors: ['13'] }
+    ])
+    const thirteen = snapToRoads([at(0, 1), at(1000, 1)], roads, { brt: true, koridor: '13' })
+    for (const p of thirteen) expect(north(p)).toBeCloseTo(10, 0)
+    const one = snapToRoads([at(0, 1), at(1000, 1)], roads, { brt: true, koridor: '1' })
+    for (const p of one) expect(north(p)).toBeCloseTo(0, 0)
   })
 
   it('lays a loose line onto its road', () => {
@@ -194,5 +206,19 @@ describe('snapToRoads on a roundabout', () => {
     const roads = new Roads([road([[0, 0], [0, 500]], { oneway: true }), road([[0, 500], [0, 1000]], { oneway: true })])
     const snapped = snapToRoads([at(0, 0), at(0, 470), at(150, 500), at(0, 530), at(0, 1000)], roads)
     expect(Math.max(...snapped.map(east))).toBeGreaterThan(100)
+  })
+})
+
+describe('koridorsOf', () => {
+  it('reads the koridors a busway carries from its name', () => {
+    expect(koridorsOf('Transjakarta Busway Koridor 4, 6')).toEqual(['4', '6'])
+    expect(koridorsOf('Transjakarta Busway Koridor 13')).toEqual(['13'])
+    expect(koridorsOf('Jalan Sudirman')).toEqual([])
+  })
+
+  it('puts a line in its koridor family by its number', () => {
+    expect(koridorOf('13E')).toBe('13')
+    expect(koridorOf('L13E')).toBe('13')
+    expect(koridorOf('6A')).toBe('6')
   })
 })

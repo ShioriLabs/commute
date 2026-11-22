@@ -24,6 +24,9 @@ import { decodePolyline, type LngLat } from '../../utils/polyline'
  *   Latuharhari, the slip road on the middle of Latuharhari. Taken as unjoined, 6 turned at the corner.
  * - A halte's own coordinate lies between the lanes it has: Galunggung's platforms say 6 calls on the
  *   south lane, 4 on the north.
+ * - An elevated busway is a bridge, kept off by the road matcher (a flyover over a koridor's own lane),
+ *   but it is the 13 family's own way: westbound they came down to the street under it past Velbak.
+ *   Only a koridor's own, by the busway's name: 13's past Blok M runs over 1's lane at Palatehan.
  */
 
 const MAP = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../web/app/data/bus-map.json'), 'utf-8')) as {
@@ -171,5 +174,18 @@ describe('Peta Bus as shipped, on the streets round them', () => {
       const feed = FEED.lines.find(l => l.code === code)!.shapes.map(s => decodePolyline(s).map(xy))
       expect(distanceTo(drawn(code), pecenongan)).toBeLessThan(distanceTo(feed, pecenongan) - 4)
     }
+  })
+
+  it('keeps the 13 family up on their elevated busway westbound past Velbak', () => {
+    for (const code of ['13', '13E', 'L13E']) {
+      for (const piece of drawn(code)) expect(distanceTo([piece], halte('Velbak'))).toBeLessThan(8)
+      expect(Math.min(...drawn(code).map(p => distanceTo([p], halte('Velbak'))))).toBeLessThan(3)
+    }
+  })
+
+  it('keeps 1 on its own lane at Palatehan and the 13 family on theirs above it', () => {
+    const lane = offset(halte('Jln. Palatehan'), 0, 12.5)
+    expect(distanceTo(drawn('1'), lane)).toBeLessThan(3)
+    for (const code of ['13', '13E', 'L13E']) expect(distanceTo(drawn(code), lane)).toBeGreaterThan(5)
   })
 })

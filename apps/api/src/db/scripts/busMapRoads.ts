@@ -149,6 +149,19 @@ interface Road {
   bridge: boolean
   /** A toll road (OSM motorway): what parts a split road's two carriageways (Yos Sudarso at Walikota). */
   motorway?: boolean
+  /** A busway's koridors, as its name has them ("Transjakarta Busway Koridor 4, 6"). */
+  koridors?: string[]
+}
+
+/** The koridors a busway's [name] says it carries. */
+export function koridorsOf(name: string): string[] {
+  const listed = /Koridor\s+([\d,\s]+)/i.exec(name)
+  return listed ? listed[1]!.split(/[,\s]+/).filter(Boolean) : []
+}
+
+/** The koridor family a line belongs to, by its code's number: 13 for 13, 13E and L13E. */
+export function koridorOf(code: string): string | undefined {
+  return /(\d+)/.exec(code)?.[1]
 }
 
 /** A motorway runs alongside two points when within this of the way between them (SNAP_COS in busMapBundle). */
@@ -323,6 +336,7 @@ export async function loadRoads(pieces: readonly LngLat[][]): Promise<Roads> {
               xy: part.map(([px, py]) => toXY(tileLngLat(z, x, y, layer.extent, px, py))),
               oneway: f.properties.oneway === 'yes',
               busway: detail === 'busway',
+              ...(detail === 'busway' ? { koridors: koridorsOf(String(f.properties.name ?? '')) } : {}),
               bridge: f.properties.is_bridge === true,
               motorway: detail === 'motorway'
             })
@@ -372,7 +386,7 @@ function along(road: Road): number[] {
 export function snapToRoads(
   piece: readonly LngLat[],
   roads: Roads,
-  { brt = false, anyWay = false, stops = [], platforms = [] }: { brt?: boolean, anyWay?: boolean, stops?: readonly LngLat[], platforms?: readonly LngLat[] } = {}
+  { brt = false, anyWay = false, stops = [], platforms = [], koridor }: { brt?: boolean, anyWay?: boolean, stops?: readonly LngLat[], platforms?: readonly LngLat[], koridor?: string } = {}
 ): LngLat[] {
   if (piece.length < 2) return [...piece]
   const points = sample(piece.map(toXY))
@@ -429,7 +443,10 @@ export function snapToRoads(
       const score = d
         - (previous && previous.road === r ? SAME_ROAD_M : 0)
         - (brt && road.busway ? BUSWAY_M : 0)
-        + (road.bridge ? BRIDGE_M : 0)
+        // A busway on a bridge named for the line's own koridor is its elevated lane (13 above Ciledug
+        // and Tendean): its way, however near the street under it the feed runs. Another's (13's past
+        // Blok M, over 1's own lane) is still off it.
+        + (road.bridge && !(brt && koridor !== undefined && road.koridors?.includes(koridor)) ? BRIDGE_M : 0)
         + (road.motorway ? MOTORWAY_M : 0)
       candidates.push({ score, match: { road: r, at: along(road)[s]! + t * l, point: [qx, qy] } })
     }
