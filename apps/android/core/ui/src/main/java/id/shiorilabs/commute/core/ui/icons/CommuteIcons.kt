@@ -9,6 +9,7 @@ import com.adamglin.phosphoricons.bold.ArrowBendDownRight
 import com.adamglin.phosphoricons.bold.BellSimpleSlash
 import com.adamglin.phosphoricons.bold.BellSimpleRinging
 import com.adamglin.phosphoricons.bold.BellSimple
+import com.adamglin.phosphoricons.bold.Bug
 import com.adamglin.phosphoricons.bold.Alarm
 import com.adamglin.phosphoricons.bold.ArrowRight
 import com.adamglin.phosphoricons.bold.ArrowSquareOut
@@ -89,6 +90,9 @@ object CommuteIcons {
 
     /** The map's layer picker: the FDTJ artwork or the streets, as Google Maps' layers button. */
     val MapLayers: ImageVector = PhosphorIcons.Bold.Stack
+
+    /** The map's debug panel, Experimental "Panel Debug Peta". */
+    val MapDebug: ImageVector = PhosphorIcons.Bold.Bug
     val Fare: ImageVector = PhosphorIcons.Bold.Receipt
     val Close: ImageVector = PhosphorIcons.Bold.X
 

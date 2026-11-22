@@ -429,6 +429,14 @@ private fun MapWithSheet(
     LaunchedEffect(selection, layersOffered) {
         if (selection != null || !layersOffered) layersOpen = false
     }
+    // Experimental "Panel Debug Peta": a button under the layers one on the streets, opening its panel.
+    val debugEnabled by viewModel.debugEnabled.collectAsStateWithLifecycle()
+    val streetsRaw by viewModel.streetsRaw.collectAsStateWithLifecycle()
+    val debugOffered = streets && debugEnabled
+    var debugOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(selection, debugOffered) {
+        if (selection != null || !debugOffered) debugOpen = false
+    }
 
     // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
     // sheet does rather than once it has gone.
@@ -591,11 +599,13 @@ private fun MapWithSheet(
                     onTap = {
                         attributionOpen = false
                         layersOpen = false
+                        debugOpen = false
                         streetsPill = null
                     },
                     onUserMove = { controller.onUserMove() },
                     onLineTap = openStreetsLine,
                     isolated = isolatedLine,
+                    raw = debugOffered && streetsRaw,
                 )
                 val pill = streetsPill?.let { busMap?.lines?.get(it) }
                 if (pill != null && selection == null) {
@@ -631,12 +641,30 @@ private fun MapWithSheet(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                         attributionOpen = false
+                        debugOpen = false
                         layersOpen = !layersOpen
                     },
                     // Under the close, centred on it; at the top right on home, which has none.
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = topInset + if (home == null) LAYERS_BUTTON_TOP else LAYERS_BUTTON_TOP_HOME, end = 10.dp)
+                        .chromeEnter(2),
+                )
+            }
+            if (debugOffered) {
+                MapButton(
+                    icon = CommuteIcons.MapDebug,
+                    description = stringResource(R.string.map_debug_open),
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        attributionOpen = false
+                        layersOpen = false
+                        debugOpen = !debugOpen
+                    },
+                    // Under the layers button.
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = topInset + if (home == null) DEBUG_BUTTON_TOP else DEBUG_BUTTON_TOP_HOME, end = 10.dp)
                         .chromeEnter(2),
                 )
             }
@@ -890,6 +918,24 @@ private fun MapWithSheet(
                 },
             )
         }
+
+        // The debug panel, under its button, over the sheet.
+        AnimatedVisibility(
+            visible = debugOpen,
+            enter = fadeIn(tween(CHOOSER_FADE_MILLIS)) + scaleIn(tween(CHOOSER_FADE_MILLIS), initialScale = 0.92f, transformOrigin = TransformOrigin(1f, 0f)),
+            exit = fadeOut(tween(CHOOSER_FADE_MILLIS)),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = topInset + if (home == null) DEBUG_CARD_TOP else DEBUG_CARD_TOP_HOME, end = 16.dp),
+        ) {
+            MapDebugPanel(
+                raw = streetsRaw,
+                onRaw = { raw ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.showRaw(raw)
+                },
+            )
+        }
     }
 }
 
@@ -909,6 +955,7 @@ private fun StreetsLayer(
     onUserMove: () -> Unit,
     onLineTap: (List<String>) -> Unit,
     isolated: String?,
+    raw: Boolean,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -929,6 +976,7 @@ private fun StreetsLayer(
                 onUserMove = onUserMove,
                 onLineTap = onLineTap,
                 isolated = isolated,
+                raw = raw,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -1307,6 +1355,12 @@ private val LAYERS_CARD_TOP = 112.dp
 /** On home, with no close: the layers button where the close would be, its card under it. */
 private val LAYERS_BUTTON_TOP_HOME = 8.dp
 private val LAYERS_CARD_TOP_HOME = 60.dp
+
+/** The debug button under the layers button (40 dp tall, a 12 dp gap), and its panel under that. */
+private val DEBUG_BUTTON_TOP = LAYERS_BUTTON_TOP + 52.dp
+private val DEBUG_CARD_TOP = LAYERS_CARD_TOP + 52.dp
+private val DEBUG_BUTTON_TOP_HOME = LAYERS_BUTTON_TOP_HOME + 52.dp
+private val DEBUG_CARD_TOP_HOME = LAYERS_CARD_TOP_HOME + 52.dp
 
 /** A line picked on the streets: the pill naming it, under the title, and the margin it's framed with. */
 private val LINE_PILL_TOP = 60.dp

@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.map.presentation
 
 import android.graphics.Bitmap
 import id.shiorilabs.commute.feature.map.domain.Transform
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,6 +22,9 @@ class MapSession @Inject constructor() {
 
     /** Where the streets layer's camera was when it last left the screen. */
     var streetsCamera: StreetsCamera? = null
+
+    /** The debug panel's pick: the streets layer's lines as the feed draws them, not as refined. */
+    val streetsRaw = MutableStateFlow(false)
 }
 
 /** The streets layer's camera, in MapLibre's terms but free of its types. */

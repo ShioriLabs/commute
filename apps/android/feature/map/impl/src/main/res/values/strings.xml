@@ -34,4 +34,9 @@
     <string name="map_streets_attribution_title">Peta Jalan</string>
     <string name="map_streets_attribution_credit">© Kontributor OpenStreetMap · Protomaps</string>
     <string name="map_streets_line_close">Tampilkan semua rute</string>
+    <string name="map_debug_open">Panel debug peta</string>
+    <string name="map_debug_title">Debug Peta</string>
+    <string name="map_debug_lines">Garis rute</string>
+    <string name="map_debug_lines_refined">Olahan</string>
+    <string name="map_debug_lines_raw">GTFS mentah</string>
 </resources>

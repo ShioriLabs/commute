@@ -170,13 +170,20 @@ fun stopsInView(
         .toList()
 }
 
-/** The streets layer's three sources, as GeoJSON FeatureCollection text MapLibre reads as is. */
 /**
- * The streets layer's sources: [lines] the bundled network (each street once, its lines side by
- * side), [routes] every line on its own street geometry (street zoom, and a line alone), [haltes]
- * and [rail] the dots.
+ * The streets layer's sources, as GeoJSON FeatureCollection text MapLibre reads as is: [lines] the
+ * bundled network (each street once, its lines side by side), [routes] every line on its own street
+ * geometry (street zoom, and a line alone), [haltes] and [rail] the dots, [marks] each halte on its
+ * bundle, and [raw] every line as the feed draws it, for the map's debug panel.
  */
-data class BusMapGeoJson(val lines: String, val routes: String, val haltes: String, val rail: String, val marks: String = "")
+data class BusMapGeoJson(
+    val lines: String,
+    val routes: String,
+    val haltes: String,
+    val rail: String,
+    val marks: String = "",
+    val raw: String = "",
+)
 
 /** GeoJSON properties the streets layer's style expressions and taps read. */
 object BusMapProps {
@@ -294,37 +301,40 @@ fun BusMap.toGeoJson(tappable: ((stationId: String) -> Boolean)? = null): BusMap
             )
         }
     }
-    // Every line on its own geometry, one LineString per shape piece.
-    val routeFeatures = buildJsonArray {
-        for (line in lines.filter { isTrunk(it.code) }) {
-            for (shape in line.drawnShapes) {
-                val points = decodePolyline(shape)
-                if (points.size < 2) continue
-                add(
-                    feature(
-                        geometry = buildJsonObject {
-                            put("type", "LineString")
-                            putJsonArray("coordinates") {
-                                for (p in points) add(buildJsonArray { add(p.longitude); add(p.latitude) })
-                            }
-                        },
-                        properties = buildJsonObject {
-                            put(BusMapProps.CODE, line.code)
-                            put(BusMapProps.KIND, line.kind)
-                            put(BusMapProps.COLOR, line.color)
-                        },
-                    ),
-                )
-            }
-        }
-    }
     return BusMapGeoJson(
         lines = collection(lineFeatures).toString(),
-        routes = collection(routeFeatures).toString(),
+        // Every line on its own geometry, one LineString per piece: laid on the roads, and as the feed has it.
+        routes = collection(pieceFeatures { it.drawnShapes }).toString(),
         marks = collection(markFeatures).toString(),
         haltes = collection(halteFeatures).toString(),
         rail = collection(railFeatures).toString(),
+        raw = collection(pieceFeatures { it.shapes }).toString(),
     )
+}
+
+/** Each trunk line's [pieces], a LineString apiece carrying its code, kind and colour. */
+private fun BusMap.pieceFeatures(pieces: (BusMapLine) -> List<String>): JsonArray = buildJsonArray {
+    for (line in lines.filter { isTrunk(it.code) }) {
+        for (shape in pieces(line)) {
+            val points = decodePolyline(shape)
+            if (points.size < 2) continue
+            add(
+                feature(
+                    geometry = buildJsonObject {
+                        put("type", "LineString")
+                        putJsonArray("coordinates") {
+                            for (p in points) add(buildJsonArray { add(p.longitude); add(p.latitude) })
+                        }
+                    },
+                    properties = buildJsonObject {
+                        put(BusMapProps.CODE, line.code)
+                        put(BusMapProps.KIND, line.kind)
+                        put(BusMapProps.COLOR, line.color)
+                    },
+                ),
+            )
+        }
+    }
 }
 
 private fun point(lng: Double, lat: Double): JsonObject = buildJsonObject {

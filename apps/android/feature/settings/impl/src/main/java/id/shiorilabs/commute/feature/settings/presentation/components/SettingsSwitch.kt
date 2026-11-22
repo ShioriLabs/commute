@@ -22,14 +22,14 @@ import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /**
- * A setting that is on or off: what it is and what it does, and the switch. The whole row toggles
+ * A setting that is on or off: what it is, what it does unless [subtitle] is null, and the switch. The whole row toggles
  * it. With [enabled] false (a switch over it is off) it shows its own setting, greyed, kept for when
  * that comes back on.
  */
 @Composable
 internal fun SettingsSwitch(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
@@ -52,11 +52,13 @@ internal fun SettingsSwitch(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         // The row is the control; the switch only shows it.
         Switch(

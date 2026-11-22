@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.map.domain
 
+import id.shiorilabs.commute.core.geo.decodePolyline
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -49,6 +50,19 @@ class BusMapTest {
             }
             assertTrue(line.prop(BusMapProps.COLOR).matches(Regex("#[0-9A-Fa-f]{6}")))
         }
+    }
+
+    @Test
+    fun `raw GTFS draws each trunk line's feed shapes, not its pieces laid on the roads`() {
+        val raw = features(busMap.toGeoJson().raw)
+        val trunks = busMap.lines.filter { isTrunk(it.code) }
+        assertEquals(trunks.sumOf { line -> line.shapes.count { decodePolyline(it).size >= 2 } }, raw.size)
+        val nine = trunks.first { it.code == "9" }
+        val first = raw.first { it.prop(BusMapProps.CODE) == "9" }["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
+        val fed = decodePolyline(nine.shapes.first())
+        assertEquals(fed.size, first.size)
+        assertEquals(fed.first().longitude, (first.first() as JsonArray)[0].jsonPrimitive.double, 1e-9)
+        assertEquals(nine.color, raw.first { it.prop(BusMapProps.CODE) == "9" }.prop(BusMapProps.COLOR))
     }
 
     @Test

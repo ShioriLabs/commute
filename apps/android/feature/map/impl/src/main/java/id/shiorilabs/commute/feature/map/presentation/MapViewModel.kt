@@ -230,6 +230,17 @@ class MapViewModel @Inject constructor(
     val streetsPicked: StateFlow<Boolean> =
         developerPreferences.mapStreetsShown.stateIn(viewModelScope, WhileUiSubscribed, false)
 
+    /** Experimental "Panel Debug Peta": the streets layer's debug button and its panel. */
+    val debugEnabled: StateFlow<Boolean> =
+        developerPreferences.mapDebug.stateIn(viewModelScope, WhileUiSubscribed, false)
+
+    /** The streets layer's lines as the feed draws them (raw GTFS) rather than refined. */
+    val streetsRaw: StateFlow<Boolean> get() = session.streetsRaw
+
+    fun showRaw(raw: Boolean) {
+        session.streetsRaw.value = raw
+    }
+
     fun pickStreets(shown: Boolean) {
         viewModelScope.launch { developerPreferences.setMapStreetsShown(shown) }
     }

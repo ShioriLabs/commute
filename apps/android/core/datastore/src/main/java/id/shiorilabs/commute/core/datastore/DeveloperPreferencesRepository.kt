@@ -61,6 +61,9 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Peta Jalan": the map gains a layer picker, its streets drawn from shirase with Peta Bus over them. */
     val mapStreets: Flow<Boolean> = dataStore.data.map { it[MAP_STREETS] == true }
 
+    /** "Panel Debug Peta": a button on the streets map opening a panel of tools for checking Peta Bus. */
+    val mapDebug: Flow<Boolean> = dataStore.data.map { it[MAP_DEBUG] == true }
+
     /** The layer the map was left on: the streets (true) or the FDTJ artwork. The map reopens on it. */
     val mapStreetsShown: Flow<Boolean> = dataStore.data.map { it[MAP_STREETS_SHOWN] == true }
 
@@ -92,6 +95,8 @@ class DeveloperPreferencesRepository @Inject constructor(
 
     suspend fun setMapStreetsShown(shown: Boolean) = set(MAP_STREETS_SHOWN, shown)
 
+    suspend fun setMapDebug(enabled: Boolean) = set(MAP_DEBUG, enabled)
+
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         dataStore.edit { it[key] = value }
     }
@@ -112,5 +117,6 @@ class DeveloperPreferencesRepository @Inject constructor(
         val MAP_HOME = booleanPreferencesKey("map_home")
         val MAP_STREETS = booleanPreferencesKey("map_streets")
         val MAP_STREETS_SHOWN = booleanPreferencesKey("map_streets_shown")
+        val MAP_DEBUG = booleanPreferencesKey("map_debug")
     }
 }

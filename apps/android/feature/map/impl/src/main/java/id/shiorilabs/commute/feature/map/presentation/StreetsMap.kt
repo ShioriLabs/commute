@@ -73,6 +73,8 @@ fun StreetsMap(
     onLineTap: (codes: List<String>) -> Unit = {},
     /** The line drawn alone, the rest faded, as the artwork isolates one; null for all of them. */
     isolated: String? = null,
+    /** The debug panel's raw GTFS: every line as the feed draws it, unbundled, in place of the refined network. */
+    raw: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -141,7 +143,7 @@ fun StreetsMap(
                     return@addOnMapClickListener true
                 }
                 // No stop under the finger: a line, the one drawn on top there.
-                val lines = map.queryRenderedFeatures(box, ISOLATE_LAYER, BRT_ROUTE_LAYER, AUI_ROUTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)
+                val lines = map.queryRenderedFeatures(box, RAW_ISOLATE_LAYER, RAW_LAYER, ISOLATE_LAYER, BRT_ROUTE_LAYER, AUI_ROUTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)
                     .firstNotNullOfOrNull { feature ->
                         // A stroke carries all its lines; a line on its own streets, just its code.
                         feature.getStringProperty(BusMapProps.LINES)?.split(' ')?.filter(String::isNotEmpty)?.ifEmpty { null }
@@ -172,11 +174,11 @@ fun StreetsMap(
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
         addBusMap(style, busMap, dark, screenDensity)
     }
-    // A line alone: the rest faded under it, it on its own streets over them.
-    LaunchedEffect(state.style, busMap, dark, isolated) {
+    // Refined or raw, and a line alone: the rest faded under it, it on its own streets over them.
+    LaunchedEffect(state.style, busMap, dark, isolated, raw) {
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
-        isolate(style, isolated)
+        showLines(style, raw, isolated)
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
@@ -323,14 +325,15 @@ private fun hasLocation(context: Context): Boolean =
  * change.
  */
 private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float) {
-    for (id in LINE_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
-    for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE)) style.removeSource(id)
+    for (id in LINE_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, RAW_LAYER, RAW_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
+    for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, RAW_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE)) style.removeSource(id)
 
     style.addSource(GeoJsonSource(LINES_SOURCE, busMap.geoJson.lines))
     style.addSource(GeoJsonSource(ROUTES_SOURCE, busMap.geoJson.routes))
     style.addSource(GeoJsonSource(HALTES_SOURCE, busMap.geoJson.haltes))
     style.addSource(GeoJsonSource(RAIL_SOURCE, busMap.geoJson.rail))
     style.addSource(GeoJsonSource(MARKS_SOURCE, busMap.geoJson.marks))
+    style.addSource(GeoJsonSource(RAW_SOURCE, busMap.geoJson.raw))
 
     val color = Expression.get(BusMapProps.COLOR)
     val zoom = Expression.zoom()
@@ -393,6 +396,19 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
         PropertyFactory.visibility(Property.NONE),
     )
+    // The debug panel's raw GTFS: every line as the feed draws it, thin and unbundled at every zoom,
+    // one over another where they share a street. Hidden until picked; a line alone over the rest.
+    fun raw(id: String, scale: Float) = LineLayer(id, RAW_SOURCE).withProperties(
+        PropertyFactory.lineColor(Expression.toColor(color)),
+        PropertyFactory.lineWidth(
+            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, RAW_W_10 * scale), Expression.stop(14, RAW_W_14 * scale), Expression.stop(18, RAW_W_18 * scale)),
+        ),
+        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+        PropertyFactory.visibility(Property.NONE),
+    )
+    val rawLines = raw(RAW_LAYER, 1f)
+    val rawAlone = raw(RAW_ISOLATE_LAYER, RAW_ALONE_SCALE)
     val haltes = CircleLayer(HALTE_LAYER, HALTES_SOURCE).withProperties(
         PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(13, 2f), Expression.stop(16, 5f), Expression.stop(18, 7f))),
         PropertyFactory.circleColor(if (dark) HALTE_FILL_DARK else HALTE_FILL),
@@ -452,7 +468,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         minZoom = MARKS_MIN_ZOOM
         maxZoom = STREET_ZOOM
     }
-    for (layer: Layer in listOf(wash, trunks, aui, brt, auiRoutes, brtRoutes, alone, dots, bars, haltes, rail)) {
+    for (layer: Layer in listOf(wash, trunks, aui, brt, auiRoutes, brtRoutes, rawLines, alone, rawAlone, dots, bars, haltes, rail)) {
         if (style.getLayer(OVERLAY_SLOT) != null) style.addLayerBelow(layer, OVERLAY_SLOT) else style.addLayer(layer)
     }
     // Halte names over the whole style: under the basemap's labels they lost every collision to a
@@ -460,17 +476,20 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     style.addLayer(names)
 }
 
-/** Line [code] drawn alone, every other faded under it; null for all of them as they are. */
-private fun isolate(style: Style, code: String?) {
-    for (id in LINE_LAYERS) {
-        (style.getLayer(id) as? LineLayer)?.setProperties(PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f))
-    }
-    (style.getLayer(ISOLATE_LAYER) as? LineLayer)?.apply {
-        if (code != null) {
-            setFilter(Expression.eq(Expression.get(BusMapProps.CODE), Expression.literal(code)))
-            setProperties(PropertyFactory.visibility(Property.VISIBLE))
-        } else {
-            setProperties(PropertyFactory.visibility(Property.NONE))
+/**
+ * The refined network, or with [raw] every line as the feed draws it, the bundles' halte marks going
+ * with the network; line [code] drawn alone over the rest faded, or null for all of them as they are.
+ */
+private fun showLines(style: Style, raw: Boolean, code: String?) {
+    fun visible(shown: Boolean) = PropertyFactory.visibility(if (shown) Property.VISIBLE else Property.NONE)
+    val faded = PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f)
+    for (id in LINE_LAYERS) style.getLayer(id)?.setProperties(visible(!raw), faded)
+    for (id in listOf(BAR_LAYER, MARK_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(!raw))
+    style.getLayer(RAW_LAYER)?.setProperties(visible(raw), faded)
+    for ((id, shown) in listOf(ISOLATE_LAYER to !raw, RAW_ISOLATE_LAYER to raw)) {
+        (style.getLayer(id) as? LineLayer)?.apply {
+            if (code != null) setFilter(Expression.eq(Expression.get(BusMapProps.CODE), Expression.literal(code)))
+            setProperties(visible(shown && code != null))
         }
     }
 }
@@ -483,6 +502,15 @@ private const val ROUTES_SOURCE = "peta-bus-routes"
 private const val AUI_ROUTE_LAYER = "peta-bus-aui-routes"
 private const val BRT_ROUTE_LAYER = "peta-bus-brt-routes"
 private const val ISOLATE_LAYER = "peta-bus-alone"
+
+/** The debug panel's raw GTFS: its source, every line on it, and a line alone over them. */
+private const val RAW_SOURCE = "peta-bus-raw"
+private const val RAW_LAYER = "peta-bus-raw"
+private const val RAW_ISOLATE_LAYER = "peta-bus-raw-alone"
+private const val RAW_W_10 = 1.2f
+private const val RAW_W_14 = 2f
+private const val RAW_W_18 = 3.5f
+private const val RAW_ALONE_SCALE = 2f
 private const val WASH_LAYER = "peta-bus-wash"
 private const val MARKS_SOURCE = "peta-bus-marks"
 private const val BAR_LAYER = "peta-bus-bars"
