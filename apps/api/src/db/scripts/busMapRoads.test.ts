@@ -16,6 +16,20 @@ const road = (points: [number, number][], { oneway = false, busway = false, brid
   ({ xy: points.map(([e, n]) => xy(e, n)), oneway, busway, bridge, motorway })
 
 describe('snapToRoads', () => {
+  it('takes the lane past a halte that its bus calls at, by the platform on it', () => {
+    // Galunggung: two eastbound busways 12 m apart, the halte between; 6 calls on the south one.
+    const roads = new Roads([
+      road([[0, 6], [400, 6]], { oneway: true, busway: true }),
+      road([[0, -6], [400, -6]], { oneway: true, busway: true })
+    ])
+    const line = [at(0, 2), at(400, 2)]
+    const south = snapToRoads(line, roads, { brt: true, platforms: [at(200, -5)] })
+    for (const p of south.filter(q => Math.abs(east(q) - 200) < 40)) expect(north(p)).toBeCloseTo(-6, 0)
+    // Platforms on both (one each way, 4 at Pasar Rumput) leave the choice as it was.
+    const either = snapToRoads(line, roads, { brt: true, platforms: [at(200, -5), at(210, 5)] })
+    expect(either).toEqual(snapToRoads(line, roads, { brt: true }))
+  })
+
   it('lays a loose line onto its road', () => {
     const roads = new Roads([road([[0, 0], [0, 1000]])])
     // The feed's points wander 8-12 m off the road.

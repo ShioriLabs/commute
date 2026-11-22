@@ -100,6 +100,22 @@ const ROUTE_REACH_M = 80
 const ROUTE_HALTE_M = 15
 const HALTE_NEAR_M = 50
 
+/**
+ * Within PLATFORM_NEAR_M of one of the line's platforms (its own side of a halte, from the feed's stop
+ * ids) lying on a busway (within PLATFORM_ON_M), of the busways the bus's way passing within PLATFORM_M
+ * of it, only those no more than PLATFORM_SLACK_M further from it than that one: of the lanes past a
+ * halte, the one its bus calls at (6 on Galunggung's south lane, 4 on its north). A halte's own
+ * coordinate lies between them. A platform off the busways says too little: Semanggi's lie between
+ * Gatot Subroto and its toll road.
+ */
+const PLATFORM_NEAR_M = 50
+const PLATFORM_M = 15
+const PLATFORM_ON_M = 3
+const PLATFORM_SLACK_M = 5
+
+/** Platforms this near each other are one halte's, and say what they say together. */
+const PLATFORM_HALTE_M = 30
+
 /** Road points this near each other are one junction: z15 busways meet z14 roads a fraction of a metre off. */
 const NODE_M = 1
 
@@ -338,14 +354,31 @@ function along(road: Road): number[] {
   return out
 }
 
-/** [piece] laid onto [roads] (see the file comment); [brt] prefers a busway, [stops] are the line's haltes. */
+/**
+ * [piece] laid onto [roads] (see the file comment); [brt] prefers a busway, [stops] are the line's haltes,
+ * [platforms] the sides of them its buses call at.
+ */
 export function snapToRoads(
   piece: readonly LngLat[],
   roads: Roads,
-  { brt = false, anyWay = false, stops = [] }: { brt?: boolean, anyWay?: boolean, stops?: readonly LngLat[] } = {}
+  { brt = false, anyWay = false, stops = [], platforms = [] }: { brt?: boolean, anyWay?: boolean, stops?: readonly LngLat[], platforms?: readonly LngLat[] } = {}
 ): LngLat[] {
   if (piece.length < 2) return [...piece]
   const points = sample(piece.map(toXY))
+  const sides = platforms.map(toXY)
+  // Each platform's halte: the platforms within PLATFORM_HALTE_M of it, itself among them.
+  const together = sides.map(([ax, ay]) => sides.flatMap(([bx, by], k) => (Math.hypot(bx - ax, by - ay) <= PLATFORM_HALTE_M ? [k] : [])))
+  // How far each road passes from each platform, as asked.
+  const passing = new Map<string, number>()
+  const fromPlatform = (r: number, k: number): number => {
+    const key = `${r}:${k}`
+    let d = passing.get(key)
+    if (d === undefined) {
+      d = distanceTo(roads.roads[r]!.xy, sides[k]!)
+      passing.set(key, d)
+    }
+    return d
+  }
   const matches: (Match | null)[] = []
   let previous: Match | null = null
   for (let i = 0; i < points.length; i++) {
@@ -355,8 +388,7 @@ export function snapToRoads(
     const hl = Math.hypot(nx - px, ny - py) || 1
     const hx = (nx - px) / hl
     const hy = (ny - py) / hl
-    let best: Match | null = null
-    let bestScore = Infinity
+    const candidates: { score: number, match: Match }[] = []
     for (const { road: r, i: s } of roads.near(x, y)) {
       const road = roads.roads[r]!
       const [ax, ay] = road.xy[s]!
@@ -378,9 +410,31 @@ export function snapToRoads(
         - (brt && road.busway ? BUSWAY_M : 0)
         + (road.bridge ? BRIDGE_M : 0)
         + (road.motorway ? MOTORWAY_M : 0)
-      if (score < bestScore) {
-        bestScore = score
-        best = { road: r, at: along(road)[s]! + t * l, point: [qx, qy] }
+      candidates.push({ score, match: { road: r, at: along(road)[s]! + t * l, point: [qx, qy] } })
+    }
+    // Near its platforms on a busway, of the busways the bus's way past them, only the ones they're on. A
+    // busway one platform is on stays, whatever another says: 4 calls at Pasar Rumput beside each of two
+    // busways, one each way.
+    const passed = new Set<number>()
+    const kept = new Set<number>()
+    const halte = new Set(sides.flatMap(([sx, sy], k) => (Math.hypot(sx - x, sy - y) <= PLATFORM_NEAR_M ? together[k]! : [])))
+    for (const k of halte) {
+      const past = candidates.filter(c => roads.roads[c.match.road]!.busway && fromPlatform(c.match.road, k) <= PLATFORM_M)
+      if (past.length < 2) continue
+      const nearest = Math.min(...past.map(c => fromPlatform(c.match.road, k)))
+      if (nearest > PLATFORM_ON_M) continue
+      for (const c of past) {
+        passed.add(c.match.road)
+        if (fromPlatform(c.match.road, k) <= nearest + PLATFORM_SLACK_M) kept.add(c.match.road)
+      }
+    }
+    for (const c of candidates) if (passed.has(c.match.road) && !kept.has(c.match.road)) c.score = Infinity
+    let best: Match | null = null
+    let bestScore = Infinity
+    for (const c of candidates) {
+      if (c.score < bestScore) {
+        bestScore = c.score
+        best = c.match
       }
     }
     matches.push(best)

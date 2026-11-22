@@ -79,9 +79,21 @@ const OUTPUT_PATH = `${__dirname}/../../../../web/app/data/bus-map.json`
  */
 const FEED_OUTPUT_PATH = `${__dirname}/../../../../web/app/data/bus-map-feed.json`
 
-/** [FEED_OUTPUT_PATH]'s shape: each line's code and its feed shapes, encoded. */
+/**
+ * [FEED_OUTPUT_PATH]'s shape: each line's code, its feed shapes, encoded, and the platforms its trips
+ * call at where a halte has them apart (more than PLATFORM_APART_M from the halte): which side of it the
+ * line is laid on (alongRoads).
+ */
 export interface BusMapFeed {
-  lines: { code: string, shapes: string[] }[]
+  lines: { code: string, shapes: string[], platforms?: LngLat[] }[]
+}
+
+/** A platform this near its halte's own coordinate says nothing a halte doesn't. */
+const PLATFORM_APART_M = 3
+
+/** Each line's platforms, by code: the sides of its haltes it calls at. */
+export function platformsOf(feed: BusMapFeed): Map<string, LngLat[]> {
+  return new Map(feed.lines.flatMap(l => (l.platforms ? [[l.code, l.platforms] as const] : [])))
 }
 
 /** Each line's feed shapes, decoded, by code: the trips a koridor's redraw may take a leg from. */
@@ -347,6 +359,7 @@ export function dedupePatterns(patterns: readonly LngLat[][], apart?: KeptApart)
 // ── inputs ──────────────────────────────────────────────────────────────────
 
 const round5 = (n: number): number => Math.round(n * 1e5) / 1e5
+const round6 = (n: number): number => Math.round(n * 1e6) / 1e6
 
 function loadFeed(file: string): Record<string, string>[] {
   return parseCSV(fs.readFileSync(`${FEED_DIR}/${file}`, 'utf-8'))
@@ -379,6 +392,14 @@ async function main(): Promise<void> {
 
   const stopById = new Map(loadFeed('stops.txt').map(s => [s.stop_id!, s]))
   const collapse = (id: string): string => stopById.get(id)?.parent_station || id
+  /** [id]'s own coordinate when it is a platform set apart from its halte's, else null. */
+  const platformOf = (id: string): LngLat | null => {
+    const s = stopById.get(id)
+    const parent = s?.parent_station ? stopById.get(s.parent_station) : undefined
+    if (!s || !parent || !s.stop_lon || !parent.stop_lon) return null
+    const at: LngLat = [round6(Number(s.stop_lon)), round6(Number(s.stop_lat))]
+    return lengthM([at, [Number(parent.stop_lon), Number(parent.stop_lat)]]) > PLATFORM_APART_M ? at : null
+  }
 
   const tripsByRoute = new Map<string, { tripId: string, shapeId: string }[]>()
   for (const t of loadFeed('trips.txt')) {
@@ -390,11 +411,15 @@ async function main(): Promise<void> {
   const inScopeTrips = new Set([...tripsByRoute.values()].flat().map(t => t.tripId))
 
   const stopsByTrip = new Map<string, { seq: number, stop: string }[]>()
+  const platformsByTrip = new Map<string, string[]>()
   for (const row of loadFeed('stop_times.txt')) {
     if (!inScopeTrips.has(row.trip_id!)) continue
     const list = stopsByTrip.get(row.trip_id!) ?? []
     list.push({ seq: Number(row.stop_sequence), stop: collapse(row.stop_id!) })
     stopsByTrip.set(row.trip_id!, list)
+    const ids = platformsByTrip.get(row.trip_id!) ?? []
+    ids.push(row.stop_id!)
+    platformsByTrip.set(row.trip_id!, ids)
   }
 
   const wantedShapes = new Set([...tripsByRoute.values()].flat().map(t => t.shapeId).filter(Boolean))
@@ -443,7 +468,12 @@ async function main(): Promise<void> {
       }
     }
 
-    feed.lines.push({ code: route.route_short_name!, shapes: feedShapes(trips.map(t => t.shapeId), shapes) })
+    const platforms = [...new Set(trips.flatMap(t => platformsByTrip.get(t.tripId) ?? []))].sort()
+      .flatMap((id) => {
+        const at = platformOf(id)
+        return at ? [at] : []
+      })
+    feed.lines.push({ code: route.route_short_name!, shapes: feedShapes(trips.map(t => t.shapeId), shapes), ...(platforms.length > 0 ? { platforms } : {}) })
     lines.push({
       code: route.route_short_name!,
       name: route.route_long_name!.trim(),
@@ -461,7 +491,7 @@ async function main(): Promise<void> {
   const sortedHaltes = Object.fromEntries(Object.entries(normal.haltes).sort(([a], [b]) => a.localeCompare(b)))
   const rail = parseRailCoords(fs.readFileSync(COORDS_CSV, 'utf-8'))
 
-  const onRoads = await alongRoads(normal.lines, sortedHaltes)
+  const onRoads = await alongRoads(normal.lines, sortedHaltes, platformsOf(feed))
   const edges = await bundleShapes(onRoads.lines, onRoads.roads, sortedHaltes)
   const stopMarks = marksFor(edges, onRoads.lines, sortedHaltes)
   const map: BusMap = { attribution: ATTRIBUTION, lines: onRoads.lines, edges, stopMarks, haltes: sortedHaltes, rail }
@@ -581,14 +611,18 @@ function marksFor(edges: readonly BusMapEdge[], lines: readonly BusMapLine[], ha
  * the same shapes onto the same roads and changes nothing. The roads come back
  * too, for the network's edges.
  */
-async function alongRoads(lines: readonly BusMapLine[], haltes: BusMap['haltes']): Promise<{ lines: BusMapLine[], roads: Roads }> {
+async function alongRoads(
+  lines: readonly BusMapLine[],
+  haltes: BusMap['haltes'],
+  platforms: ReadonlyMap<string, LngLat[]> = new Map()
+): Promise<{ lines: BusMapLine[], roads: Roads }> {
   const roads = await loadRoads(lines.flatMap(l => l.shapes.map(s => decodePolyline(s))))
   return {
     lines: lines.map((l) => {
       // Out-and-back excursions taken out, as street zoom draws these (dropRetraces): 9 north past Cawang.
       const stops = l.stops.flatMap(code => (haltes[code] ? [[haltes[code][1], haltes[code][2]] as LngLat] : []))
       const lay = (s: string): string => {
-        const laid = dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops }), stops)
+        const laid = dropRetraces(snapToRoads(decodePolyline(s), roads, { brt: l.kind === 'BRT', stops, platforms: platforms.get(l.code) }), stops)
         const smooth = smoothPath(cutLoops(laid, DRAWN_LOOP_M), DRAWN_SMOOTH_M)
         return encodePolyline(simplifyBends(smooth, DRAWN_SIMPLIFY_M, DRAWN_BEND_M, DRAWN_BEND_DEG), DRAWN_PRECISION)
       }
@@ -680,7 +714,7 @@ async function rebundle(): Promise<void> {
   const map = JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf-8')) as BusMap
   const feed = fs.existsSync(FEED_OUTPUT_PATH) ? JSON.parse(fs.readFileSync(FEED_OUTPUT_PATH, 'utf-8')) as BusMapFeed : { lines: [] }
   const normal = alongTopology(map.lines, map.haltes, tripsOf(feed))
-  const onRoads = await alongRoads(normal.lines, normal.haltes)
+  const onRoads = await alongRoads(normal.lines, normal.haltes, platformsOf(feed))
   const edges = await bundleShapes(onRoads.lines, onRoads.roads, normal.haltes)
   const stopMarks = marksFor(edges, onRoads.lines, normal.haltes)
   const out: BusMap = { attribution: map.attribution, lines: onRoads.lines, edges, stopMarks, haltes: normal.haltes, rail: map.rail }
