@@ -6,7 +6,6 @@ import {
   dropBypasses,
   dropRetraces,
   dropShortLoops,
-  filletCorners,
   loadSolver,
   orderCost,
   orderLinesExact,
@@ -14,6 +13,7 @@ import {
   placeStops,
   roundCorners,
   roundJunctions,
+  smoothPath,
   strokeCount,
   strokeKeys,
   type BundleLine,
@@ -515,37 +515,22 @@ describe('dropRetraces', () => {
   })
 })
 
-describe('filletCorners', () => {
-  // A hairpin as the tiles draw it: chords 10 m long, each turning 15 degrees, round 180.
-  const chords = (): LngLat[] => {
-    const out: LngLat[] = [[LNG, LAT]]
-    let x = 0
-    let y = 0
-    let heading = 0
-    for (let i = 0; i < 13; i++) {
-      x += 10 * Math.sin(heading)
-      y += 10 * Math.cos(heading)
-      out.push([LNG + x / M_LNG, LAT + y / M_LAT])
-      heading += (15 * Math.PI) / 180
-    }
-    return out
-  }
+describe('smoothPath', () => {
+  const metres = (p: LngLat): [number, number] => [(p[0] - LNG) * M_LNG, (p[1] - LAT) * M_LAT]
 
-  const same = (a: LngLat, b: LngLat): void => {
-    expect(a[0]).toBeCloseTo(b[0], 9)
-    expect(a[1]).toBeCloseTo(b[1], 9)
-  }
-
-  it('leaves turns under 20 degrees for a bundle, as they are', () => {
-    const kept = filletCorners(chords(), 0)
-    expect(kept.length).toBe(chords().length)
-    kept.forEach((p, i) => same(p, chords()[i]!))
+  it('leaves a straight straight, its ends where they were', () => {
+    const smooth = smoothPath(north(0, 500), 6).map(metres)
+    for (const [x] of smooth) expect(Math.abs(x)).toBeLessThan(0.01)
+    expect(smooth[0]![1]).toBeCloseTo(0, 6)
+    expect(smooth[smooth.length - 1]![1]).toBeCloseTo(500, 6)
   })
 
-  it('rounds a curve drawn as chords when told to round turns that gentle', () => {
-    const rounded = filletCorners(chords(), 0, undefined, (5 * Math.PI) / 180)
-    expect(rounded.length).toBeGreaterThan(chords().length)
-    same(rounded[0]!, chords()[0]!)
-    same(rounded[rounded.length - 1]!, chords()[chords().length - 1]!)
+  it('irons out a wobble of a few metres along a street', () => {
+    // A busway as the tiles draw it round a bend: points every 10 m, each 1.5 m off either way.
+    const wobbly: LngLat[] = []
+    for (let m = 0; m <= 300; m += 10) wobbly.push([LNG + (m % 20 === 0 ? 1.5 : -1.5) / M_LNG, LAT + m / M_LAT])
+    const smooth = smoothPath(wobbly, 6).map(metres)
+    const inner = smooth.filter(([, y]) => y > 30 && y < 270)
+    expect(Math.max(...inner.map(([x]) => Math.abs(x)))).toBeLessThan(0.3)
   })
 })
