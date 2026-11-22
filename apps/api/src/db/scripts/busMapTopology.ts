@@ -537,7 +537,8 @@ export function alignToTopology(
             const limit = Math.hypot(b[0] - a[0], b[1] - a[1]) * OWN_REACH + 2 * FAR_M
             let best: [number, number][] | null = null
             for (const t of trips) {
-              if (Math.hypot(t.xy[0]![0] - a[0], t.xy[0]![1] - a[1]) > NEAR_M) continue
+              // Within FAR_M: where its buses wait may be on past the halte (12's and 9's at Pluit 1, 97 m on).
+              if (Math.hypot(t.xy[0]![0] - a[0], t.xy[0]![1] - a[1]) > FAR_M) continue
               // From where it passes nearest the halte on its way out, not the bay it pulls out of (1's at
               // Blok M, 13 m off the street: a tick on the map).
               const from = passes(t, a, NEAR_M)[0] ?? 0
