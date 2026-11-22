@@ -47,8 +47,9 @@ const TERMINAL_EXTRA_M = 300
 /** Shorter than this, the way from where a trip starts or ends is the feed shuffling about a bay (2 at Pulo Gadung). */
 const TERMINAL_MIN_M = 20
 
-/** A run ending this near where the next starts is joined on to it. */
+/** A run ending this near where the next starts, within TERMINAL_JOIN_COS of straight on, is joined on to it. */
 const TERMINAL_JOIN_M = 50
+const TERMINAL_JOIN_COS = Math.cos((60 * Math.PI) / 180)
 
 /**
  * The way a bus comes out from where it waits at terminus [h] to [p] on the line: the start of a trip
@@ -537,10 +538,13 @@ export function alignToTopology(
             let best: [number, number][] | null = null
             for (const t of trips) {
               if (Math.hypot(t.xy[0]![0] - a[0], t.xy[0]![1] - a[1]) > NEAR_M) continue
-              const to = passes(t, b, NEAR_M).find(m => m > NEAR_M)
-              if (to === undefined || to > limit) continue
-              if ([...dropped, ...between].some(p => passes(t, p, NEAR_M).some(m => m > NEAR_M && m < to - NEAR_M))) continue
-              if (!best || to < lengthOf(best)) best = slice(t, 0, to)
+              // From where it passes nearest the halte on its way out, not the bay it pulls out of (1's at
+              // Blok M, 13 m off the street: a tick on the map).
+              const from = passes(t, a, NEAR_M)[0] ?? 0
+              const to = passes(t, b, NEAR_M).find(m => m > from + NEAR_M)
+              if (to === undefined || to - from > limit) continue
+              if ([...dropped, ...between].some(p => passes(t, p, NEAR_M).some(m => m > from + NEAR_M && m < to - NEAR_M))) continue
+              if (!best || to - from < lengthOf(best)) best = slice(t, from, to)
             }
             return best
           }
@@ -591,14 +595,18 @@ export function alignToTopology(
       const clean = despike(path)
       if (clean.length >= 2) drawn.push(clean.map(toLngLat))
     }
-    // A run ending just short of where the next starts (6 in to Ragunan, out from its loop 25 m on) goes on to it.
+    // A run ending just short of where the next starts, on ahead (6 in to Ragunan, out from its loop 25 m
+    // on), goes on to it. One beside it (1's out of Blok M's bay, 12 m off the street) is left.
     if (drawn.length >= 2) {
       drawn.forEach((piece, r) => {
         const next = drawn[(r + 1) % drawn.length]![0]!
         const [ex, ey] = toXY(piece[piece.length - 1]!)
+        const [px, py] = toXY(piece[Math.max(0, piece.length - 2)]!)
         const [nx, ny] = toXY(next)
         const gap = Math.hypot(nx - ex, ny - ey)
-        if (gap > 0.5 && gap <= TERMINAL_JOIN_M) piece.push([...next] as LngLat)
+        const run = Math.hypot(ex - px, ey - py)
+        const ahead = run > 0 && ((ex - px) * (nx - ex) + (ey - py) * (ny - ey)) / (run * gap) >= TERMINAL_JOIN_COS
+        if (gap > 0.5 && gap <= TERMINAL_JOIN_M && ahead) piece.push([...next] as LngLat)
       })
     }
     pieces.set(line.code, drawn.length > 0 ? drawn : line.pieces.map(p => [...p]))
