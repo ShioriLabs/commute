@@ -16,6 +16,9 @@ data class RouteRun(val points: List<GeoPoint>, val slot: Double)
  * within [SHARED_M] (laid on the roads, two lines on one lane lie within a metre; the next lane is
  * six off), a bus line with bus lines, a rail line with rail lines. Across a stretch, lines go in
  * [lines]' order, a colour's together and drawn as one ([strokesOf]); a line alone keeps its middle.
+ * A line going the other way on the very same line ([ONE_TRACK_M]: a track both ways run on, as a
+ * subway's shapes are drawn) runs with them too; the order across is then the compass's (left to
+ * right facing [FRAME_BEARING]'s half), so each line keeps one place whichever way it goes.
  * A stretch shared for less than [MIN_RUN_M] stays as the ones beside it, the line not stepping
  * aside and back for a moment.
  */
@@ -35,7 +38,6 @@ fun separateRoutes(lines: List<BusMapLine>, pieces: Map<String, List<List<GeoPoi
 
     class Seg(val code: String, val rail: Boolean, val ax: Double, val ay: Double, val bx: Double, val by: Double)
     val grid = HashMap<Long, MutableList<Seg>>()
-    fun cell(x: Double, y: Double) = (floor(x / CELL_M).toLong() shl 32) xor (floor(y / CELL_M).toLong() and 0xffffffffL)
     for (line in drawn) {
         val rail = line.kind == "RAIL"
         for (piece in pieces[line.code].orEmpty()) {
@@ -52,33 +54,43 @@ fun separateRoutes(lines: List<BusMapLine>, pieces: Map<String, List<List<GeoPoi
         }
     }
 
-    // The other lines going [dx, dy]'s way within reach of (x, y), [rail] with [rail].
-    fun alongside(code: String, rail: Boolean, x: Double, y: Double, dx: Double, dy: Double): Set<String> {
+    // The other lines going [dx, dy]'s way within reach of (x, y), [rail] with [rail], or on that
+    // very line the other way; and whether any goes the other way there.
+    class Alongside(val codes: Set<String>, val back: Boolean)
+    fun alongside(code: String, rail: Boolean, x: Double, y: Double, dx: Double, dy: Double): Alongside {
         val found = HashSet<String>()
+        var back = false
         val cx = floor(x / CELL_M).toLong()
         val cy = floor(y / CELL_M).toLong()
         for (gx in cx - 1..cx + 1) for (gy in cy - 1..cy + 1) {
             for (s in grid[(gx shl 32) xor (gy and 0xffffffffL)] ?: continue) {
-                if (s.code == code || s.rail != rail || s.code in found) continue
+                if (s.rail != rail) continue
                 val ex = s.bx - s.ax
                 val ey = s.by - s.ay
                 val len = hypot(ex, ey)
-                if (len == 0.0 || (ex * dx + ey * dy) / len < SAME_WAY_COS) continue
+                if (len == 0.0) continue
+                val along = (ex * dx + ey * dy) / len
+                if (along > -SAME_WAY_COS && along < SAME_WAY_COS) continue
                 val t = (((x - s.ax) * ex + (y - s.ay) * ey) / (len * len)).coerceIn(0.0, 1.0)
-                if (hypot(x - s.ax - t * ex, y - s.ay - t * ey) <= SHARED_M) found += s.code
+                val apart = hypot(x - s.ax - t * ex, y - s.ay - t * ey)
+                if (along < 0 && apart <= ONE_TRACK_M) back = true
+                if (s.code != code && (if (along > 0) apart <= SHARED_M else apart <= ONE_TRACK_M)) found += s.code
             }
         }
-        return found
+        return Alongside(found, back)
     }
 
     val slotCache = HashMap<List<String>, Map<String, Double>>()
-    fun slotOf(code: String, with: Set<String>): Double {
-        if (with.isEmpty()) return 0.0
-        val together = (with + code).sortedBy { rank[it] ?: Int.MAX_VALUE }
+    // [code]'s place going [dx, dy] among [with]: across its way, or the compass's with one going back.
+    fun slotOf(code: String, with: Alongside, dx: Double, dy: Double): Double {
+        if (with.codes.isEmpty()) return 0.0
+        val together = (with.codes + code).sortedBy { rank[it] ?: Int.MAX_VALUE }
         val slots = slotCache.getOrPut(together) {
             strokesOf(together, 0.0, byCode).flatMap { stroke -> stroke.codes.map { it to stroke.slot } }.toMap()
         }
-        return slots[code] ?: 0.0
+        val slot = slots[code] ?: 0.0
+        if (!with.back) return slot
+        return if (dx * FRAME_X + dy * FRAME_Y >= 0) slot else -slot
     }
 
     val out = LinkedHashMap<String, List<RouteRun>>()
@@ -104,7 +116,7 @@ fun separateRoutes(lines: List<BusMapLine>, pieces: Map<String, List<List<GeoPoi
                 val steps = ceil(len / STEP_M).toInt().coerceAtLeast(1)
                 for (k in 0 until steps) {
                     val mid = (k + 0.5) / steps
-                    val slot = slotOf(line.code, alongside(line.code, rail, pa[0] + (pb[0] - pa[0]) * mid, pa[1] + (pb[1] - pa[1]) * mid, dx, dy))
+                    val slot = slotOf(line.code, alongside(line.code, rail, pa[0] + (pb[0] - pa[0]) * mid, pa[1] + (pb[1] - pa[1]) * mid, dx, dy), dx, dy)
                     val end = (k + 1.0) / steps
                     points += if (k == steps - 1) b else GeoPoint(a.latitude + (b.latitude - a.latitude) * end, a.longitude + (b.longitude - a.longitude) * end)
                     vertex += k == steps - 1
@@ -163,6 +175,18 @@ private const val M_PER_DEG = 111_320.0
 
 /** Two lines going one way this close run together: one lane. */
 private const val SHARED_M = 3.0
+
+/** Going the other way this close is the very same line: one track both ways run on. Laid on the roads, opposite ways are two or more apart. */
+private const val ONE_TRACK_M = 1.5
+
+/**
+ * The compass's way across a line both ways run on: one facing within 90° of this bearing goes
+ * left to right, one facing back right to left. Off the grids' ways (Jakarta's, near north and
+ * east; Manhattan's, 29° and 119°), where a street's bundle would turn over.
+ */
+private const val FRAME_BEARING = -15.0
+private val FRAME_X = kotlin.math.sin(Math.toRadians(FRAME_BEARING))
+private val FRAME_Y = cos(Math.toRadians(FRAME_BEARING))
 
 /** Within about 30° of one way. */
 private const val SAME_WAY_COS = 0.85

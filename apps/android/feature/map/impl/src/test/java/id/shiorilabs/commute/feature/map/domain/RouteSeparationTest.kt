@@ -40,16 +40,34 @@ class RouteSeparationTest {
     }
 
     @Test
-    fun `lines going opposite ways, or a lane apart, keep their middle`() {
+    fun `lines going opposite ways on their own lanes, or a lane apart, keep their middle`() {
         val runs = separateRoutes(
             listOf(line("4", "#7E3794"), line("6", "#39B54A"), line("9", "#C0C0C0")),
             mapOf(
                 "4" to listOf(east(0.0, 500.0)),
-                "6" to listOf(east(500.0, 0.0)),
+                "6" to listOf(east(500.0, 0.0, northM = 2.5)),
                 "9" to listOf(east(0.0, 500.0, northM = 6.0)),
             ),
         )
         for (code in listOf("4", "6", "9")) assertEquals(code, listOf(0.0), runs[code]!!.map { it.slot })
+    }
+
+    @Test
+    fun `on one track both ways run on, each line keeps one place whichever way it goes`() {
+        val runs = separateRoutes(
+            listOf(line("A", "#0062CF"), line("B", "#EB6800")),
+            mapOf(
+                "A" to listOf(east(0.0, 500.0), east(500.0, 0.0)),
+                "B" to listOf(east(500.0, 0.0), east(0.0, 500.0)),
+            ),
+        )
+        val (aEast, aWest) = runs["A"]!!.map { it.slot }
+        val (bWest, bEast) = runs["B"]!!.map { it.slot }
+        // Right of its way is the other side going back: one place, the slot's sign turned over.
+        assertEquals(aEast, -aWest, 0.0)
+        assertEquals(bEast, -bWest, 0.0)
+        assertEquals(0.5, kotlin.math.abs(aEast), 0.0)
+        assertEquals(-aEast, bEast, 0.0)
     }
 
     @Test
