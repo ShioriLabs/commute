@@ -4,6 +4,7 @@ import {
   bundle,
   bundleOrder,
   buildNetwork,
+  crossOver,
   dropBypasses,
   dropRetraces,
   dropShortLoops,
@@ -422,6 +423,34 @@ describe('roundJunctions', () => {
       })
     })
   })
+
+  it('curves a loop\'s way back onto its street, the street left straight', () => {
+    // 4 and 6 at Galunggung: the street both ways, east and west of the node; the way back up from
+    // the terminus comes in from the south, leaning east, and turns onto the street eastward.
+    const node = at(0, 0)
+    const edges = [
+      { path: [at(300, 0), node], lines: ['4', '6'] },
+      { path: [node, at(-300, 0)], lines: ['4', '6'] },
+      { path: [at(-40, -200), node], lines: ['4', '6'] }
+    ]
+    const tally: CornerTally = { eased: 0, junctions: 0, squeezed: 0, folded: 0 }
+    const [east, west, back] = roundJunctions(edges, tally).map(p => p.map(metres))
+    expect(tally.junctions).toBe(1)
+    // The street still straight, its far ends where they were.
+    for (const [, y] of [...east!, ...west!]) expect(y).toBeCloseTo(0, 6)
+    expect(east![0]![0]).toBeCloseTo(300, 6)
+    expect(west![west!.length - 1]![0]).toBeCloseTo(-300, 6)
+    // The way back curves onto it east of where the node was, along it; all three meet there.
+    const end = back![back!.length - 1]!
+    const before = back![back!.length - 2]!
+    expect(end[1]).toBeCloseTo(0, 6)
+    expect(end[0]).toBeGreaterThan(5)
+    expect(Math.abs(end[1] - before[1])).toBeLessThan(Math.abs(end[0] - before[0]))
+    for (const meet of [east![east!.length - 1]!, west![0]!]) {
+      expect(meet[0]).toBeCloseTo(end[0], 6)
+      expect(meet[1]).toBeCloseTo(end[1], 6)
+    }
+  })
 })
 
 describe('a piece ending across its own line', () => {
@@ -467,6 +496,85 @@ describe('two lines round one terminal loop', () => {
       return [p[0]!, p[p.length - 1]!]
     })
     expect(ends.some(([lng, lat]) => Math.hypot((lng - LNG) * M_LNG - 100, (lat - LAT) * M_LAT) < 5)).toBe(true)
+  })
+
+  it('keeps the lanes they end in at the terminus, and crosses where the street goes on round the loop', async () => {
+    // As at Galunggung: 6 ends on the south busway, 4 on the north one, 12 m apart.
+    const report = { local: 0, exact: 0, components: 0, fallbacks: 0 }
+    const edges = await bundle([loop('4', [at(100, 6), at(800, 100)]), loop('6', [at(100, -6), at(800, 100)])], report)
+    // Each side of the terminus, heading east past it, 6 is on the right (south).
+    for (const edge of edges) {
+      const p = decodePolyline(edge.shape).map(([lng, lat]) => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT] as const)
+      const k = p.findIndex(([x, y]) => Math.hypot(x - 100, y) < 5)
+      if (k < 0) continue
+      const [x0] = p[k === 0 ? 0 : k - 1]!
+      const [x1] = p[k === 0 ? 1 : k]!
+      const east = x1 > x0
+      const six = edge.lines.indexOf('6')
+      // Lines lie left to right along the edge's way.
+      expect(east ? six === edge.lines.length - 1 : six === 0, edge.lines.join(' ')).toBe(true)
+    }
+    // Their one crossing is on the street, where the way back lands on it (roundJunctions), not
+    // in the turn, where 6 would land beside its line.
+    expect(report.exact).toBe(1)
+  })
+})
+
+describe('crossOver', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  const metres = ([lng, lat]: LngLat): [number, number] => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT]
+  const strokeOf = new Map([['4', '4'], ['6', '6'], ['1', '1']])
+
+  it('draws two lines changing sides straight through a node as a crossing, not a jump', () => {
+    // 4 and 6 west along Jl. Galunggung: east of the node 6 is on the right (north), west of it on
+    // the left. Each edge's lines lie left to right along its way.
+    const edges: BusMapEdge[] = [
+      { shape: encodePolyline([at(300, 0), at(0, 0)]), lines: ['4', '6'] },
+      { shape: encodePolyline([at(0, 0), at(-300, 0)]), lines: ['6', '4'] }
+    ]
+    const out = crossOver(edges, strokeOf)
+    // The rest of the street as it was.
+    expect(out).toContainEqual(edges[0])
+    // The crossing: each line alone, stepping from its place east of the node to its place west.
+    const pieces = out.filter(e => e.lines.length === 1)
+    const four = pieces.filter(e => e.lines[0] === '4').map(e => ({ x: metres(decodePolyline(e.shape)[0]!)[0], shift: e.shift ?? 0 }))
+    four.sort((a, b) => b.x - a.x)
+    expect(four.length).toBeGreaterThan(4)
+    // Heading west, right is north: 4 starts left (-0.5) and ends right (+0.5), smoothly.
+    expect(four[0]!.shift).toBeLessThan(-0.4)
+    expect(four[four.length - 1]!.shift).toBeGreaterThan(0.4)
+    for (let i = 1; i < four.length; i++) expect(four[i]!.shift).toBeGreaterThanOrEqual(four[i - 1]!.shift)
+    // Then on west as one bundle again, the pieces joining it end to end.
+    const rest = out.find(e => e.lines.length === 2 && e !== edges[0] && e.shape !== edges[0]!.shape)!
+    expect(rest.lines).toEqual(['6', '4'])
+    expect(metres(decodePolyline(rest.shape)[0]!)[0]).toBeLessThan(-20)
+  })
+
+  it('crosses on the side a way back landing at the node does not go on along', () => {
+    // The way back lands from the west along the street, going on east in the east side's order: the
+    // street's lines change sides through the node, and the crossing goes west.
+    const edges: BusMapEdge[] = [
+      { shape: encodePolyline([at(0, 0), at(300, 0)]), lines: ['4', '6'] },
+      { shape: encodePolyline([at(0, 0), at(-100, 0)]), lines: ['4', '6'] },
+      { shape: encodePolyline([at(-60, -60), at(-20, -2), at(0, 0)]), lines: ['4', '6'] }
+    ]
+    const out = crossOver(edges, strokeOf)
+    expect(out).toContainEqual(edges[0])
+    expect(out).toContainEqual(edges[2])
+    for (const piece of out.filter(e => e.lines.length === 1)) expect(metres(decodePolyline(piece.shape)[0]!)[0]).toBeLessThanOrEqual(0.5)
+  })
+
+  it('leaves lines keeping their sides, and a turn, as they are', () => {
+    const straight: BusMapEdge[] = [
+      { shape: encodePolyline([at(300, 0), at(0, 0)]), lines: ['4', '6'] },
+      { shape: encodePolyline([at(0, 0), at(-300, 0)]), lines: ['4', '6'] }
+    ]
+    expect(crossOver(straight, strokeOf)).toEqual(straight)
+    const turn: BusMapEdge[] = [
+      { shape: encodePolyline([at(300, 0), at(0, 0)]), lines: ['4', '6'] },
+      { shape: encodePolyline([at(0, 0), at(0, 300)]), lines: ['6', '4'] }
+    ]
+    expect(crossOver(turn, strokeOf)).toEqual(turn)
   })
 })
 

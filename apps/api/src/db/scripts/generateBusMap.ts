@@ -9,6 +9,7 @@ import { LINES as LRTJBDB_LINES } from '../../operators/lrtjbdb/lines'
 import { LINES as MRTJ_LINES } from '../../operators/mrtj/lines'
 import {
   bundle,
+  crossOver,
   dropBypasses,
   dropRetraces,
   easeCorners,
@@ -716,7 +717,10 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: 
   const laid = laidOnRoads(edges, roads, brt, corners, strokeKeys(lines), laying, stopsOf)
   console.log(`  corners:    ${corners.eased} eased into one bend, ${corners.junctions} turned at a node, ${corners.squeezed} narrower than their radius (${corners.folded} folding a bundle)`)
   if (laying.unlaid > 0) console.log(`  roads:      ${laying.unlaid} edge(s) kept to their own way, laid onto a road beside it`)
-  return laid
+  // Lines changing sides straight through a node cross over there, not jump.
+  const crossed = crossOver(laid, strokeKeys(lines))
+  if (crossed.length > laid.length) console.log(`  crossings:  ${crossed.length - laid.length} edge(s) more, lines crossing over`)
+  return crossed
 }
 
 /**
@@ -801,7 +805,7 @@ function laidOnRoads(
     const stops = edge.lines.flatMap(l => stopsOf.get(l) ?? [])
     return easeCorners(simplify(trimBarbs(laid, stops), SIMPLIFY_M), strokes(edge).length, corners)
   })
-  const joined = roundJunctions(eased.map((path, i) => ({ path, lines: strokes(edges[i]!) })), corners)
+  const joined = roundJunctions(eased.map((path, i) => ({ path, lines: strokes(edges[i]!), rail: railOnly(edges[i]!) })), corners)
   return edges.map((edge, i) => {
     const path = joined[i]!
     if (path.length < 2) return edge

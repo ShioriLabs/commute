@@ -236,8 +236,8 @@ export interface Network {
   /** Undirected edge `a|b` -> the lines along it. */
   edges: Map<string, Set<string>>
   adjacency: Map<number, Set<number>>
-  /** The point each line's termini lie on -> the lines ending there (BundleLine.termini). */
-  termini?: Map<number, Set<string>>
+  /** The point each line's termini lie on -> the lines ending there, each where it ends (BundleLine.termini). */
+  termini?: Map<number, Map<string, [number, number]>>
 }
 
 /*
@@ -248,6 +248,16 @@ export interface Network {
  * under the terminus's mark, not where the loop leaves the street.
  */
 const TERMINUS_M = 30
+
+/*
+ * Lines ending this far apart or more at one terminus end in lanes of their own,
+ * and lie there as they do: 6 on Galunggung's south busway, 4 on the north (12 m),
+ * as the street zoom draws them (each line's own lane, by its GTFS platform). They
+ * cross on the street instead, where it goes straight on round the loop: there a
+ * line passing twice (passesThrough) crosses for SPLIT_CROSSING, under its way
+ * back landing on the street (roundJunctions moves the node there).
+ */
+const LANES_APART_M = 4
 
 /** Whether two points, in metres, of a line heading [heading] lie either side of something keeping their streets apart. */
 export type KeptApart = (a: [number, number], b: [number, number], heading: [number, number]) => boolean
@@ -491,7 +501,7 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
     const [next] = adjacency.get(id)!
     for (const line of edges.get(edgeKey(id, next!)) ?? [code]) link(id, best, line)
   }
-  const termini = new Map<number, Set<string>>()
+  const termini = new Map<number, Map<string, [number, number]>>()
   for (const line of lines) {
     for (const [lng, lat] of line.termini ?? []) {
       const [x, y] = [lng * KX, lat * KY]
@@ -511,7 +521,10 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
           }
         }
       }
-      if (best >= 0) termini.set(best, new Set([...termini.get(best) ?? [], line.code]))
+      if (best < 0) continue
+      const here = termini.get(best) ?? new Map<string, [number, number]>()
+      if (!here.has(line.code)) here.set(line.code, [x, y])
+      termini.set(best, here)
     }
   }
   return { points, edges, adjacency, termini }
@@ -840,6 +853,11 @@ export function pairRules(network: Network, list: readonly Chain[]): PairRule[] 
   const rules: PairRule[] = []
   for (const [node, here] of ends) {
     const ending = network.termini?.get(node)
+    const laned = new Set<string>()
+    // Just a street and a loop off it, all with the same lines: there roundJunctions lands the
+    // loop's way back on the street, over where its lines may cross.
+    const linesHere = here.map(end => list[end.chain]!.lines)
+    const loopOff = here.length === 3 && linesHere.every(l => l.size === linesHere[0]!.size && [...l].every(x => linesHere[0]!.has(x)))
     const endsOf = new Map<string, End[]>()
     for (const end of here) {
       for (const line of list[end.chain]!.lines) endsOf.set(line, [...(endsOf.get(line) ?? []), end])
@@ -852,13 +870,31 @@ export function pairRules(network: Network, list: readonly Chain[]): PairRule[] 
         const [a, [a1, a2], twiceA] = through[i]!
         const [b, [b1, b2], twiceB] = through[j]!
         if (a === b) continue
-        // Both end here: they change places under the terminus's mark, for nothing.
-        if (ending?.has(a) && ending.has(b)) continue
         const shared = [a1, a2].filter(e => e === b1 || e === b2)
+        const endA = ending?.get(a)
+        const endB = ending?.get(b)
+        if (endA && endB) {
+          // Both end here: in one place, they change places under the terminus's mark, for nothing.
+          if (Math.hypot(endA[0] - endB[0], endA[1] - endB[1]) < LANES_APART_M) continue
+          // In lanes of their own, each side lies as they do (LANES_APART_M).
+          const pair = `${a}|${b}`
+          if (!laned.has(pair) && shared.length === 2) {
+            laned.add(pair)
+            for (const end of shared) {
+              // Coming in along the chain: a's lane to the left of b's?
+              const [hx, hy] = [-end.dx, -end.dy]
+              const aGoesLeft = -hy * (endA[0] - endB[0]) + hx * (endA[1] - endB[1]) > 0
+              rules.push({ a, b, inChain: end.chain, inAtStart: end.atStart, aGoesLeft, weight: SAME_CROSSING })
+            }
+          }
+        }
         // A line passing twice parts from itself here, so it is only held to keep its place along one way.
         if ((twiceA || twiceB) && shared.length !== 2) continue
         if (shared.length === 2) {
-          rules.push({ a, b, inChain: a1.chain, inAtStart: a1.atStart, outChain: a2.chain, outAtStart: a2.atStart, weight: SAME_CROSSING })
+          // Off a loop, a line passing twice crosses where the street goes straight on, under its way
+          // back landing on the street (roundJunctions): crossed in the turn, it would land beside its line.
+          const straightOn = loopOff && (twiceA || twiceB) && -a1.dx * a2.dx - a1.dy * a2.dy >= Math.cos(STRAIGHT_TURN)
+          rules.push({ a, b, inChain: a1.chain, inAtStart: a1.atStart, outChain: a2.chain, outAtStart: a2.atStart, weight: straightOn ? SPLIT_CROSSING : SAME_CROSSING })
         } else if (shared.length === 1) {
           const into = shared[0]!
           const outA = into === a1 ? a2! : a1!
@@ -1281,7 +1317,7 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport,
   }
   const strokes: Chain[] = list.map(chain => ({ path: chain.path, lines: new Set([...chain.lines].map(l => strokeOf.get(l)!)) }))
   // The termini too, as the strokes ending there.
-  const termini = new Map([...network.termini ?? []].map(([n, ls]) => [n, new Set([...ls].map(l => strokeOf.get(l)!))]))
+  const termini = new Map([...network.termini ?? []].map(([n, ls]) => [n, new Map([...ls].map(([l, xy]) => [strokeOf.get(l)!, xy]))]))
   const rules = pairRules({ ...network, termini }, strokes)
   const localOrders = orderLinesLocal(strokes, rules, strokeRank)
   const exactOrders = orderLinesExact(strokes, rules, strokeRank, await loadSolver(), report)
@@ -1901,6 +1937,8 @@ export function roundCorners(path: readonly LngLat[], lines: number, tally?: Cor
 export interface JunctionEdge {
   path: readonly LngLat[]
   lines: readonly string[]
+  /** Rail lines' alone: its track is its own way, joined as it is, never curved onto a street. */
+  rail?: boolean
 }
 
 /**
@@ -1914,7 +1952,10 @@ export interface JunctionEdge {
  *
  * A node a line goes straight through is left as it is: moved into a corner's
  * arc, it would put a notch in that line (koridor 1 straight down past Blok M,
- * where the 13E bundle turns off it).
+ * where the 13E bundle turns off it). There a loop's way back, its lines the
+ * street's both ways, curves onto the street on an arc of its own, ending along
+ * it the less sharp way: 4 and 6 back up onto Jl. Galunggung, eastward. The
+ * node moves along the street to where the arc lands, all three meeting there.
  */
 export function roundJunctions(edges: readonly JunctionEdge[], tally?: CornerTally): LngLat[][] {
   /** An edge's end at a node: the way it leaves, its end leg, and what of that leg the corner at its far end takes. */
@@ -1945,6 +1986,43 @@ export function roundJunctions(edges: readonly JunctionEdge[], tally?: CornerTal
   // Decided first, on the edges as they are, then applied: an end takes no more of its leg than its share.
   const cuts: { end: End, points: XY[] }[] = []
   const moves: { end: End, to: XY }[] = []
+  /** Coming in along [a], the turn onto [b]: left positive. */
+  const turnOf = (a: End, b: End): number => Math.atan2(-a.dx * b.dy + a.dy * b.dx, -a.dx * b.dx - a.dy * b.dy)
+  /** At a node a street goes straight through, each loop's way back curved onto the street (see above). */
+  const mergeOnto = (here: readonly End[]): void => {
+    const street = new Set<End>()
+    for (const a of here) {
+      for (const b of here) {
+        if (a.edge !== b.edge && a.leg > 0 && b.leg > 0 && Math.abs(turnOf(a, b)) < ARC_MIN_TURN) street.add(a).add(b)
+      }
+    }
+    for (const side of here) {
+      if (street.has(side) || side.leg === 0) continue
+      const lines = edges[side.edge]!.lines
+      if (edges[side.edge]!.rail) continue
+      // The street's lines just the way back's, either side: a loop off it, all its lines round.
+      const same = (other: readonly string[]): boolean => other.length === lines.length && lines.every(l => other.includes(l))
+      const onto = [...street].filter(s => s.edge !== side.edge && same(edges[s.edge]!.lines))
+      if (onto.length < 2) continue
+      const b = onto.sort((p, q) => Math.abs(turnOf(side, p)) - Math.abs(turnOf(side, q)))[0]!
+      const turn = turnOf(side, b)
+      if (Math.abs(turn) < ARC_MIN_TURN || Math.abs(turn) > ARC_MAX_TURN) continue
+      const width = Math.max(lines.length, edges[b.edge]!.lines.length)
+      const wanted = tangentFor(turn, arcRadius(width))
+      const tangent = Math.min(wanted, roomAt(side, wanted), roomAt(b, wanted))
+      tallyCorner(tally, turn, wanted, tangent, width)
+      const xy = paths[side.edge]!
+      const node = side.atStart ? xy[0]! : xy[xy.length - 1]!
+      const steps = 2 * Math.max(1, Math.ceil(Math.abs(turn) / ARC_STEP / 2))
+      // The whole arc for the way back, from its own leg to the street's; the node along the street
+      // to where it lands, so the street stays straight and any swap of its lines is under the arc.
+      const arc = arcPoints(node, -side.dx, -side.dy, turn, tangent, steps)
+      cuts.push({ end: side, points: arc })
+      for (const end of here) if (end !== side) moves.push({ end, to: arc[arc.length - 1]! })
+      if (tally) tally.junctions++
+      return
+    }
+  }
   for (const here of ends.values()) {
     let best: { a: End, b: End, shared: number, turn: number } | null = null
     let straightThrough = false
@@ -1963,6 +2041,7 @@ export function roundJunctions(edges: readonly JunctionEdge[], tally?: CornerTal
         if (!best || shared > best.shared || (shared === best.shared && Math.abs(turn) > Math.abs(best.turn))) best = { a, b, shared, turn }
       }
     }
+    if (straightThrough) mergeOnto(here)
     if (!best || straightThrough) continue
     const { a, b, turn } = best
     const radius = arcRadius(Math.max(edges[a.edge]!.lines.length, edges[b.edge]!.lines.length))
@@ -2179,4 +2258,112 @@ export function dropBypasses(pieces: readonly LngLat[][], apart?: KeptApart): Ln
  */
 export function isDrawn(code: string): boolean {
   return /^\d+$/.test(code) || code === '13E' || code === 'L13E' || isRailCode(code)
+}
+
+/*
+ * Lines changing sides where their bundle goes straight on through a node,
+ * crossing over: drawn as offsets from the street's middle, a swap there is a
+ * jump, each line ending on one side and starting again on the other (4 and 6
+ * on Jl. Galunggung, where the loop's way back lands). Over the first CROSS_M
+ * of one side (the one the node's other edges don't go on along), in CROSS_STEPS pieces, each stroke is drawn alone at an offset
+ * easing from where it comes in to where it goes on, so they cross as Transit
+ * draws a crossing. Not rail: its strokes are heavier (RAIL_WEIGHT).
+ */
+const CROSS_M = 50
+const CROSS_STEPS = 10
+const CROSS_TURN_COS = Math.cos((20 * Math.PI) / 180)
+
+/** [edges] with each straight-on change of sides drawn as a crossing (see above). */
+export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<string, string>): BusMapEdge[] {
+  const paths = edges.map(e => toXYs(decodePolyline(e.shape)))
+  const lengthOf = (xy: readonly XY[]): number => xy.reduce((m, p, i) => (i ? m + Math.hypot(p[0] - xy[i - 1]![0], p[1] - xy[i - 1]![1]) : 0), 0)
+  /** Each stroke (a run of lines of one colour) of [edge], left to right along it, at its offset from the middle. */
+  const strokes = (edge: BusMapEdge): { key: string, lines: string[], slot: number }[] => {
+    const runs: { key: string, lines: string[] }[] = []
+    for (const line of edge.lines) {
+      const key = strokeOf.get(line) ?? line
+      const run = runs[runs.length - 1]
+      if (run && run.key === key) run.lines.push(line)
+      else runs.push({ key, lines: [line] })
+    }
+    return runs.map((run, i) => ({ ...run, slot: i - (runs.length - 1) / 2 + (edge.shift ?? 0) }))
+  }
+  // Each edge's ends at each node, and the way it leaves the node.
+  interface End { edge: number, atStart: boolean, dx: number, dy: number }
+  const ends = new Map<string, End[]>()
+  paths.forEach((xy, e) => {
+    if (xy.length < 2) return
+    for (const atStart of [true, false]) {
+      const way = atStart ? xy : [...xy].reverse()
+      const from = way[0]!
+      const to = way.find(p => Math.hypot(p[0] - from[0], p[1] - from[1]) >= 20) ?? way[way.length - 1]!
+      const d = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1
+      const key = `${from[0].toFixed(1)},${from[1].toFixed(1)}`
+      ends.set(key, [...ends.get(key) ?? [], { edge: e, atStart, dx: (to[0] - from[0]) / d, dy: (to[1] - from[1]) / d }])
+    }
+  })
+  const out = edges.map(e => [e])
+  const crossed = new Set<number>()
+  for (const here of ends.values()) {
+    for (const a of here) {
+      for (const b of here) {
+        if (a.edge >= b.edge || crossed.has(a.edge) || crossed.has(b.edge)) continue
+        if (-(a.dx * b.dx + a.dy * b.dy) < CROSS_TURN_COS) continue
+        const ea = edges[a.edge]!
+        const eb = edges[b.edge]!
+        if ([...ea.lines, ...eb.lines].some(isRailCode)) continue
+        // The crossing on the side the node's other edges don't go straight on along (a way back landing
+        // on the street goes on along the side it lands facing), else the longer; out from the node.
+        const goingOn = (x: End, y: End): number => here.filter(c => c !== a && c !== b && -(c.dx * x.dx + c.dy * x.dy) > -(c.dx * y.dx + c.dy * y.dy)).length
+        const [onA, onB] = [goingOn(a, b), goingOn(b, a)]
+        const [host, from] = onA !== onB ? (onB < onA ? [b, a] : [a, b]) : lengthOf(paths[b.edge]!) >= lengthOf(paths[a.edge]!) ? [b, a] : [a, b]
+        const hostEdge = edges[host.edge]!
+        // Offsets right of the way out: an edge run against it has its right on the left.
+        const outward = strokes(hostEdge).map(s => ({ ...s, slot: host.atStart ? s.slot : -s.slot }))
+        const inward = new Map(strokes(edges[from.edge]!).map(s => [s.key, from.atStart ? -s.slot : s.slot]))
+        const moving = outward.filter(s => inward.has(s.key))
+        const swapped = moving.some((s, i) => moving.some((t, j) => i < j && (inward.get(s.key)! - inward.get(t.key)!) * (s.slot - t.slot) < 0))
+        if (!swapped) continue
+        const xy = host.atStart ? paths[host.edge]! : [...paths[host.edge]!].reverse()
+        const length = lengthOf(xy)
+        const span = Math.min(CROSS_M, length / 3)
+        /** The point [m] along [xy], and the index of the vertex after it. */
+        const along = (m: number): [XY, number] => {
+          let walked = 0
+          for (let i = 1; i < xy.length; i++) {
+            const leg = Math.hypot(xy[i]![0] - xy[i - 1]![0], xy[i]![1] - xy[i - 1]![1])
+            if (walked + leg >= m) {
+              const t = leg ? (m - walked) / leg : 0
+              return [[xy[i - 1]![0] + (xy[i]![0] - xy[i - 1]![0]) * t, xy[i - 1]![1] + (xy[i]![1] - xy[i - 1]![1]) * t], i]
+            }
+            walked += leg
+          }
+          return [xy[xy.length - 1]!, xy.length - 1]
+        }
+        /** [xy] between [m0] and [m1] along it. */
+        const between = (m0: number, m1: number): XY[] => {
+          const [p0, i0] = along(m0)
+          const [p1, i1] = along(m1)
+          return [p0, ...xy.slice(i0, i1), p1]
+        }
+        const pieces: BusMapEdge[] = []
+        for (let k = 0; k < CROSS_STEPS; k++) {
+          const shape = encodePolyline(toLngLats(between((span * k) / CROSS_STEPS, (span * (k + 1)) / CROSS_STEPS)))
+          const t = (k + 0.5) / CROSS_STEPS
+          const ease = t * t * (3 - 2 * t)
+          for (const s of outward) {
+            const start = inward.get(s.key) ?? s.slot
+            const shift = Math.round((start + (s.slot - start) * ease) * 1e3) / 1e3
+            pieces.push({ shape, lines: s.lines, ...(shift !== 0 ? { shift } : {}) })
+          }
+        }
+        // The rest of the side on from the crossing, as it was and the way it ran.
+        const rest = between(span, length)
+        const restShape = encodePolyline(toLngLats(host.atStart ? rest : [...rest].reverse()))
+        out[host.edge] = [{ ...hostEdge, shape: restShape }, ...pieces]
+        crossed.add(host.edge)
+      }
+    }
+  }
+  return out.flat()
 }
