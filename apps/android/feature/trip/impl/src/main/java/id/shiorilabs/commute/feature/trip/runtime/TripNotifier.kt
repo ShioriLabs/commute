@@ -321,6 +321,9 @@ class TripNotifier @Inject constructor(
         return if (estimated) {
             context.getString(R.string.trip_alert_alight_estimated_title) to
                 copy.sentences(context.getString(R.string.trip_alert_alight_estimated, alighting), next) + check
+        } else if (thenIndex == null) {
+            // The last stop: one sentence, as said aloud, not the stop's name then a label.
+            context.getString(R.string.trip_alert_alight_title) to context.getString(R.string.trip_alert_alight_arrived, alighting) + check
         } else {
             context.getString(R.string.trip_alert_alight_title) to copy.sentences(alighting, next) + check
         }

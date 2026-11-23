@@ -42,6 +42,8 @@
     <string name="trip_alert_prepare_estimated">Sekitar %1$d menit lagi sampai %2$s, cek papan stasiun ya</string>
     <string name="trip_alert_prepare_estimated_untimed">Sebentar lagi sampai %1$s, cek papan stasiun ya</string>
     <string name="trip_alert_alight_title">Turun di sini</string>
+    <!-- Under "Turun di sini" at the trip's last stop; a change names the stop and the next ride instead. -->
+    <string name="trip_alert_alight_arrived">Kamu telah tiba di %1$s</string>
     <string name="trip_alert_alight_estimated_title">Harusnya udah sampai</string>
     <string name="trip_alert_alight_estimated">%1$s. Cek papan stasiun dulu ya</string>
     <!-- Under "Turun di sini", after the KRL's own announcement, in the app's own "kamu". -->
