@@ -141,6 +141,18 @@ class BundlePathsTest {
     }
 
     @Test
+    fun `zoomed out a street's small bends are straightened, at street zoom they are kept`() {
+        // East 600 m with a 12 m kink at the middle.
+        val paths = map(
+            BusMapEdge(encode(at(0.0, 0.0), at(280.0, 0.0), at(300.0, 12.0), at(320.0, 0.0), at(600.0, 0.0)), listOf("4")),
+        ).bundlePaths()
+        val four = paths.single()
+        val out = BUNDLE_BANDS.first { 12.0 >= it.from && 12.0 < it.to }
+        assertTrue(offsetBundlePath(four, out).all { kotlin.math.abs(metres(it).second) < 1.0 })
+        assertTrue(offsetBundlePath(four, band15).any { metres(it).second > 6.0 })
+    }
+
+    @Test
     fun `where a line's edges branch, it goes on along the straightest and starts the other afresh`() {
         val paths = map(
             BusMapEdge(encode(at(0.0, 0.0), at(300.0, 0.0)), listOf("9")),

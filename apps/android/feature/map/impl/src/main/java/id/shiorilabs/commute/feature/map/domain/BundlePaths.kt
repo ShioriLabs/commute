@@ -213,8 +213,11 @@ fun offsetBundlePath(path: BundlePath, band: BundleBand, heavier: Double = 1.0):
     val ys = ArrayList<Double>()
     val along = ArrayList<Double>()
     val pieceEnd = DoubleArray(pieces.size)
+    // Zoomed out, each edge straightened first (straightenDp): every line on it alike, so they stay
+    // side by side, and its ends kept, so they still meet at the nodes.
+    val straightenM = straightenDp(z) * heavier * metresPerDp
     for ((p, piece) in pieces.withIndex()) {
-        for ((i, q) in piece.points.withIndex()) {
+        for ((i, q) in straightened(piece.points, kx, straightenM).withIndex()) {
             val x = q.longitude * kx
             val y = q.latitude * M_PER_DEG_LAT
             if (xs.isNotEmpty() && (p > 0 && i == 0 || abs(x - xs.last()) + abs(y - ys.last()) < 1e-6)) continue
@@ -447,6 +450,26 @@ private fun roundCorners(xs: ArrayList<Double>, ys: ArrayList<Double>, along: Ar
     along += od.last()
 }
 
+/**
+ * How far, in dp, a street's way may be straightened at zoom [z]: zoomed out a bend in the street
+ * isn't read, only the lines' run, as a transit map draws them; [STRAIGHTEN_DP] out to
+ * [STRAIGHTEN_FULL_ZOOM], easing to none by [STRAIGHTEN_NONE_ZOOM], where the streets are read.
+ * Taken times the lines' weight, so it stays about a line's width and a station's mark still sits
+ * on its lines.
+ */
+fun straightenDp(z: Double): Double = when {
+    z <= STRAIGHTEN_FULL_ZOOM -> STRAIGHTEN_DP
+    z >= STRAIGHTEN_NONE_ZOOM -> 0.0
+    else -> STRAIGHTEN_DP * (STRAIGHTEN_NONE_ZOOM - z) / (STRAIGHTEN_NONE_ZOOM - STRAIGHTEN_FULL_ZOOM)
+}
+
+/** [points] straightened to within [toleranceM] (Douglas–Peucker), their ends kept. */
+private fun straightened(points: List<GeoPoint>, kx: Double, toleranceM: Double): List<GeoPoint> {
+    if (toleranceM <= 0 || points.size < 3) return points
+    val xy = points.map { doubleArrayOf(it.longitude * kx, it.latitude * M_PER_DEG_LAT) }
+    return simplifyXY(xy, toleranceM).map { GeoPoint(it[1] / M_PER_DEG_LAT, it[0] / kx) }
+}
+
 /** Douglas–Peucker over [pts], [tolerance] metres. */
 private fun simplifyXY(pts: List<DoubleArray>, tolerance: Double): List<DoubleArray> {
     if (pts.size < 3) return pts
@@ -521,6 +544,11 @@ private const val LOOP_WIDTHS = 6.0
 
 /** Each path's own way smoothed over about this many line widths: a hook smaller than the line, gone. */
 private const val SMOOTH_WIDTHS = 3.0
+
+/** A street straightened up to this many dp zoomed out (straightenDp), and the zooms it eases off over. */
+private const val STRAIGHTEN_DP = 2.0
+private const val STRAIGHTEN_FULL_ZOOM = 13.0
+private const val STRAIGHTEN_NONE_ZOOM = 15.0
 
 /** The paths simplified to this, in dp at their band's zoom. */
 private const val SIMPLIFY_PX = 0.3
