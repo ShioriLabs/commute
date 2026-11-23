@@ -868,6 +868,22 @@ describe('contractShortEdges', () => {
     expect(out.some(e => e.lines.join() === '10' && decodePolyline(e.shape).some(p => metres(p)[0] < -10))).toBe(true)
   })
 
+  it('folds two tracks left between the same nodes side by side into one, each line beside its neighbour', () => {
+    // KCI A up into Duri on C's track, back out on T's 15 m off; A, T and C one bundle south of them.
+    const south = at(0, 0)
+    const north = at(0, 250)
+    const edges: BusMapEdge[] = [
+      { shape: encodePolyline([at(0, -300), south]), lines: ['KCI:A', 'KCI:T', 'KCI:C'] },
+      { shape: encodePolyline([south, at(8, 120), north]), lines: ['KCI:A', 'KCI:C'] },
+      { shape: encodePolyline([south, at(-7, 120), north]), lines: ['KCI:A', 'KCI:T'] },
+      { shape: encodePolyline([north, at(0, 800)]), lines: ['KCI:C'] }
+    ]
+    const out = contractShortEdges(edges, 60)
+    const between = out.filter(e => e.lines.includes('KCI:A') && decodePolyline(e.shape).some(p => metres(p)[1] > 100 && metres(p)[1] < 200))
+    expect(between.length).toBe(1)
+    expect(between[0]!.lines).toEqual(['KCI:A', 'KCI:T', 'KCI:C'])
+  })
+
   it('leaves edges between a junction and a line end, and longer ones, as they are', () => {
     const edges: BusMapEdge[] = [
       { shape: encodePolyline([at(0, 0), at(0, 30)]), lines: ['A'] },

@@ -2507,7 +2507,7 @@ export function contractShortEdges(edges: readonly BusMapEdge[], minM: number): 
     }
     return xy[xy.length - 1]!
   }
-  let list = edges.map(e => ({ edge: e, path: toXYs(decodePolyline(e.shape)) })).filter(e => e.path.length >= 2)
+  let list: { edge: BusMapEdge, path: XY[] }[] = edges.map(e => ({ edge: e, path: toXYs(decodePolyline(e.shape)) })).filter(e => e.path.length >= 2)
   for (;;) {
     const degree = new Map<string, number>()
     for (const { path } of list) for (const p of [path[0]!, path[path.length - 1]!]) degree.set(keyOf(p), (degree.get(keyOf(p)) ?? 0) + 1)
@@ -2553,5 +2553,76 @@ export function contractShortEdges(edges: readonly BusMapEdge[], minM: number): 
       })
       .filter(({ path }) => keyOf(path[0]!) !== keyOf(path[path.length - 1]!) || lengthOf(path) >= 3 * minM)
   }
-  return list.map(({ edge, path }) => ({ ...edge, shape: encodePolyline(toLngLats(path)) }))
+  // Two edges the knots left between the same two nodes, side by side (BUBBLE_M), one street drawn
+  // twice: KCI A up into Duri on C's track and back out on T's, 20 m apart, whose ends 9 m apart
+  // were one node only once the knot there was drawn in. Folded into the one with more lines, each
+  // line of the other beside the line it ran beside there.
+  const pairs = new Map<string, number[]>()
+  list.forEach(({ path }, i) => {
+    const [a, b] = [keyOf(path[0]!), keyOf(path[path.length - 1]!)]
+    if (a === b) return
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`
+    pairs.set(key, [...(pairs.get(key) ?? []), i])
+  })
+  const folded = new Set<number>()
+  const widest = (from: readonly XY[], to: readonly XY[]): number => Math.max(...from.map(p => nearestOn(to, p)))
+  for (const group of pairs.values()) {
+    if (group.length < 2) continue
+    const sorted = [...group].sort((i, j) => list[j]!.edge.lines.length - list[i]!.edge.lines.length || lengthOf(list[j]!.path) - lengthOf(list[i]!.path))
+    const keep = list[sorted[0]!]!
+    for (const i of sorted.slice(1)) {
+      const fold = list[i]!
+      // Tracks only: a bus line's two carriageways, or a loop round a block, stay two (folding them
+      // parted lines side by side at Cawang).
+      if (![...keep.edge.lines, ...fold.edge.lines].every(isRailCode)) continue
+      const [lk, lf] = [lengthOf(keep.path), lengthOf(fold.path)]
+      if (Math.max(lk, lf) > BUBBLE_STRETCH * Math.min(lk, lf)) continue
+      if (widest(fold.path, keep.path) > BUBBLE_M || widest(keep.path, fold.path) > BUBBLE_M) continue
+      // The fold's lines along keep's way: run against it, its left to right is the other way round.
+      const same = keyOf(fold.path[0]!) === keyOf(keep.path[0]!)
+      const order = same ? fold.edge.lines : [...fold.edge.lines].reverse()
+      const lines = [...new Set([...keep.edge.lines, ...order])]
+      // In the order of an edge going on from either end with them all (A, T and C south of Duri),
+      // along keep's way; else each of the fold's beside the line it ran beside.
+      const [start, end] = [keyOf(keep.path[0]!), keyOf(keep.path[keep.path.length - 1]!)]
+      const alongKeep = list.flatMap((other, j): string[][] => {
+        if (group.includes(j) || !lines.every(l => other.edge.lines.includes(l))) return []
+        const [os, oe] = [keyOf(other.path[0]!), keyOf(other.path[other.path.length - 1]!)]
+        const kept = other.edge.lines.filter(l => lines.includes(l))
+        if (oe === start || os === end) return [kept]
+        if (os === start || oe === end) return [[...kept].reverse()]
+        return []
+      })[0]
+      const merged = alongKeep ?? [...keep.edge.lines]
+      if (!alongKeep) {
+        order.forEach((line, k) => {
+          if (merged.includes(line)) return
+          const before = order.slice(0, k).reverse().find(l => merged.includes(l))
+          merged.splice(before === undefined ? 0 : merged.indexOf(before) + 1, 0, line)
+        })
+      }
+      keep.edge = { ...keep.edge, lines: merged }
+      folded.add(i)
+    }
+  }
+  return list.filter((_, i) => !folded.has(i)).map(({ edge, path }) => ({ ...edge, shape: encodePolyline(toLngLats(path)) }))
+}
+
+/** Two edges between the same nodes this close all along, no longer than this many times each other, are one street. */
+const BUBBLE_M = 40
+const BUBBLE_STRETCH = 1.5
+
+/** How far [p] lies from the polyline [path], in its own units. */
+function nearestOn(path: readonly XY[], p: XY): number {
+  let best = Infinity
+  for (let i = 1; i < path.length; i++) {
+    const [ax, ay] = path[i - 1]!
+    const [bx, by] = path[i]!
+    const dx = bx - ax
+    const dy = by - ay
+    const l2 = dx * dx + dy * dy || 1
+    const t = Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / l2))
+    best = Math.min(best, Math.hypot(p[0] - (ax + t * dx), p[1] - (ay + t * dy)))
+  }
+  return best
 }
