@@ -87,6 +87,8 @@ fun StreetsMap(
     lines: StreetsLines = StreetsLines.ADJUSTED,
     /** Raw's lines as GeoJSON, once read; null till then. */
     feed: String? = null,
+    /** The halte and station marks drawn. */
+    dots: StreetsDots = StreetsDots.ALL,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -189,7 +191,7 @@ fun StreetsMap(
         addBusMap(style, busMap, dark, screenDensity, roundelFace)
     }
     // As it shows, or raw or processed, and a line alone: the rest faded under it, it over them.
-    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed) {
+    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed, dots) {
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
         val debug = when (lines) {
@@ -198,7 +200,7 @@ fun StreetsMap(
             StreetsLines.ADJUSTED -> null
         }
         if (debug != null) style.getSourceAs<GeoJsonSource>(DEBUG_SOURCE)?.setGeoJson(debug)
-        showLines(style, debug = debug != null, code = isolated)
+        showLines(style, debug = debug != null, code = isolated, dots = dots)
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
@@ -769,11 +771,13 @@ private fun parseColor(hex: String): Int =
  * marks going with the network; line [code] drawn alone over the rest faded, or null for all of
  * them as they are.
  */
-private fun showLines(style: Style, debug: Boolean, code: String?) {
+private fun showLines(style: Style, debug: Boolean, code: String?, dots: StreetsDots = StreetsDots.ALL) {
     fun visible(shown: Boolean) = PropertyFactory.visibility(if (shown) Property.VISIBLE else Property.NONE)
     val faded = PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f)
     for (id in LINE_LAYERS + CASING_LAYERS) style.getLayer(id)?.setProperties(visible(!debug), faded)
-    for (id in listOf(BAR_LAYER, MARK_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(!debug))
+    for (id in listOf(BAR_LAYER, MARK_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(!debug && dots.haltes))
+    for (id in listOf(HALTE_LAYER, HALTE_NAME_LAYER)) style.getLayer(id)?.setProperties(visible(dots.haltes))
+    for (id in listOf(RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(dots.stations))
     style.getLayer(DEBUG_LAYER)?.setProperties(visible(debug), faded)
     for ((id, shown) in listOf(ISOLATE_LAYER to !debug, ISOLATE_LAYER + CASING_SUFFIX to !debug, DEBUG_ISOLATE_LAYER to debug)) {
         (style.getLayer(id) as? LineLayer)?.apply {

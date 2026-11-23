@@ -41,4 +41,9 @@
     <string name="map_debug_lines_raw">Raw</string>
     <string name="map_debug_lines_processed">Processed</string>
     <string name="map_debug_lines_adjusted">Adjusted</string>
+    <string name="map_debug_dots">Titik</string>
+    <string name="map_debug_dots_all">Semua</string>
+    <string name="map_debug_dots_haltes">Halte</string>
+    <string name="map_debug_dots_stations">Stasiun</string>
+    <string name="map_debug_dots_none">Tidak</string>
 </resources>

@@ -29,12 +29,15 @@ import id.shiorilabs.commute.feature.map.R
 
 /**
  * "Debug Peta", Experimental "Panel Debug Peta": tools for checking Peta Bus on the streets layer,
- * one item under another. First, how the route lines are drawn: [StreetsLines].
+ * one item under another: how the route lines are drawn ([StreetsLines]), and which halte and station
+ * marks show ([StreetsDots]).
  */
 @Composable
 internal fun MapDebugPanel(
     lines: StreetsLines,
     onLines: (StreetsLines) -> Unit,
+    dots: StreetsDots,
+    onDots: (StreetsDots) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val title = stringResource(R.string.map_debug_title)
@@ -56,6 +59,19 @@ internal fun MapDebugPanel(
                     ),
                     picked = lines,
                     onPick = onLines,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text = stringResource(R.string.map_debug_dots), style = MaterialTheme.typography.labelLarge)
+                Choice(
+                    options = listOf(
+                        stringResource(R.string.map_debug_dots_all) to StreetsDots.ALL,
+                        stringResource(R.string.map_debug_dots_haltes) to StreetsDots.HALTES,
+                        stringResource(R.string.map_debug_dots_stations) to StreetsDots.STATIONS,
+                        stringResource(R.string.map_debug_dots_none) to StreetsDots.NONE,
+                    ),
+                    picked = dots,
+                    onPick = onDots,
                 )
             }
         }

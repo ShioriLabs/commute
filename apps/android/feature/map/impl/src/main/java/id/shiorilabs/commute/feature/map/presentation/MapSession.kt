@@ -25,6 +25,17 @@ class MapSession @Inject constructor() {
 
     /** The debug panel's pick: how the streets layer draws its lines. */
     val streetsLines = MutableStateFlow(StreetsLines.ADJUSTED)
+
+    /** The debug panel's pick: which of the streets layer's halte and station marks show. */
+    val streetsDots = MutableStateFlow(StreetsDots.ALL)
+}
+
+/** Which marks the streets layer draws, picked in the map's debug panel. */
+enum class StreetsDots(val haltes: Boolean, val stations: Boolean) {
+    ALL(haltes = true, stations = true),
+    HALTES(haltes = true, stations = false),
+    STATIONS(haltes = false, stations = true),
+    NONE(haltes = false, stations = false),
 }
 
 /** How the streets layer draws Peta Bus's lines, picked in the map's debug panel. */

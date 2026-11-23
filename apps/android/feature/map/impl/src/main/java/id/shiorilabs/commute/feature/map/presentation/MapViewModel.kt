@@ -245,6 +245,13 @@ class MapViewModel @Inject constructor(
         if (lines == StreetsLines.RAW) loadFeed()
     }
 
+    /** Which halte and station marks the streets layer draws. */
+    val streetsDots: StateFlow<StreetsDots> get() = session.streetsDots
+
+    fun showDots(dots: StreetsDots) {
+        session.streetsDots.value = dots
+    }
+
     /** The lines as the feed has them, as GeoJSON; null until [loadFeed] has read them. */
     val feedLines: StateFlow<String?> get() = feed
     private val feed = MutableStateFlow<String?>(null)

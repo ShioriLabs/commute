@@ -479,6 +479,7 @@ private fun MapWithSheet(
     // Experimental "Panel Debug Peta": a button under the layers one on the streets, opening its panel.
     val debugEnabled by viewModel.debugEnabled.collectAsStateWithLifecycle()
     val streetsLines by viewModel.streetsLines.collectAsStateWithLifecycle()
+    val streetsDots by viewModel.streetsDots.collectAsStateWithLifecycle()
     val feedLines by viewModel.feedLines.collectAsStateWithLifecycle()
     val debugOffered = streets && debugEnabled
     var debugOpen by remember { mutableStateOf(false) }
@@ -660,6 +661,7 @@ private fun MapWithSheet(
                     isolated = isolatedLine,
                     lines = if (debugOffered) streetsLines else StreetsLines.ADJUSTED,
                     feed = feedLines,
+                    dots = if (debugOffered) streetsDots else StreetsDots.ALL,
                 )
                 val pill = streetsPill?.let { busMap?.lines?.get(it) }
                 if (pill != null && selection == null) {
@@ -1010,6 +1012,11 @@ private fun MapWithSheet(
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                     viewModel.showLines(lines)
                 },
+                dots = streetsDots,
+                onDots = { dots ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.showDots(dots)
+                },
             )
         }
     }
@@ -1033,6 +1040,7 @@ private fun StreetsLayer(
     isolated: String?,
     lines: StreetsLines,
     feed: String?,
+    dots: StreetsDots,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -1055,6 +1063,7 @@ private fun StreetsLayer(
                 isolated = isolated,
                 lines = lines,
                 feed = feed,
+                dots = dots,
                 modifier = Modifier.fillMaxSize(),
             )
         }
