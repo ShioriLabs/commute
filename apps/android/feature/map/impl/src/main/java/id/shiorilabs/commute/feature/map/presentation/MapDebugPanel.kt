@@ -31,7 +31,8 @@ import id.shiorilabs.commute.feature.map.R
  * "Debug Peta", Experimental "Panel Debug Peta": tools for checking Peta Bus on the streets layer,
  * one item under another: how the route lines are drawn ([StreetsLines]), which halte and station
  * marks show ([StreetsDots]), the lines zoomed out bundled or as at street zoom ([StreetsOverview]),
- * and lines sharing a lane on their own streets side by side or not ([StreetsApart]).
+ * lines sharing a lane on their own streets side by side or not ([StreetsApart]), how heavy the lines
+ * are ([StreetsWeight]), and whose network is drawn ([StreetsCity]).
  */
 @Composable
 internal fun MapDebugPanel(
@@ -43,6 +44,10 @@ internal fun MapDebugPanel(
     onOverview: (StreetsOverview) -> Unit,
     apart: StreetsApart,
     onApart: (StreetsApart) -> Unit,
+    weight: StreetsWeight,
+    onWeight: (StreetsWeight) -> Unit,
+    city: StreetsCity,
+    onCity: (StreetsCity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val title = stringResource(R.string.map_debug_title)
@@ -99,6 +104,29 @@ internal fun MapDebugPanel(
                     ),
                     picked = apart,
                     onPick = onApart,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text = "Line weight", style = MaterialTheme.typography.labelLarge)
+                Choice(
+                    options = listOf(
+                        "1×" to StreetsWeight.NORMAL,
+                        "1.5×" to StreetsWeight.HEAVIER,
+                        "2×" to StreetsWeight.DOUBLE,
+                    ),
+                    picked = weight,
+                    onPick = onWeight,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text = "Data", style = MaterialTheme.typography.labelLarge)
+                Choice(
+                    options = listOf(
+                        "Jakarta" to StreetsCity.JAKARTA,
+                        "New York" to StreetsCity.NEW_YORK,
+                    ),
+                    picked = city,
+                    onPick = onCity,
                 )
             }
         }

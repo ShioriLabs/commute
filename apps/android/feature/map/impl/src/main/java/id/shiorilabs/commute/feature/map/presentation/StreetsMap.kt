@@ -93,6 +93,10 @@ fun StreetsMap(
     overview: StreetsOverview = StreetsOverview.BUNDLED,
     /** The debug panel's pick: lines sharing a lane on their own streets side by side, or one over another. */
     apart: StreetsApart = StreetsApart.SEPARATED,
+    /** The debug panel's pick: whose network is drawn, the camera taken there. */
+    city: StreetsCity = StreetsCity.JAKARTA,
+    /** The debug panel's pick: the lines, their spacing and the halte marks this much heavier. */
+    weight: StreetsWeight = StreetsWeight.NORMAL,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -181,6 +185,7 @@ fun StreetsMap(
         }
     }
 
+    LaunchedEffect(state.map, city) { state.showCity(city) }
     // A theme or detail change swaps the style; Peta Bus and the rider's dot go back over the new one.
     LaunchedEffect(state.map, styleUrl) {
         val map = state.map ?: return@LaunchedEffect
@@ -189,13 +194,13 @@ fun StreetsMap(
             state.enableRider(context, style)
         }
     }
-    LaunchedEffect(state.style, busMap, dark) {
+    LaunchedEffect(state.style, busMap, dark, weight) {
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
-        addBusMap(style, busMap, dark, screenDensity, roundelFace)
+        addBusMap(style, busMap, dark, screenDensity, roundelFace, weight.scale)
     }
     // As it shows, or raw or processed, and a line alone: the rest faded under it, it over them.
-    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed, dots, overview, apart) {
+    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed, dots, overview, apart, weight) {
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
         val debug = when (lines) {
@@ -204,7 +209,7 @@ fun StreetsMap(
             StreetsLines.ADJUSTED -> null
         }
         if (debug != null) style.getSourceAs<GeoJsonSource>(DEBUG_SOURCE)?.setGeoJson(debug)
-        showLines(style, debug = debug != null, code = isolated, dots = dots, overview = overview, apart = apart)
+        showLines(style, debug = debug != null, code = isolated, dots = dots, overview = overview, apart = apart, weight = weight.scale)
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
@@ -245,7 +250,35 @@ class StreetsMapState(private val initial: StreetsCamera?, private val save: (St
         this.map = map
     }
 
+    private var city: StreetsCity? = null
+
+    /**
+     * The camera kept to [next]'s city: Jabodetabek's bounds, or none for New York (shirase draws no
+     * streets there, the lines on its bare ground). Taken there when the pick changes, and to New
+     * York on opening there, Jabodetabek's bounds having held the camera to Jakarta till now.
+     */
+    internal fun showCity(next: StreetsCity) {
+        val map = map ?: return
+        if (city == next) return
+        val first = city == null
+        city = next
+        when (next) {
+            StreetsCity.JAKARTA -> {
+                map.setLatLngBoundsForCameraTarget(JABODETABEK)
+                if (!first) map.cameraPosition = cameraAt(DEFAULT_CAMERA)
+            }
+            StreetsCity.NEW_YORK -> {
+                map.setLatLngBoundsForCameraTarget(null)
+                map.cameraPosition = cameraAt(NEW_YORK_CAMERA)
+            }
+        }
+    }
+
+    private fun cameraAt(at: StreetsCamera) =
+        CameraPosition.Builder().target(LatLng(at.latitude, at.longitude)).zoom(at.zoom).bearing(at.bearing).build()
+
     internal fun detach() {
+        city = null
         map = null
         style = null
         view = null
@@ -363,7 +396,7 @@ private fun hasLocation(context: Context): Boolean =
  * the haltes' names up close go over everything. Replaces what an earlier call added, for a theme
  * change.
  */
-private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float, typeface: Typeface?) {
+private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float, typeface: Typeface?, heavier: Float = 1f) {
     for (id in LINE_LAYERS + CASING_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, DEBUG_LAYER, DEBUG_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
     for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, DEBUG_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE)) style.removeSource(id)
 
@@ -423,7 +456,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
             Expression.stop(18, Expression.product(slot, Expression.literal(LINE_W_18 * scale))),
         )
     }
-    fun lines(id: String, slot: String, filter: Expression, scale: Float = 1f) = LineLayer(id, LINES_SOURCE).withProperties(
+    fun lines(id: String, slot: String, filter: Expression, scale: Float = heavier) = LineLayer(id, LINES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
         PropertyFactory.lineWidth(width(scale)),
         PropertyFactory.lineOffset(offset(slot, scale)),
@@ -433,7 +466,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     // Zoomed out, the trunk koridors alone (plain-number BRTs and L13E), closed up among themselves and
     // drawn bolder, there being fewer: the city's network rather than every branch and feeder. Closer
     // in, every line at its own place.
-    val trunks = lines(TRUNK_LAYER, BusMapProps.TRUNK_SLOT, Expression.has(BusMapProps.TRUNK_SLOT), TRUNK_SCALE)
+    val trunks = lines(TRUNK_LAYER, BusMapProps.TRUNK_SLOT, Expression.has(BusMapProps.TRUNK_SLOT), TRUNK_SCALE * heavier)
         .apply { maxZoom = ALL_LINES_MIN_ZOOM }
     val aui = lines(AUI_LAYER, BusMapProps.SLOT, Expression.eq(Expression.get(BusMapProps.KIND), Expression.literal("AUI")))
         .apply {
@@ -450,7 +483,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     // there, and a bundle drawn into a junction's one point (Bundaran HI) jumps off them.
     fun routes(id: String, kinds: Expression) = LineLayer(id, ROUTES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
-        PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(STREET_ZOOM, byKind(ROUTE_W_16)), Expression.stop(18, byKind(ROUTE_W_18)))),
+        PropertyFactory.lineWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(STREET_ZOOM, byKind(ROUTE_W_16 * heavier)), Expression.stop(18, byKind(ROUTE_W_18 * heavier)))),
         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
     ).withFilter(kinds).apply { minZoom = STREET_ZOOM }
@@ -458,9 +491,9 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     val brtRoutes = routes(BRT_ROUTE_LAYER, trunkKinds)
     val routeCasing = Expression.interpolate(
         Expression.linear(), zoom,
-        Expression.stop(STREET_ZOOM, byKind(ROUTE_W_16, CASING_DP)), Expression.stop(18, byKind(ROUTE_W_18, CASING_DP)),
+        Expression.stop(STREET_ZOOM, byKind(ROUTE_W_16 * heavier, CASING_DP)), Expression.stop(18, byKind(ROUTE_W_18 * heavier, CASING_DP)),
     )
-    for (layer in listOf(auiRoutes, brtRoutes)) layer.setProperties(PropertyFactory.lineOffset(routeOffset()))
+    for (layer in listOf(auiRoutes, brtRoutes)) layer.setProperties(PropertyFactory.lineOffset(routeOffset(heavier)))
     // A line alone, over the rest faded: on its own streets at every zoom. Hidden until one is picked.
     val alone = LineLayer(ISOLATE_LAYER, ROUTES_SOURCE).withProperties(
         PropertyFactory.lineColor(Expression.toColor(color)),
@@ -519,7 +552,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         PropertyFactory.iconIgnorePlacement(true),
         // The bundle's width, as the lines': drawn for z15's, scaled with them.
         PropertyFactory.iconSize(
-            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, LINE_W_10 / LINE_W_15), Expression.stop(13, LINE_W_13 / LINE_W_15), Expression.stop(15, 1f), Expression.stop(18, LINE_W_18 / LINE_W_15)),
+            Expression.interpolate(Expression.linear(), zoom, Expression.stop(10, heavier * LINE_W_10 / LINE_W_15), Expression.stop(13, heavier * LINE_W_13 / LINE_W_15), Expression.stop(15, heavier), Expression.stop(18, heavier * LINE_W_18 / LINE_W_15)),
         ),
         // Across with its bundle where that is moved off the street's middle: in z15's dp, scaled by
         // the icon size as the bar is, and turned with it. Typed, as icon-offset takes only an
@@ -531,7 +564,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     }
     val dots = CircleLayer(MARK_DOT_LAYER, MARKS_SOURCE).withProperties(
         PropertyFactory.circleColor(HALTE_FILL),
-        PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(11, 1.6f), Expression.stop(13, 2.5f), Expression.stop(15, 3.5f), Expression.stop(16, 4.2f))),
+        PropertyFactory.circleRadius(Expression.interpolate(Expression.linear(), zoom, Expression.stop(11, 1.6f * heavier), Expression.stop(13, 2.5f * heavier), Expression.stop(15, 3.5f * heavier), Expression.stop(16, 4.2f * heavier))),
         PropertyFactory.circleStrokeColor(MARK_OUTLINE),
         PropertyFactory.circleStrokeWidth(Expression.interpolate(Expression.linear(), zoom, Expression.stop(11, 0.8f), Expression.stop(15, 1.2f))),
     ).withFilter(Expression.eq(Expression.get(BusMapProps.COUNT), Expression.literal(1))).apply {
@@ -546,11 +579,11 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
         ),
     )
     val casings = listOf(
-        casing(trunks, width(TRUNK_SCALE, fill = 1f, casing = CASING_DP), offset(BusMapProps.TRUNK_SLOT, TRUNK_SCALE)),
-        casing(aui, width(1f, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, 1f)),
-        casing(brt, width(1f, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, 1f)),
-        casing(auiRoutes, routeCasing, routeOffset()),
-        casing(brtRoutes, routeCasing, routeOffset()),
+        casing(trunks, width(TRUNK_SCALE * heavier, fill = 1f, casing = CASING_DP), offset(BusMapProps.TRUNK_SLOT, TRUNK_SCALE * heavier)),
+        casing(aui, width(heavier, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, heavier)),
+        casing(brt, width(heavier, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, heavier)),
+        casing(auiRoutes, routeCasing, routeOffset(heavier)),
+        casing(brtRoutes, routeCasing, routeOffset(heavier)),
     )
     // The casings under every line, so a line's edge never cuts the one beside it; the alone line's
     // under it alone, over the rest faded.
@@ -783,6 +816,7 @@ private fun showLines(
     dots: StreetsDots = StreetsDots.ALL,
     overview: StreetsOverview = StreetsOverview.BUNDLED,
     apart: StreetsApart = StreetsApart.SEPARATED,
+    weight: Float = 1f,
 ) {
     fun visible(shown: Boolean) = PropertyFactory.visibility(if (shown) Property.VISIBLE else Property.NONE)
     val faded = PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f)
@@ -794,7 +828,7 @@ private fun showLines(
         layer.setProperties(visible(!debug && (route || !routes)), faded)
         if (route) {
             layer.minZoom = if (routes) 0f else STREET_ZOOM
-            layer.setProperties(PropertyFactory.lineOffset(if (apart == StreetsApart.SEPARATED) routeOffset() else Expression.literal(0f)))
+            layer.setProperties(PropertyFactory.lineOffset(if (apart == StreetsApart.SEPARATED) routeOffset(weight) else Expression.literal(0f)))
         }
     }
     for (id in listOf(BAR_LAYER, MARK_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(!debug && !routes && dots.haltes))
@@ -814,12 +848,12 @@ private fun showLines(
  * ([BusMapProps.SLOT]): a place a line's width over [LINE_FILL], as a bundle's, a hairline of casing
  * between.
  */
-private fun routeOffset(): Expression {
+private fun routeOffset(weight: Float = 1f): Expression {
     val slot = Expression.coalesce(Expression.get(BusMapProps.SLOT), Expression.literal(0.0))
     return Expression.interpolate(
         Expression.linear(), Expression.zoom(),
-        Expression.stop(STREET_ZOOM, Expression.product(slot, Expression.literal(ROUTE_W_16 / LINE_FILL))),
-        Expression.stop(18, Expression.product(slot, Expression.literal(ROUTE_W_18 / LINE_FILL))),
+        Expression.stop(STREET_ZOOM, Expression.product(slot, Expression.literal(weight * ROUTE_W_16 / LINE_FILL))),
+        Expression.stop(18, Expression.product(slot, Expression.literal(weight * ROUTE_W_18 / LINE_FILL))),
     )
 }
 
@@ -990,6 +1024,9 @@ private const val MIN_ZOOM = 9.0
 private const val MAX_ZOOM = 19.0
 private const val RIDER_ZOOM = 15.0
 private const val RECENTER_MILLIS = 600
+
+/** Midtown West and Central Park, the debug panel's New York ([StreetsCity.NEW_YORK]). */
+private val NEW_YORK_CAMERA = StreetsCamera(latitude = 40.768, longitude = -73.979, zoom = 13.5)
 
 /** Bundaran HI, with the koridors around it, before the rider's whereabouts are known. */
 private val DEFAULT_CAMERA = StreetsCamera(latitude = -6.1950, longitude = 106.8230, zoom = 12.5)

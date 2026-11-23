@@ -482,6 +482,8 @@ private fun MapWithSheet(
     val streetsDots by viewModel.streetsDots.collectAsStateWithLifecycle()
     val streetsOverview by viewModel.streetsOverview.collectAsStateWithLifecycle()
     val streetsApart by viewModel.streetsApart.collectAsStateWithLifecycle()
+    val streetsCity by viewModel.streetsCity.collectAsStateWithLifecycle()
+    val streetsWeight by viewModel.streetsWeight.collectAsStateWithLifecycle()
     val feedLines by viewModel.feedLines.collectAsStateWithLifecycle()
     val debugOffered = streets && debugEnabled
     var debugOpen by remember { mutableStateOf(false) }
@@ -666,6 +668,8 @@ private fun MapWithSheet(
                     dots = if (debugOffered) streetsDots else StreetsDots.ALL,
                     overview = if (debugOffered) streetsOverview else StreetsOverview.BUNDLED,
                     apart = if (debugOffered) streetsApart else StreetsApart.SEPARATED,
+                    city = streetsCity,
+                    weight = if (debugOffered) streetsWeight else StreetsWeight.NORMAL,
                 )
                 val pill = streetsPill?.let { busMap?.lines?.get(it) }
                 if (pill != null && selection == null) {
@@ -1031,6 +1035,16 @@ private fun MapWithSheet(
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                     viewModel.showApart(apart)
                 },
+                weight = streetsWeight,
+                onWeight = { weight ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.showWeight(weight)
+                },
+                city = streetsCity,
+                onCity = { city ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.showCity(city)
+                },
             )
         }
     }
@@ -1057,6 +1071,8 @@ private fun StreetsLayer(
     dots: StreetsDots,
     overview: StreetsOverview,
     apart: StreetsApart,
+    city: StreetsCity,
+    weight: StreetsWeight,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -1082,6 +1098,8 @@ private fun StreetsLayer(
                 dots = dots,
                 overview = overview,
                 apart = apart,
+                city = city,
+                weight = weight,
                 modifier = Modifier.fillMaxSize(),
             )
         }

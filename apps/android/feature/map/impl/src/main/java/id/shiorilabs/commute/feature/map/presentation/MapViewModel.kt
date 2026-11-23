@@ -266,6 +266,24 @@ class MapViewModel @Inject constructor(
         session.streetsApart.value = apart
     }
 
+    /** How heavy the streets layer's lines are drawn. */
+    val streetsWeight: StateFlow<StreetsWeight> get() = session.streetsWeight
+
+    fun showWeight(weight: StreetsWeight) {
+        session.streetsWeight.value = weight
+    }
+
+    /** Whose network the streets layer draws. */
+    val streetsCity: StateFlow<StreetsCity> get() = session.streetsCity
+
+    fun showCity(city: StreetsCity) {
+        if (session.streetsCity.value == city) return
+        session.streetsCity.value = city
+        busMapLayer.value = null
+        busMapLoading = false
+        loadBusMap()
+    }
+
     /** The lines as the feed has them, as GeoJSON; null until [loadFeed] has read them. */
     val feedLines: StateFlow<String?> get() = feed
     private val feed = MutableStateFlow<String?>(null)
@@ -307,11 +325,13 @@ class MapViewModel @Inject constructor(
     fun loadBusMap() {
         if (busMapLoading) return
         busMapLoading = true
+        val city = session.streetsCity.value
         viewModelScope.launch {
             val layer = runCatching {
                 withContext(Dispatchers.Default) {
-                    val map = busMapJson.decodeFromString(BusMap.serializer(), storage.bundled(BUS_MAP_FILE))
-                    val stations = stationDirectory.stored()
+                    val map = busMapJson.decodeFromString(BusMap.serializer(), storage.bundled(city.file))
+                    // Another city's stations aren't in the directory: every one kept.
+                    val stations = if (city == StreetsCity.JAKARTA) stationDirectory.stored() else null
                     val known = stations?.mapTo(HashSet()) { it.id }
                     val tappable: ((String) -> Boolean)? = known?.let { ids -> { id -> id in ids } }
                     val dictionary = lineRepository.dictionary.value.ifEmpty { lineRepository.lines().getOrNull().orEmpty() }
@@ -331,6 +351,8 @@ class MapViewModel @Inject constructor(
                     )
                 }
             }.getOrNull()
+            // Picked away from meanwhile: the new pick's load stands.
+            if (session.streetsCity.value != city) return@launch
             if (layer == null) busMapLoading = false
             busMapLayer.value = layer
         }

@@ -34,6 +34,29 @@ class MapSession @Inject constructor() {
 
     /** The debug panel's pick: lines on their own streets side by side where they share a lane, or one over another. */
     val streetsApart = MutableStateFlow(StreetsApart.SEPARATED)
+
+    /** The debug panel's pick: whose network the streets layer draws. */
+    val streetsCity = MutableStateFlow(StreetsCity.JAKARTA)
+
+    /** The debug panel's pick: how heavy the streets layer's lines are drawn. */
+    val streetsWeight = MutableStateFlow(StreetsWeight.NORMAL)
+}
+
+/** The streets layer's lines, their bundles' spacing and halte marks this many times as heavy, picked in the map's debug panel. */
+enum class StreetsWeight(val scale: Float) {
+    NORMAL(1f),
+    HEAVIER(1.5f),
+    DOUBLE(2f),
+}
+
+/**
+ * Whose network the streets layer draws, picked in the map's debug panel: Peta Bus, or New York's
+ * subway around Midtown West and Central Park run through Peta Bus's bundler (a debug build's
+ * `bus-map-nyc.json`), to see the drawing on a network Transit's map is known for.
+ */
+enum class StreetsCity(val file: String) {
+    JAKARTA("bus-map.json"),
+    NEW_YORK("bus-map-nyc.json"),
 }
 
 /** How lines sharing a lane are drawn on their own streets, picked in the map's debug panel. */
