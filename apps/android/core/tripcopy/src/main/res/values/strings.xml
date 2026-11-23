@@ -23,12 +23,15 @@
     <string name="trip_headsign">arah %1$s</string>
     <string name="trip_platform">Peron %1$s</string>
     <string name="trip_ride_more">%1$s +%2$d lainnya</string>
+    <!-- trip_ride_more inside a sentence: "Lalu transit ke 4D atau 4 lainnya" -->
+    <string name="trip_ride_or_more">%1$s atau %2$d lainnya</string>
     <string name="trip_ride_to">Turun di %1$s</string>
     <string name="trip_source_estimated">Perkiraan dari jadwal</string>
     <string name="trip_source_unknown">Posisi belum diketahui</string>
     <string name="trip_stations_left">%1$d stasiun lagi</string>
     <string name="trip_then_change">Lalu transit ke %1$s</string>
-    <string name="trip_then_done">Ini tujuan kamu</string>
+    <!-- Under "Turun di Kranji sekarang" at the trip's end: what's left to do, not what the title says. -->
+    <string name="trip_then_done">Cek lagi barang bawaan kamu ya</string>
     <string name="trip_via">via %1$s</string>
     <string name="trip_wake_text">Turun di %1$s</string>
     <string name="trip_wake_title">Bangun! Bentar lagi turun</string>

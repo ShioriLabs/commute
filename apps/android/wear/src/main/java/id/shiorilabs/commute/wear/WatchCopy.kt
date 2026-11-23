@@ -107,7 +107,7 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
             ).takeUnless { showsStops },
         )
         is Headline.AlightNow -> listOf(
-            headline.then?.let { resources.getString(CopyR.string.trip_then_change, rideName(it)) }
+            headline.then?.let { resources.getString(CopyR.string.trip_then_change, wording.rideNameSaid(it)) }
                 ?: resources.getString(CopyR.string.trip_then_done),
         )
         is Headline.Arrived -> emptyList()

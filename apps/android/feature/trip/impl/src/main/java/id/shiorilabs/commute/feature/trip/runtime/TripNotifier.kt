@@ -249,7 +249,7 @@ class TripNotifier @Inject constructor(
         val ride = trip.plan.ride(trip.state.legIndex)
         val notification = alertBuilder(
             context.getString(R.string.trip_ask_still_on_route_title),
-            context.getString(R.string.trip_ask_still_on_route, rideName(ride)),
+            context.getString(R.string.trip_ask_still_on_route, rideNameSaid(ride)),
         )
             .addAction(0, context.getString(CopyR.string.trip_action_still_on_route), action(TripReceiver.ACTION_STILL_ON_ROUTE))
             .addAction(0, context.getString(CopyR.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
@@ -281,7 +281,7 @@ class TripNotifier @Inject constructor(
             REROUTE_ID,
             alertBuilder(
                 context.getString(R.string.trip_alert_rerouted_title, departs),
-                context.getString(text, formatClock(missed), rideName(ride), departs, ride.stops.first().name),
+                context.getString(text, formatClock(missed), rideNameSaid(ride), departs, ride.stops.first().name),
             ).build(),
         )
     }
@@ -310,9 +310,9 @@ class TripNotifier @Inject constructor(
                 ?.let { context.getString(R.string.trip_then_missed, formatClock(it.missed)) }
                 .orEmpty()
             if (departs == null) {
-                context.getString(CopyR.string.trip_then_change, rideName(then))
+                context.getString(CopyR.string.trip_then_change, rideNameSaid(then))
             } else {
-                context.getString(R.string.trip_then_change_at, rideName(then), departs) + missed
+                context.getString(R.string.trip_then_change_at, rideNameSaid(then), departs) + missed
             }
         }
         // Its own line, under where and what then: the expanded alert shows it, collapsed leads with the rest.
@@ -405,7 +405,7 @@ class TripNotifier @Inject constructor(
 
     private fun copy() = TripCopy(context.resources, lines.dictionary.value)
 
-    private fun rideName(ride: TripLeg.Ride): String = copy().rideName(ride)
+    private fun rideNameSaid(ride: TripLeg.Ride): String = copy().rideNameSaid(ride)
 
     private fun colorOf(ride: TripLeg.Ride): Int = lineColorOrNull(ride) ?: FALLBACK_LINE
 

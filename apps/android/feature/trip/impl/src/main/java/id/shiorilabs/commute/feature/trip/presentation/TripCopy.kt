@@ -25,6 +25,9 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
 
     fun rideName(ride: TripLeg.Ride): String = wording.rideName(ride)
 
+    /** [rideName] inside a sentence: "4D atau 4 lainnya". */
+    fun rideNameSaid(ride: TripLeg.Ride): String = wording.rideNameSaid(ride)
+
     fun direction(ride: TripLeg.Ride): String? = wording.direction(ride)
 
     fun title(headline: Headline): String = wording.title(headline)
@@ -44,9 +47,11 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
             ),
             nextDepartures(headline, now),
         )
+        // A walk leads ("Jalan ke Sudirman Peron 2"); without one, the ride's direction does, as boarding's,
+        // so the line never opens on a bare "Peron 2".
         is Headline.Change -> sentences(
             clause(
-                walkAndPlatform(headline),
+                walkAndPlatform(headline) ?: direction(headline.ride),
                 headline.ride.platformCode?.takeIf { headline.walk == null }
                     ?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
                 headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
@@ -67,7 +72,7 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
                     ?.let { resources.getString(R.string.trip_alights_around, formatClock(it)) },
             ),
         )
-        is Headline.AlightNow -> headline.then?.let { resources.getString(CopyR.string.trip_then_change, rideName(it)) }
+        is Headline.AlightNow -> headline.then?.let { resources.getString(CopyR.string.trip_then_change, rideNameSaid(it)) }
             ?: resources.getString(CopyR.string.trip_then_done)
         is Headline.Arrived -> ""
     }

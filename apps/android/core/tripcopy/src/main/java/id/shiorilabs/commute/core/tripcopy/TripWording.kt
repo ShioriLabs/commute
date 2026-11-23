@@ -23,6 +23,16 @@ class TripWording(private val resources: Resources, private val lineName: (Strin
         return resources.getString(R.string.trip_ride_more, if (ride.isBus) code else name, ride.otherLines)
     }
 
+    /**
+     * [rideName] inside a sentence, where "+4 lainnya" reads as a label: "Lalu transit ke 4D atau 4
+     * lainnya". The same as [rideName] for one line.
+     */
+    fun rideNameSaid(ride: TripLeg.Ride): String {
+        if (ride.otherLines == 0) return rideName(ride)
+        val code = ride.line.substringAfter(':')
+        return resources.getString(R.string.trip_ride_or_more, if (ride.isBus) code else lineName(ride.line) ?: code, ride.otherLines)
+    }
+
     /** [tripDirection] for this wording's resources. */
     fun direction(ride: TripLeg.Ride): String? = tripDirection(resources, ride)
 
