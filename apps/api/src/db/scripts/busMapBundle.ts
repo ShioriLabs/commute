@@ -1216,6 +1216,9 @@ function solveOrders(
  * straight on), and SHIFT_COST a line width moved off the street's middle. A linear
  * program, solved by HiGHS, finds the shifts; a chain of one line stays centred,
  * so its halte dots stay on it. Shifts are kept within SHIFT_MAX line widths.
+ * Places are as clients draw them, a rail line RAIL_WEIGHT wide: counted a
+ * width apiece, a shift holding the lines going on held the bus lines and
+ * left a rail line beside them stepping across.
  */
 const SHIFT_MAX = 1
 const SHIFT_COST = 0.25
@@ -1239,7 +1242,14 @@ function leaving(network: Network, chain: Chain, atStart: boolean): [number, num
 }
 
 /** Each chain's shift, in line widths right of its way (see above). */
-export function bundleShifts(network: Network, list: readonly Chain[], orders: readonly string[][], highs: LegacyHighs): number[] {
+export function bundleShifts(
+  network: Network,
+  list: readonly Chain[],
+  orders: readonly string[][],
+  highs: LegacyHighs,
+  /** A stroke's width as clients draw it: RAIL_WEIGHT for a rail line's, 1 for a bus line's. */
+  widthOf: (key: string) => number = () => 1
+): number[] {
   const shifts = list.map(() => 0)
   const free = (c: number): boolean => orders[c]!.length >= 2
   const ends = new Map<number, { chain: number, atStart: boolean }[]>()
@@ -1251,7 +1261,17 @@ export function bundleShifts(network: Network, list: readonly Chain[], orders: r
       ends.set(node, here)
     }
   })
-  const place = (c: number, line: string): number => orders[c]!.indexOf(line) - (orders[c]!.length - 1) / 2
+  // Each stroke's middle across its chain as clients draw it: side by side, each its own width, centred.
+  const places = orders.map((order) => {
+    const widths = order.map(widthOf)
+    let left = -widths.reduce((m, w) => m + w, 0) / 2
+    return new Map(order.map((key, i) => {
+      const middle = left + widths[i]! / 2
+      left += widths[i]!
+      return [key, middle] as const
+    }))
+  })
+  const place = (c: number, line: string): number => places[c]!.get(line)!
 
   const rows: string[] = []
   const objective: string[] = []
@@ -1349,7 +1369,9 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport,
   // Exact can't do worse; if it ever reads so, the program is wrong, and the local order stands.
   if (exact > local) console.warn(`  line order: solved ${exact} against local search's ${local}; keeping local`)
   const strokeOrders = exact > local ? localOrders : exactOrders
-  const shifts = bundleShifts(network, strokes, strokeOrders, await loadSolver())
+  // A stroke's width as clients draw it: a rail line's heavier (RAIL_WEIGHT).
+  const railStroke = new Set(lines.filter(l => isRailCode(l.code)).map(l => strokeOf.get(l.code)!))
+  const shifts = bundleShifts(network, strokes, strokeOrders, await loadSolver(), key => (railStroke.has(key) ? RAIL_WEIGHT : 1))
   // Each stroke back to its lines on the chain, in bundle order.
   const orders = list.map((chain, c) => strokeOrders[c]!.flatMap(key =>
     [...chain.lines].filter(l => strokeOf.get(l) === key).sort((a, b) => rank.get(a)! - rank.get(b)!)))

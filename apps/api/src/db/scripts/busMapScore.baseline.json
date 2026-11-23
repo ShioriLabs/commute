@@ -1,17 +1,17 @@
 {
   "jakarta": {
-    "composite": 171.489,
-    "jog": 36.589,
-    "moved": 103.969,
+    "composite": 158.297,
+    "jog": 32.397,
+    "moved": 102.008,
     "sameCrossings": 4,
     "splitCrossings": 6,
-    "separations": 24,
+    "separations": 21,
     "overlapM": 1022.5
   },
   "nyc": {
-    "composite": 7.957,
-    "jog": 3.157,
-    "moved": 11.25,
+    "composite": 7.194,
+    "jog": 2.394,
+    "moved": 10.5,
     "sameCrossings": 0,
     "splitCrossings": 1,
     "separations": 0,
