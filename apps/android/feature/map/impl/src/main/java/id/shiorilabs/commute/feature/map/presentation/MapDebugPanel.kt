@@ -31,8 +31,9 @@ import id.shiorilabs.commute.feature.map.R
  * "Debug Peta", Experimental "Panel Debug Peta": tools for checking Peta Bus on the streets layer,
  * one item under another: how the route lines are drawn ([StreetsLines]), which halte and station
  * marks show ([StreetsDots]), the lines zoomed out bundled or as at street zoom ([StreetsOverview]),
- * lines sharing a lane on their own streets side by side or not ([StreetsApart]), how heavy the lines
- * are ([StreetsWeight]), and whose network is drawn ([StreetsCity]).
+ * lines sharing a lane on their own streets side by side or not ([StreetsApart]), the bundles' lines
+ * one path or edge by edge ([StreetsJoins]), how heavy the lines are ([StreetsWeight]), and whose
+ * network is drawn ([StreetsCity]).
  */
 @Composable
 internal fun MapDebugPanel(
@@ -44,6 +45,8 @@ internal fun MapDebugPanel(
     onOverview: (StreetsOverview) -> Unit,
     apart: StreetsApart,
     onApart: (StreetsApart) -> Unit,
+    joins: StreetsJoins,
+    onJoins: (StreetsJoins) -> Unit,
     weight: StreetsWeight,
     onWeight: (StreetsWeight) -> Unit,
     city: StreetsCity,
@@ -104,6 +107,17 @@ internal fun MapDebugPanel(
                     ),
                     picked = apart,
                     onPick = onApart,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text = "Joins", style = MaterialTheme.typography.labelLarge)
+                Choice(
+                    options = listOf(
+                        "Continuous" to StreetsJoins.CONTINUOUS,
+                        "Pieces" to StreetsJoins.PIECES,
+                    ),
+                    picked = joins,
+                    onPick = onJoins,
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

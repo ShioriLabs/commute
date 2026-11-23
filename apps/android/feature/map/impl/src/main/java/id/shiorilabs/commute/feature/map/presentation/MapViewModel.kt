@@ -16,6 +16,8 @@ import id.shiorilabs.commute.core.config.Environment
 import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.data.MapStorage
 import id.shiorilabs.commute.feature.map.domain.BusMap
+import id.shiorilabs.commute.feature.map.domain.BundlePath
+import id.shiorilabs.commute.feature.map.domain.bundlePaths
 import id.shiorilabs.commute.feature.map.domain.BusMapFeed
 import id.shiorilabs.commute.feature.map.domain.feedGeoJson
 import id.shiorilabs.commute.feature.map.domain.BusMapGeoJson
@@ -273,6 +275,13 @@ class MapViewModel @Inject constructor(
         session.streetsWeight.value = weight
     }
 
+    /** How the streets layer joins its lines at the nodes. */
+    val streetsJoins: StateFlow<StreetsJoins> get() = session.streetsJoins
+
+    fun showJoins(joins: StreetsJoins) {
+        session.streetsJoins.value = joins
+    }
+
     /** Whose network the streets layer draws. */
     val streetsCity: StateFlow<StreetsCity> get() = session.streetsCity
 
@@ -339,6 +348,7 @@ class MapViewModel @Inject constructor(
                     val drawn = map.lines.associate { it.code to it.color }
                     BusMapLayer(
                         geoJson = map.toGeoJson(tappable, railNames = stations.orEmpty().associate { it.id to it.name }),
+                        paths = map.bundlePaths(),
                         attribution = map.attribution,
                         stops = map.stops(tappable),
                         lines = map.lineInfo(),
@@ -374,6 +384,8 @@ data class BusMapLayer(
     val lines: Map<String, BusMapLineInfo>,
     /** Each rail roundel image ([railRoundelImage]) and the roundels it draws, left to right. */
     val railRoundels: Map<String, List<RailRoundel>> = emptyMap(),
+    /** Each line through the bundles as one path ([bundlePaths]), drawn per zoom band. */
+    val paths: List<BundlePath> = emptyList(),
 )
 
 /** One station roundel on the streets layer: [number] `C12` in its line's [color] (`#RRGGBB`), by [operator]. */

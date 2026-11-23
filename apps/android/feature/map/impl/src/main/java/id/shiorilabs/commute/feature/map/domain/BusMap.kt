@@ -295,6 +295,9 @@ object BusMapProps {
     const val BEARING = "bearing"
     const val COUNT = "count"
 
+    /** A line path's zoom band ([BUNDLE_BANDS]): the layer drawing it, its offset baked for those zooms. */
+    const val BAND = "band"
+
     /** A halte bar's `[x, 0]` offset in dp at z15, x right of the street's way: its bundle's shift. */
     const val BAR_OFFSET = "barOffset"
 }

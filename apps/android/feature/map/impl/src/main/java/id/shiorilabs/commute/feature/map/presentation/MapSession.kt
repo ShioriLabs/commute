@@ -40,6 +40,18 @@ class MapSession @Inject constructor() {
 
     /** The debug panel's pick: how heavy the streets layer's lines are drawn. */
     val streetsWeight = MutableStateFlow(StreetsWeight.NORMAL)
+
+    /** The debug panel's pick: each line drawn on through the nodes, or each edge's lines on their own. */
+    val streetsJoins = MutableStateFlow(StreetsJoins.CONTINUOUS)
+}
+
+/** How the streets layer joins its bundles' lines at the nodes, picked in the map's debug panel. */
+enum class StreetsJoins {
+    /** Each line one path through the network, easing over and rounding its corners: the map as it shows. */
+    CONTINUOUS,
+
+    /** Each edge's lines drawn on their own at its offset, ending at its nodes. */
+    PIECES,
 }
 
 /** The streets layer's lines, their bundles' spacing and halte marks this many times as heavy, picked in the map's debug panel. */

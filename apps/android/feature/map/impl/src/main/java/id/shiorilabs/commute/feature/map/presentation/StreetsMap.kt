@@ -28,6 +28,10 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import id.shiorilabs.commute.feature.map.domain.BUNDLE_BANDS
+import id.shiorilabs.commute.feature.map.domain.bundlePathsGeoJson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import id.shiorilabs.commute.core.font.R as FontR
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.components.splitStationNumber
@@ -97,6 +101,8 @@ fun StreetsMap(
     city: StreetsCity = StreetsCity.JAKARTA,
     /** The debug panel's pick: the lines, their spacing and the halte marks this much heavier. */
     weight: StreetsWeight = StreetsWeight.NORMAL,
+    /** The debug panel's pick: each line one path through the bundles, or each edge's on their own. */
+    joins: StreetsJoins = StreetsJoins.CONTINUOUS,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -166,15 +172,16 @@ fun StreetsMap(
                     onStation(stationId)
                     return@addOnMapClickListener true
                 }
-                // No stop under the finger: a line, the one drawn on top there.
-                val tapped = map.queryRenderedFeatures(box, DEBUG_ISOLATE_LAYER, DEBUG_LAYER, ISOLATE_LAYER, BRT_ROUTE_LAYER, AUI_ROUTE_LAYER, BRT_LAYER, AUI_LAYER, TRUNK_LAYER)
-                    .firstNotNullOfOrNull { feature ->
-                        // A stroke carries all its lines; a line on its own streets, just its code.
-                        feature.getStringProperty(BusMapProps.LINES)?.split(' ')?.filter(String::isNotEmpty)?.ifEmpty { null }
-                            ?: feature.getStringProperty(BusMapProps.CODE)?.let(::listOf)
-                    }
-                    ?: return@addOnMapClickListener false
-                onLine(tapped)
+                // No stop under the finger: a line, the one drawn on top there, with every line of its
+                // colour there (13, 13E and L13E are one purple; a path is one line).
+                val hits = map.queryRenderedFeatures(box, DEBUG_ISOLATE_LAYER, DEBUG_LAYER, ISOLATE_LAYER, BRT_ROUTE_LAYER, AUI_ROUTE_LAYER, *PATH_LAYERS.toTypedArray(), BRT_LAYER, AUI_LAYER, TRUNK_LAYER)
+                fun codesOf(feature: org.maplibre.geojson.Feature): List<String> =
+                    // A stroke carries all its lines; a line on its own streets, just its code.
+                    feature.getStringProperty(BusMapProps.LINES)?.split(' ')?.filter(String::isNotEmpty)?.ifEmpty { null }
+                        ?: feature.getStringProperty(BusMapProps.CODE)?.let(::listOf).orEmpty()
+                val top = hits.firstOrNull { codesOf(it).isNotEmpty() } ?: return@addOnMapClickListener false
+                val colour = top.getStringProperty(BusMapProps.COLOR)
+                onLine((codesOf(top) + hits.filter { it.getStringProperty(BusMapProps.COLOR) == colour }.flatMap(::codesOf)).distinct())
                 true
             }
             map.addOnCameraIdleListener { state.saveCamera() }
@@ -199,8 +206,16 @@ fun StreetsMap(
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
         addBusMap(style, busMap, dark, screenDensity, roundelFace, weight.scale)
     }
+    // Each line one path through the bundles, its offsets baked per zoom band at this weight: off the
+    // main thread, then onto the source addBusMap made.
+    LaunchedEffect(state.style, busMap, dark, weight) {
+        val style = state.style ?: return@LaunchedEffect
+        if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
+        val geoJson = withContext(Dispatchers.Default) { bundlePathsGeoJson(busMap.paths, weight.scale.toDouble()) }
+        style.getSourceAs<GeoJsonSource>(PATHS_SOURCE)?.setGeoJson(geoJson)
+    }
     // As it shows, or raw or processed, and a line alone: the rest faded under it, it over them.
-    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed, dots, overview, apart, weight) {
+    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed, dots, overview, apart, weight, joins) {
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
         val debug = when (lines) {
@@ -209,7 +224,7 @@ fun StreetsMap(
             StreetsLines.ADJUSTED -> null
         }
         if (debug != null) style.getSourceAs<GeoJsonSource>(DEBUG_SOURCE)?.setGeoJson(debug)
-        showLines(style, debug = debug != null, code = isolated, dots = dots, overview = overview, apart = apart, weight = weight.scale)
+        showLines(style, debug = debug != null, code = isolated, dots = dots, overview = overview, apart = apart, weight = weight.scale, joins = joins)
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
@@ -398,7 +413,7 @@ private fun hasLocation(context: Context): Boolean =
  */
 private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density: Float, typeface: Typeface?, heavier: Float = 1f) {
     for (id in LINE_LAYERS + CASING_LAYERS + listOf(WASH_LAYER, ISOLATE_LAYER, DEBUG_LAYER, DEBUG_ISOLATE_LAYER, BAR_LAYER, MARK_DOT_LAYER, RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER, HALTE_NAME_LAYER, HALTE_LAYER)) style.removeLayer(id)
-    for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, DEBUG_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE)) style.removeSource(id)
+    for (id in listOf(LINES_SOURCE, ROUTES_SOURCE, DEBUG_SOURCE, HALTES_SOURCE, RAIL_SOURCE, MARKS_SOURCE, PATHS_SOURCE)) style.removeSource(id)
 
     style.addSource(GeoJsonSource(LINES_SOURCE, busMap.geoJson.lines))
     style.addSource(GeoJsonSource(ROUTES_SOURCE, busMap.geoJson.routes))
@@ -406,6 +421,8 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     style.addSource(GeoJsonSource(RAIL_SOURCE, busMap.geoJson.rail))
     style.addSource(GeoJsonSource(MARKS_SOURCE, busMap.geoJson.marks))
     style.addSource(GeoJsonSource(DEBUG_SOURCE, busMap.geoJson.processed))
+    // Filled once the paths are baked for this weight (StreetsMap's effect).
+    style.addSource(GeoJsonSource(PATHS_SOURCE, EMPTY_COLLECTION))
 
     val color = Expression.get(BusMapProps.COLOR)
     val zoom = Expression.zoom()
@@ -578,7 +595,21 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
             Expression.stop(10, byKind(ALONE_W_10, CASING_DP)), Expression.stop(14, byKind(ALONE_W_14, CASING_DP)), Expression.stop(18, byKind(ALONE_W_18, CASING_DP)),
         ),
     )
-    val casings = listOf(
+    // Each line one path through the bundles, a layer per zoom band, its offset baked into its band's
+    // features: no line-offset, so a line bends on through a node, not ending on one edge and starting
+    // beside itself on the next.
+    val paths = BUNDLE_BANDS.map { band ->
+        LineLayer(PATH_LAYER + band.index, PATHS_SOURCE).withProperties(
+            PropertyFactory.lineColor(Expression.toColor(color)),
+            PropertyFactory.lineWidth(width(heavier)),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+            PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+        ).withFilter(Expression.eq(Expression.get(BusMapProps.BAND), Expression.literal(band.index))).apply {
+            minZoom = band.from.toFloat()
+            maxZoom = band.to.toFloat()
+        }
+    }
+    val casings = paths.map { casing(it, width(heavier, fill = 1f, casing = CASING_DP)) } + listOf(
         casing(trunks, width(TRUNK_SCALE * heavier, fill = 1f, casing = CASING_DP), offset(BusMapProps.TRUNK_SLOT, TRUNK_SCALE * heavier)),
         casing(aui, width(heavier, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, heavier)),
         casing(brt, width(heavier, fill = 1f, casing = CASING_DP), offset(BusMapProps.SLOT, heavier)),
@@ -587,7 +618,7 @@ private fun addBusMap(style: Style, busMap: BusMapLayer, dark: Boolean, density:
     )
     // The casings under every line, so a line's edge never cuts the one beside it; the alone line's
     // under it alone, over the rest faded.
-    for (layer: Layer in listOf(wash) + casings + listOf(trunks, aui, brt, auiRoutes, brtRoutes, debugLines, aloneCasing, alone, debugAlone, dots, bars, haltes)) {
+    for (layer: Layer in listOf(wash) + casings + listOf(trunks, aui, brt) + paths + listOf(auiRoutes, brtRoutes, debugLines, aloneCasing, alone, debugAlone, dots, bars, haltes)) {
         if (style.getLayer(OVERLAY_SLOT) != null) style.addLayerBelow(layer, OVERLAY_SLOT) else style.addLayer(layer)
     }
     // Halte names over the whole style: under the basemap's labels they lost every collision to a
@@ -817,6 +848,7 @@ private fun showLines(
     overview: StreetsOverview = StreetsOverview.BUNDLED,
     apart: StreetsApart = StreetsApart.SEPARATED,
     weight: Float = 1f,
+    joins: StreetsJoins = StreetsJoins.CONTINUOUS,
 ) {
     fun visible(shown: Boolean) = PropertyFactory.visibility(if (shown) Property.VISIBLE else Property.NONE)
     val faded = PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f)
@@ -825,7 +857,11 @@ private fun showLines(
     for (id in LINE_LAYERS + CASING_LAYERS) {
         val layer = style.getLayer(id) ?: continue
         val route = id.removeSuffix(CASING_SUFFIX) in ROUTE_LAYERS
-        layer.setProperties(visible(!debug && (route || !routes)), faded)
+        // The bundles drawn as paths or edge by edge, the other hidden.
+        val path = id.removeSuffix(CASING_SUFFIX) in PATH_LAYERS
+        val piece = id.removeSuffix(CASING_SUFFIX) in PIECE_LAYERS
+        val continuous = joins == StreetsJoins.CONTINUOUS
+        layer.setProperties(visible(!debug && (route || !routes) && (!path || continuous) && (!piece || !continuous)), faded)
         if (route) {
             layer.minZoom = if (routes) 0f else STREET_ZOOM
             layer.setProperties(PropertyFactory.lineOffset(if (apart == StreetsApart.SEPARATED) routeOffset(weight) else Expression.literal(0f)))
@@ -947,7 +983,16 @@ private const val BRT_LAYER = "peta-bus-brt"
 private const val TRUNK_LAYER = "peta-bus-trunks"
 
 /** Every layer drawing lines, faded when one is drawn alone. */
-private val LINE_LAYERS = listOf(TRUNK_LAYER, AUI_LAYER, BRT_LAYER, AUI_ROUTE_LAYER, BRT_ROUTE_LAYER)
+private val LINE_LAYERS = listOf(TRUNK_LAYER, AUI_LAYER, BRT_LAYER, AUI_ROUTE_LAYER, BRT_ROUTE_LAYER) + PATH_LAYERS_LIST
+
+/** The bundles as paths ([BUNDLE_BANDS]): a layer per band, its id this and the band's index; their source. */
+private const val PATH_LAYER = "peta-bus-paths-"
+private const val PATHS_SOURCE = "peta-bus-paths"
+private val PATH_LAYERS_LIST get() = BUNDLE_BANDS.map { PATH_LAYER + it.index }
+private val PATH_LAYERS: Set<String> = PATH_LAYERS_LIST.toSet()
+
+/** The bundles edge by edge, each edge's lines at their offsets: the debug panel's Pieces. */
+private val PIECE_LAYERS = setOf(TRUNK_LAYER, AUI_LAYER, BRT_LAYER)
 
 /** The lines on their own streets, from street zoom (or every zoom, [StreetsOverview.ROUTES]). */
 private val ROUTE_LAYERS = setOf(AUI_ROUTE_LAYER, BRT_ROUTE_LAYER)

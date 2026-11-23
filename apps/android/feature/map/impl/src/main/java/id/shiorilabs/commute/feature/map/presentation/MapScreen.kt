@@ -484,6 +484,7 @@ private fun MapWithSheet(
     val streetsApart by viewModel.streetsApart.collectAsStateWithLifecycle()
     val streetsCity by viewModel.streetsCity.collectAsStateWithLifecycle()
     val streetsWeight by viewModel.streetsWeight.collectAsStateWithLifecycle()
+    val streetsJoins by viewModel.streetsJoins.collectAsStateWithLifecycle()
     val feedLines by viewModel.feedLines.collectAsStateWithLifecycle()
     val debugOffered = streets && debugEnabled
     var debugOpen by remember { mutableStateOf(false) }
@@ -670,6 +671,7 @@ private fun MapWithSheet(
                     apart = if (debugOffered) streetsApart else StreetsApart.SEPARATED,
                     city = streetsCity,
                     weight = if (debugOffered) streetsWeight else StreetsWeight.NORMAL,
+                    joins = if (debugOffered) streetsJoins else StreetsJoins.CONTINUOUS,
                 )
                 val pill = streetsPill?.let { busMap?.lines?.get(it) }
                 if (pill != null && selection == null) {
@@ -1035,6 +1037,11 @@ private fun MapWithSheet(
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                     viewModel.showApart(apart)
                 },
+                joins = streetsJoins,
+                onJoins = { joins ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.showJoins(joins)
+                },
                 weight = streetsWeight,
                 onWeight = { weight ->
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
@@ -1073,6 +1080,7 @@ private fun StreetsLayer(
     apart: StreetsApart,
     city: StreetsCity,
     weight: StreetsWeight,
+    joins: StreetsJoins,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -1100,6 +1108,7 @@ private fun StreetsLayer(
                 apart = apart,
                 city = city,
                 weight = weight,
+                joins = joins,
                 modifier = Modifier.fillMaxSize(),
             )
         }
