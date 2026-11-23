@@ -2407,10 +2407,13 @@ export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<st
  * bundle's width or so (the E leaving 8th Av and joining B/D on 53rd St, three
  * nodes 50 m apart; 1/2/3 and N/Q/R/W sharing 40 m where 7th Av and Broadway
  * cross), the short edges between are narrower than the strokes drawn on them,
- * and the lines kink through them. Each edge shorter than minM between two
- * nodes (not a line's end) is drawn into one node at its middle, shortest first, the edges
- * there ending at it; an edge left running from that node back to it is
- * dropped while short. Its lines go on through the node.
+ * and the lines kink through them. Each edge shorter than minM, from a junction
+ * to a node that isn't a line's end, is drawn into one node, shortest first,
+ * the edges there ending at it: the junction, or between two junctions their
+ * middle. Not where that would close a longer edge between the two into a loop
+ * (10's two one-way streets near Tanjung Priok, one taken in short pieces); a
+ * short one so closed, a knot's last side, is dropped. Its lines go on through
+ * the node.
  */
 export function contractShortEdges(edges: readonly BusMapEdge[], minM: number): BusMapEdge[] {
   const keyOf = (p: XY): string => `${p[0].toFixed(1)},${p[1].toFixed(1)}`
@@ -2431,21 +2434,30 @@ export function contractShortEdges(edges: readonly BusMapEdge[], minM: number): 
   for (;;) {
     const degree = new Map<string, number>()
     for (const { path } of list) for (const p of [path[0]!, path[path.length - 1]!]) degree.set(keyOf(p), (degree.get(keyOf(p)) ?? 0) + 1)
+    const lengths = list.map(({ path }) => lengthOf(path))
+    /** Whether an edge but [i] runs between [a] and [b] at least [minM] long: drawn into one node, it would be a loop. */
+    const closes = (i: number, a: string, b: string): boolean => list.some(({ path }, j) => {
+      if (j === i || lengths[j]! < minM) return false
+      const [c, d] = [keyOf(path[0]!), keyOf(path[path.length - 1]!)]
+      return (c === a && d === b) || (c === b && d === a)
+    })
     let shortest = -1
     let shortestM = minM
     list.forEach(({ path }, i) => {
       const [a, b] = [keyOf(path[0]!), keyOf(path[path.length - 1]!)]
-      if (a === b || degree.get(a)! < 2 || degree.get(b)! < 2) return
-      const m = lengthOf(path)
-      if (m < shortestM) {
+      const [da, db] = [degree.get(a)!, degree.get(b)!]
+      if (a === b || da < 2 || db < 2 || (da < 3 && db < 3)) return
+      if (lengths[i]! < shortestM && !closes(i, a, b)) {
         shortest = i
-        shortestM = m
+        shortestM = lengths[i]!
       }
     })
     if (shortest < 0) break
     const gone = list[shortest]!.path
     const ends = new Set([keyOf(gone[0]!), keyOf(gone[gone.length - 1]!)])
-    const node = middleOf(gone)
+    // The junction stays where it is, taking the short edge in; two junctions meet at its middle.
+    const [startDegree, endDegree] = [degree.get(keyOf(gone[0]!))!, degree.get(keyOf(gone[gone.length - 1]!))!]
+    const node = startDegree >= 3 && endDegree >= 3 ? middleOf(gone) : startDegree >= 3 ? gone[0]! : gone[gone.length - 1]!
     list = list
       .filter((_, i) => i !== shortest)
       .map(({ edge, path }) => {

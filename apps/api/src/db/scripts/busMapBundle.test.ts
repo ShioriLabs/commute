@@ -850,6 +850,24 @@ describe('contractShortEdges', () => {
     }
   })
 
+  it('never closes a longer edge into a loop, two one-way streets between the same junctions', () => {
+    // 10 north up one street and south down the other, 160 m apart; the north way in short pieces.
+    const top = at(0, 160)
+    const bottom = at(0, 0)
+    const edges: BusMapEdge[] = [
+      { shape: encodePolyline([at(0, 500), top]), lines: ['10', '12'] },
+      { shape: encodePolyline([top, at(30, 80), bottom]), lines: ['10'] },
+      { shape: encodePolyline([bottom, at(-20, 50)]), lines: ['10'] },
+      { shape: encodePolyline([at(-20, 50), at(-20, 100)]), lines: ['10'], shift: 0.5 },
+      { shape: encodePolyline([at(-20, 100), top]), lines: ['10'] },
+      { shape: encodePolyline([bottom, at(0, -500)]), lines: ['10', '12'] }
+    ]
+    const out = contractShortEdges(edges, 60)
+    // Both ways still drawn, top to bottom.
+    expect(out.some(e => e.lines.join() === '10' && decodePolyline(e.shape).some(p => metres(p)[0] > 20))).toBe(true)
+    expect(out.some(e => e.lines.join() === '10' && decodePolyline(e.shape).some(p => metres(p)[0] < -10))).toBe(true)
+  })
+
   it('leaves edges between a junction and a line end, and longer ones, as they are', () => {
     const edges: BusMapEdge[] = [
       { shape: encodePolyline([at(0, 0), at(0, 30)]), lines: ['A'] },

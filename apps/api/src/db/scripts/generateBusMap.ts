@@ -9,6 +9,7 @@ import { LINES as LRTJBDB_LINES } from '../../operators/lrtjbdb/lines'
 import { LINES as MRTJ_LINES } from '../../operators/mrtj/lines'
 import {
   bundle,
+  contractShortEdges,
   crossOver,
   dropBypasses,
   dropRetraces,
@@ -693,6 +694,9 @@ async function main(): Promise<void> {
  * redrawn up one carriageway and back down the other (6 on Rasuna Said) is one
  * line on the map, two only where its ways part (a loop to turn).
  */
+/** Edges shorter than this between nodes are drawn into one node (contractShortEdges): about a bundle's width at street zoom. */
+const KNOT_M = 60
+
 async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: BusMap['haltes']): Promise<BusMapEdge[]> {
   const drawn = lines.filter(l => isDrawn(l.code))
   const order: OrderReport = { local: 0, exact: 0, components: 0, fallbacks: 0 }
@@ -704,7 +708,7 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: 
     const termini = l.kind === 'RAIL' ? [] : runs.flatMap(run => (run.length ? [run[0]!, run[run.length - 1]!] : []))
     const pieces = (OVERVIEW_WAYS[l.code] ?? []).reduce((kept, way) => takeWay(kept, runs, way), dedupePatterns(runs, keptApart))
     return { code: l.code, kind: l.kind, color: l.color, termini, pieces: dropBypasses(pieces, keptApart) }
-  }), order, keptApart)
+  }), order, keptApart, { railApart: true })
   console.log(`  line order: crossings cost ${order.exact} solved exactly (local search: ${order.local}), ${order.components} component(s)`)
   if (order.fallbacks > 0) console.warn(`  ${order.fallbacks} component(s) unsolved in time, local order kept`)
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
@@ -718,8 +722,13 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: 
   const laid = laidOnRoads(edges, roads, brt, corners, strokeKeys(lines), laying, stopsOf)
   console.log(`  corners:    ${corners.eased} eased into one bend, ${corners.junctions} turned at a node, ${corners.squeezed} narrower than their radius (${corners.folded} folding a bundle)`)
   if (laying.unlaid > 0) console.log(`  roads:      ${laying.unlaid} edge(s) kept to their own way, laid onto a road beside it`)
+  // A knot of junctions closer than a bundle is wide, one node: its lines kinked through the short edges
+  // between. After the roads are laid, so each edge is laid from where it really parts (a one-way pair's
+  // second street, laid from the first's node, ran down the first).
+  const knotted = contractShortEdges(laid, KNOT_M)
+  if (knotted.length < laid.length) console.log(`  knots:      ${laid.length - knotted.length} short edge(s) drawn into their nodes`)
   // Lines changing sides straight through a node cross over there, not jump.
-  const crossed = crossOver(laid, strokeKeys(lines))
+  const crossed = crossOver(knotted, strokeKeys(lines), true)
   if (crossed.length > laid.length) console.log(`  crossings:  ${crossed.length - laid.length} edge(s) more, lines crossing over`)
   return crossed
 }
