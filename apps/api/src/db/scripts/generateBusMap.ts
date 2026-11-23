@@ -162,6 +162,12 @@ const DRAWN_LOOP_M = 40
 
 /** An edge laid onto the roads longer than this times its own length, and this much more, went onto a road beside it. */
 const LAID_STRETCH = 1.5
+
+/** A node's edges' ways out of it, judged over this far; two within 20° of opposite go straight through. */
+const NODE_HEADING_M = 30
+const STRAIGHT_THROUGH_COS = Math.cos((20 * Math.PI) / 180)
+const M_PER_LAT = 110_574
+const M_PER_LNG = Math.cos((-6.2 * Math.PI) / 180) * 111_320
 const LAID_SLACK_M = 20
 
 /** Topology redraws until the koridors settle; see alongTopology. */
@@ -691,7 +697,12 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: 
   const order: OrderReport = { local: 0, exact: 0, components: 0, fallbacks: 0 }
   // A road split by a toll road between its sides is two streets, each drawn (Yos Sudarso at Walikota).
   const keptApart = (a: [number, number], b: [number, number], heading: [number, number]): boolean => roads.motorwayBetween(a, b, heading)
-  const edges = await bundle(drawn.map(l => ({ code: l.code, kind: l.kind, color: l.color, pieces: dropBypasses(dedupePatterns(l.shapes.map(s => decodePolyline(s)), keptApart), keptApart) })), order, keptApart)
+  const edges = await bundle(drawn.map((l) => {
+    const runs = l.shapes.map(s => decodePolyline(s))
+    // A koridor's runs end where its trips turn round.
+    const termini = l.kind === 'RAIL' ? [] : runs.flatMap(run => (run.length ? [run[0]!, run[run.length - 1]!] : []))
+    return { code: l.code, kind: l.kind, color: l.color, termini, pieces: dropBypasses(dedupePatterns(runs, keptApart), keptApart) }
+  }), order, keptApart)
   console.log(`  line order: crossings cost ${order.exact} solved exactly (local search: ${order.local}), ${order.components} component(s)`)
   if (order.fallbacks > 0) console.warn(`  ${order.fallbacks} component(s) unsolved in time, local order kept`)
   const brt = new Set(lines.filter(l => l.kind === 'BRT').map(l => l.code))
@@ -736,13 +747,38 @@ function laidOnRoads(
     busNodes.add(keyOf(pts[0]!))
     busNodes.add(keyOf(pts[pts.length - 1]!))
   }
+  // The way each bus edge leaves each node, over its first NODE_HEADING_M: a node two of them go
+  // straight through is laid on their street, not a side road meeting it there.
+  const leaving = new Map<string, [number, number][]>()
+  for (const edge of edges) {
+    if (railOnly(edge)) continue
+    const pts = decodePolyline(edge.shape)
+    if (pts.length < 2) continue
+    for (const way of [pts, [...pts].reverse()]) {
+      const from = way[0]!
+      const to = way.find(q => lengthM([from, q]) >= NODE_HEADING_M) ?? way[way.length - 1]!
+      const dx = (to[0] - from[0]) * M_PER_LNG
+      const dy = (to[1] - from[1]) * M_PER_LAT
+      const d = Math.hypot(dx, dy)
+      if (d > 0) leaving.set(keyOf(from), [...(leaving.get(keyOf(from)) ?? []), [dx / d, dy / d]])
+    }
+  }
+  const straightThrough = (key: string): [number, number] | undefined => {
+    const ways = leaving.get(key) ?? []
+    for (let i = 0; i < ways.length; i++) {
+      for (let j = i + 1; j < ways.length; j++) {
+        if (ways[i]![0] * ways[j]![0] + ways[i]![1] * ways[j]![1] < -STRAIGHT_THROUGH_COS) return ways[i]
+      }
+    }
+    return undefined
+  }
   const nodes = new Map<string, LngLat>()
   const node = (p: LngLat): LngLat => {
     const key = keyOf(p)
     if (!busNodes.has(key)) return p
     let snapped = nodes.get(key)
     if (!snapped) {
-      snapped = snapPoint(p, roads)
+      snapped = snapPoint(p, roads, straightThrough(key))
       nodes.set(key, snapped)
     }
     return snapped

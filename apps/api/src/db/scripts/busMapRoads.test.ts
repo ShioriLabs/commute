@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LngLat } from '../../utils/polyline'
-import { koridorOf, koridorsOf, Roads, snapToRoads } from './busMapRoads'
+import { koridorOf, koridorsOf, Roads, snapPoint, snapToRoads } from './busMapRoads'
 
 /* Metres to the generator's flat plane and back, as busMapRoads.ts projects. */
 const KX = Math.cos((-6.2 * Math.PI) / 180) * 111_320
@@ -14,6 +14,21 @@ const north = ([, lat]: LngLat): number => lat * KY - Y0
 
 const road = (points: [number, number][], { oneway = false, busway = false, bridge = false, motorway = false } = {}) =>
   ({ xy: points.map(([e, n]) => xy(e, n)), oneway, busway, bridge, motorway })
+
+describe('snapPoint', () => {
+  // Jl. Galunggung east-west; a side road up to it from the south, its end 10 m short of it.
+  const roads = new Roads([road([[-300, 0], [300, 0]]), road([[0, -200], [0, -10]])])
+
+  it('takes the nearest road, whichever way it runs', () => {
+    expect(north(snapPoint(at(0, -6), roads))).toBeCloseTo(-10, 0)
+  })
+
+  it('keeps a node a bundle goes straight through on its street', () => {
+    const p = snapPoint(at(0, -6), roads, [1, 0])
+    expect(north(p)).toBeCloseTo(0, 0)
+    expect(east(p)).toBeCloseTo(0, 0)
+  })
+})
 
 describe('snapToRoads', () => {
   it('takes the lane past a halte that its bus calls at, by the platform on it', () => {

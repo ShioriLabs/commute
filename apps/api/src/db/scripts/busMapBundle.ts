@@ -57,6 +57,25 @@ const OWN_TAIL = Math.ceil(OWN_REACH_M / SAMPLE_M)
 const LOOP_EDGE_MIN_M = 150
 
 /**
+ * [list]'s chains cut at the termini along them (Network.termini), each part its own chain, so the
+ * lines ending there may take each side in their own order (pairRules). Last, once the network's
+ * shape is settled: a loop's two halves would read as a bubble.
+ */
+export function splitAtTermini(network: Network, list: readonly Chain[]): Chain[] {
+  return list.flatMap((chain) => {
+    const parts: Chain[] = []
+    let from = 0
+    for (let k = 1; k < chain.path.length - 1; k++) {
+      if (!network.termini?.has(chain.path[k]!)) continue
+      parts.push({ path: chain.path.slice(from, k + 1), lines: chain.lines })
+      from = k
+    }
+    parts.push({ path: chain.path.slice(from), lines: chain.lines })
+    return parts
+  })
+}
+
+/**
  * [list] without its short loops: a chain off the network and back to the point it left, under
  * LOOP_EDGE_MIN_M round, is no street but a short-turn pattern hooking off the road at its end (9
  * toward Cawang Sentral, a 73 m teardrop off the bundle by Transjakarta Pintu 1, no halte on it). A
@@ -119,6 +138,11 @@ export interface BundleLine {
    * draws New York's A, C and E as one blue. Absent, the line is a stroke of its own.
    */
   color?: string
+  /**
+   * Where its trips turn round: the ends of its runs. Lines ending at one may change places there,
+   * under the halte's mark, at no cost (TERMINUS_M).
+   */
+  termini?: LngLat[]
 }
 
 /*
@@ -212,7 +236,18 @@ export interface Network {
   /** Undirected edge `a|b` -> the lines along it. */
   edges: Map<string, Set<string>>
   adjacency: Map<number, Set<number>>
+  /** The point each line's termini lie on -> the lines ending there (BundleLine.termini). */
+  termini?: Map<number, Set<string>>
 }
+
+/*
+ * A line's terminus lies on the point of the network carrying it nearest, within
+ * this. There a chain ends, and lines ending there may swap sides for nothing:
+ * two lines round one terminal loop, both ways along the street to it, must
+ * cross once somewhere (4 and 6 round Galunggung's block), and are best crossed
+ * under the terminus's mark, not where the loop leaves the street.
+ */
+const TERMINUS_M = 30
 
 /** Whether two points, in metres, of a line heading [heading] lie either side of something keeping their streets apart. */
 export type KeptApart = (a: [number, number], b: [number, number], heading: [number, number]) => boolean
@@ -297,10 +332,14 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
   }
 
   let pieceId = 0
+  // Each piece's line, and its end points, for joining a loose end to its line after.
+  const pieceCode: string[] = []
+  const ends: { id: number, piece: number }[] = []
   for (const code of order) {
     const line = byCode.get(code)!
     const rail = line.kind === 'RAIL'
     for (const piece of line.pieces) {
+      pieceCode[pieceId] = code
       const samples = resample(piece)
       if (samples.length < 2) {
         pieceId++
@@ -415,12 +454,67 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
           if (path) for (let k = 1; k < path.length; k++) link(path[k - 1]!, path[k]!, code)
           else link(previous, at, code)
         }
+        if (i === 0) ends.push({ id: at, piece: pieceId })
         previous = at
       }
+      if (previous >= 0) ends.push({ id: previous, piece: pieceId })
       pieceId++
     }
   }
-  return { points, edges, adjacency }
+  // A piece's end left loose beside its own line, across it rather than along it, so not snapped,
+  // joins it: 4 and 6 back up onto the canal road at Galunggung, deduped where they turn east onto
+  // it, stubbed 9 m past it. The nearest point of the line's other pieces within SNAP_M.
+  for (const { id, piece } of ends) {
+    const p = points[id]!
+    if (p.piece !== piece || adjacency.get(id)?.size !== 1) continue
+    const code = pieceCode[piece]!
+    let best = -1
+    let bestD = SNAP_M
+    const cx = Math.floor(p.x / SNAP_M)
+    const cy = Math.floor(p.y / SNAP_M)
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (const other of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
+          const q = points[other]!
+          if (q.piece === piece || pieceCode[q.piece] !== code || !adjacency.has(other)) continue
+          if (keptApart([p.x, p.y], [q.x, q.y], [p.ux, p.uy])) continue
+          const d = Math.hypot(q.x - p.x, q.y - p.y)
+          if (d <= bestD) {
+            bestD = d
+            best = other
+          }
+        }
+      }
+    }
+    // With every line on the end's edge: a line snapped onto this piece ends here too (6 onto 4's).
+    if (best < 0) continue
+    const [next] = adjacency.get(id)!
+    for (const line of edges.get(edgeKey(id, next!)) ?? [code]) link(id, best, line)
+  }
+  const termini = new Map<number, Set<string>>()
+  for (const line of lines) {
+    for (const [lng, lat] of line.termini ?? []) {
+      const [x, y] = [lng * KX, lat * KY]
+      let best = -1
+      let bestD = TERMINUS_M
+      const cx = Math.floor(x / SNAP_M)
+      const cy = Math.floor(y / SNAP_M)
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (const id of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
+            if (![...adjacency.get(id) ?? []].some(n => edges.get(edgeKey(id, n))?.has(line.code))) continue
+            const d = Math.hypot(points[id]!.x - x, points[id]!.y - y)
+            if (d <= bestD) {
+              bestD = d
+              best = id
+            }
+          }
+        }
+      }
+      if (best >= 0) termini.set(best, new Set([...termini.get(best) ?? [], line.code]))
+    }
+  }
+  return { points, edges, adjacency, termini }
 }
 
 const sameLines = (a: Set<string>, b: Set<string>): boolean => a.size === b.size && [...a].every(c => b.has(c))
@@ -640,7 +734,8 @@ export function popBubbles(network: Network, list: Chain[]): boolean {
     const keep = list[sorted[0]!]!
     for (const i of sorted.slice(1)) {
       const fold = list[i]!
-      if (gap(network, fold, keep) > BUBBLE_GAP_M) continue
+      // Either way: a short link across the ends of a loop round a block is no street drawn twice.
+      if (gap(network, fold, keep) > BUBBLE_GAP_M || gap(network, keep, fold) > BUBBLE_GAP_M) continue
       const merged = new Set([...keep.lines, ...fold.lines])
       for (let k = 1; k < keep.path.length; k++) network.edges.set(edgeKey(keep.path[k - 1]!, keep.path[k]!), merged)
       keep.lines = merged
@@ -699,6 +794,23 @@ export interface PairRule {
   weight: number
 }
 
+/**
+ * A line's ways through a node, from its chain ends there: in along one, on along the other. One
+ * here three times passes twice, along its street and out round a loop and back (4 and 6 at
+ * Galunggung): the loop's two ends are the two whose chains come round to the same point.
+ */
+function passesThrough<E extends { chain: number, atStart: boolean }>(list: readonly Chain[], ends: readonly E[]): [E, E][] {
+  if (ends.length === 2) return ends[0]!.chain !== ends[1]!.chain ? [[ends[0]!, ends[1]!]] : []
+  if (ends.length !== 3) return []
+  const farOf = (end: E): number => {
+    const path = list[end.chain]!.path
+    return end.atStart ? path[path.length - 1]! : path[0]!
+  }
+  const street = ends.filter(x => ends.every(y => y === x || farOf(y) !== farOf(x)))
+  if (street.length !== 1) return []
+  return ends.filter(end => end !== street[0]).map(side => [street[0]!, side])
+}
+
 /** The pairs of lines passing through each node, and what crossing there costs (see above). */
 export function pairRules(network: Network, list: readonly Chain[]): PairRule[] {
   const { points } = network
@@ -726,20 +838,27 @@ export function pairRules(network: Network, list: readonly Chain[]): PairRule[] 
   })
 
   const rules: PairRule[] = []
-  for (const here of ends.values()) {
+  for (const [node, here] of ends) {
+    const ending = network.termini?.get(node)
     const endsOf = new Map<string, End[]>()
     for (const end of here) {
       for (const line of list[end.chain]!.lines) endsOf.set(line, [...(endsOf.get(line) ?? []), end])
     }
     // Lines passing through: in on one chain, out on another. A line ending here crosses nothing.
-    const through = [...endsOf].filter(([, e]) => e.length === 2 && e[0]!.chain !== e[1]!.chain)
+    const through: [string, [End, End], boolean][] = []
+    for (const [line, e] of endsOf) for (const pass of passesThrough(list, e)) through.push([line, pass, e.length === 3])
     for (let i = 0; i < through.length; i++) {
       for (let j = i + 1; j < through.length; j++) {
-        const [a, [a1, a2]] = through[i]!
-        const [b, [b1, b2]] = through[j]!
-        const shared = [a1!, a2!].filter(e => e === b1 || e === b2)
+        const [a, [a1, a2], twiceA] = through[i]!
+        const [b, [b1, b2], twiceB] = through[j]!
+        if (a === b) continue
+        // Both end here: they change places under the terminus's mark, for nothing.
+        if (ending?.has(a) && ending.has(b)) continue
+        const shared = [a1, a2].filter(e => e === b1 || e === b2)
+        // A line passing twice parts from itself here, so it is only held to keep its place along one way.
+        if ((twiceA || twiceB) && shared.length !== 2) continue
         if (shared.length === 2) {
-          rules.push({ a, b, inChain: a1!.chain, inAtStart: a1!.atStart, outChain: a2!.chain, outAtStart: a2!.atStart, weight: SAME_CROSSING })
+          rules.push({ a, b, inChain: a1.chain, inAtStart: a1.atStart, outChain: a2.chain, outAtStart: a2.atStart, weight: SAME_CROSSING })
         } else if (shared.length === 1) {
           const into = shared[0]!
           const outA = into === a1 ? a2! : a1!
@@ -1088,9 +1207,7 @@ export function bundleShifts(network: Network, list: readonly Chain[], orders: r
     for (const end of here) {
       for (const line of orders[end.chain]!) endsOf.set(line, [...(endsOf.get(line) ?? []), end])
     }
-    for (const [line, through] of endsOf) {
-      if (through.length !== 2 || through[0]!.chain === through[1]!.chain) continue
-      const [a, b] = through as [{ chain: number, atStart: boolean }, { chain: number, atStart: boolean }]
+    for (const [line, at] of endsOf) for (const [a, b] of passesThrough(list, at)) {
       if (!free(a.chain) && !free(b.chain)) continue
       // Travelling in along a and on along b: right of that way is right of a chain run with it.
       const sa = a.atStart ? -1 : 1
@@ -1151,7 +1268,7 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport,
     if (smoothed) list = chains(network)
     if (!popped && !smoothed) break
   }
-  list = dropShortLoops(network, list)
+  list = splitAtTermini(network, dropShortLoops(network, list))
   orient(network, list)
   const order = bundleOrder(lines)
   const rank = new Map(order.map((code, i) => [code, i]))
@@ -1163,7 +1280,9 @@ export async function bundle(lines: readonly BundleLine[], report?: OrderReport,
     if (!strokeRank.has(key)) strokeRank.set(key, rank.get(code)!)
   }
   const strokes: Chain[] = list.map(chain => ({ path: chain.path, lines: new Set([...chain.lines].map(l => strokeOf.get(l)!)) }))
-  const rules = pairRules(network, strokes)
+  // The termini too, as the strokes ending there.
+  const termini = new Map([...network.termini ?? []].map(([n, ls]) => [n, new Set([...ls].map(l => strokeOf.get(l)!))]))
+  const rules = pairRules({ ...network, termini }, strokes)
   const localOrders = orderLinesLocal(strokes, rules, strokeRank)
   const exactOrders = orderLinesExact(strokes, rules, strokeRank, await loadSolver(), report)
   const local = orderCost(rules, localOrders)
@@ -1881,7 +2000,10 @@ export function roundJunctions(edges: readonly JunctionEdge[], tally?: CornerTal
  * the same way round as that piece (no more than STRETCH times longer, plus
  * SLACK_M). Kept as Transit keeps them: a one-way pair a block or more apart for
  * longer than that (two strands, Metrobús 4 through Centro), an end loop that
- * comes back where it left (rejoining under LOOP_MIN_M along), a branch. A
+ * comes back where it left (rejoining under LOOP_MIN_M along), a branch, and a
+ * stretch leaving or rejoining a kept piece at its end (within END_M): the line
+ * goes on from there, round the rest of a terminal loop cut at its terminus (4
+ * and 6 at Galunggung, back up to the canal road), with no other side to it. A
  * stretch within NEAR_M (the other carriageway) stays too: it bundles with the
  * rest. The line's own streets, both ways, are still drawn at street zoom and alone.
  */
@@ -1891,6 +2013,7 @@ const LOCAL_MAX_M = 600
 const LOOP_MIN_M = 40
 const STRETCH = 3
 const SLACK_M = 150
+const END_M = DENSE_M
 /** A cut reaches back up to TRIM_REACH_M along what is still more than TRIM_M off the line. */
 const TRIM_M = 10
 const TRIM_REACH_M = 80
@@ -1963,6 +2086,8 @@ export function dropBypasses(pieces: readonly LngLat[][], apart?: KeptApart): Ln
   }
   if (!order.length) return []
   const kept: XY[][] = [order[0]!.xy]
+  /** Whether [at] metres along kept piece [k] is one of its ends. */
+  const atEnd = (k: number, at: number): boolean => at <= END_M || at >= lengthOf(kept[k]!) - END_M
   const out: LngLat[][] = [[...pieces[order[0]!.i]!]]
   for (const { i, xy } of order.slice(1)) {
     const pts = densify(xy)
@@ -1975,6 +2100,8 @@ export function dropBypasses(pieces: readonly LngLat[][], apart?: KeptApart): Ln
       return best
     })
     const cut = pts.map(() => false)
+    // Each stretch off the line, a..b-1: whether it would bypass, and whether the line goes on there.
+    const stretches: { a: number, b: number, bypass: boolean, goesOn: boolean }[] = []
     for (let a = 0; a < pts.length;) {
       if (near[a]!.d <= NEAR_M) {
         a++
@@ -1996,20 +2123,35 @@ export function dropBypasses(pieces: readonly LngLat[][], apart?: KeptApart): Ln
           const hl = Math.hypot(hx, hy) || 1
           return apart(mid, foot, [hx / hl, hy / hl])
         })()
-        if (!split && from.k === to.k && run <= LOCAL_MAX_M && around >= LOOP_MIN_M && around <= run * STRETCH + SLACK_M) {
-          for (let k = a; k < b; k++) cut[k] = true
-          // And back along where it is still parting from the line, so no stub splays off the bundle.
-          for (let k = a - 1, m = 0; k >= 0 && near[k]!.d > TRIM_M && m <= TRIM_REACH_M; k--) {
-            cut[k] = true
-            m += DENSE_M
-          }
-          for (let k = b, m = 0; k < pts.length && near[k]!.d > TRIM_M && m <= TRIM_REACH_M; k++) {
-            cut[k] = true
-            m += DENSE_M
-          }
-        }
+        const goesOn = atEnd(from.k, from.at) || atEnd(to.k, to.at)
+        const bypass = !split && from.k === to.k && run <= LOCAL_MAX_M && around >= LOOP_MIN_M && around <= run * STRETCH + SLACK_M
+        stretches.push({ a, b, bypass, goesOn })
       }
       a = b
+    }
+    // Round a terminal loop the line goes on, past where it only brushes the line (under
+    // SHARED_MIN_M near it), either way: 13E round the block at Puri Beta 2, by the terminus and on.
+    for (let s = 1; s < stretches.length; s++) {
+      const [p, q] = [stretches[s - 1]!, stretches[s]!]
+      if (p.goesOn && (q.a - p.b) * DENSE_M < SHARED_MIN_M) q.goesOn = true
+    }
+    for (let s = stretches.length - 2; s >= 0; s--) {
+      const [p, q] = [stretches[s]!, stretches[s + 1]!]
+      if (q.goesOn && (q.a - p.b) * DENSE_M < SHARED_MIN_M) p.goesOn = true
+    }
+    for (const { a, b, bypass, goesOn } of stretches) {
+      if (bypass && !goesOn) {
+        for (let k = a; k < b; k++) cut[k] = true
+        // And back along where it is still parting from the line, so no stub splays off the bundle.
+        for (let k = a - 1, m = 0; k >= 0 && near[k]!.d > TRIM_M && m <= TRIM_REACH_M; k--) {
+          cut[k] = true
+          m += DENSE_M
+        }
+        for (let k = b, m = 0; k < pts.length && near[k]!.d > TRIM_M && m <= TRIM_REACH_M; k++) {
+          cut[k] = true
+          m += DENSE_M
+        }
+      }
     }
     if (!cut.some(Boolean)) {
       kept.push(xy)

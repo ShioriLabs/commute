@@ -976,9 +976,12 @@ function foldAsides(matches: (Match | null)[], points: readonly [number, number]
 /**
  * [p] onto the nearest point of any drivable road within SNAP_M, whichever way it
  * runs; as it is with none. For a junction of the network, where several edges
- * meet and must go on meeting.
+ * meet and must go on meeting. With [heading] (a unit vector in metres), only
+ * onto a road running that way, either way: a node a bundle goes straight
+ * through stays on its street, not pulled onto the side road meeting it there
+ * (4 and 6 back up onto Jl. Galunggung, its straight bundle dipping 10 m).
  */
-export function snapPoint(p: LngLat, roads: Roads): LngLat {
+export function snapPoint(p: LngLat, roads: Roads, heading?: [number, number]): LngLat {
   const [x, y] = toXY(p)
   let best: [number, number] | null = null
   let bestD = SNAP_M
@@ -990,6 +993,7 @@ export function snapPoint(p: LngLat, roads: Roads): LngLat {
     const dy = by - ay
     const l2 = dx * dx + dy * dy
     if (l2 === 0) continue
+    if (heading && Math.abs(heading[0] * dx + heading[1] * dy) / Math.sqrt(l2) < ALONGSIDE_COS) continue
     const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2))
     const q: [number, number] = [ax + t * dx, ay + t * dy]
     const d = Math.hypot(x - q[0], y - q[1])

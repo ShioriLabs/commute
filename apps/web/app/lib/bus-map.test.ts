@@ -79,16 +79,17 @@ describe('bus-map.json', () => {
     }
   })
 
-  // For now only the trunk koridors are drawn (the plain numbers, 13E, L13E: isDrawn in
-  // apps/api's busMapBundle.ts); the other lines keep their data off the network.
-  it('draws every trunk koridor on the network, each once per edge, and nothing else', () => {
+  // For now only the trunk koridors and the rail lines are drawn (the plain numbers, 13E, L13E, and
+  // line keys like KCI:C: isDrawn in apps/api's busMapBundle.ts); the other lines keep their data
+  // off the network.
+  it('draws every trunk koridor and rail line on the network, each once per edge, and nothing else', () => {
     const codes = new Set(busMap.lines.map(l => l.code))
     for (const edge of busMap.edges) {
       expect(edge.lines.length, edge.shape).toBeGreaterThan(0)
       expect(new Set(edge.lines).size, edge.lines.join(' ')).toBe(edge.lines.length)
       for (const code of edge.lines) expect(codes.has(code), code).toBe(true)
     }
-    const trunk = (code: string): boolean => /^\d+$/.test(code) || code === '13E' || code === 'L13E'
+    const trunk = (code: string): boolean => /^\d+$/.test(code) || code === '13E' || code === 'L13E' || code.includes(':')
     expect(new Set(busMap.edges.flatMap(e => e.lines))).toEqual(new Set([...codes].filter(trunk)))
   })
 

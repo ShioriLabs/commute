@@ -424,6 +424,52 @@ describe('roundJunctions', () => {
   })
 })
 
+describe('a piece ending across its own line', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  it('joins it instead of stubbing past it', () => {
+    // 6 at Galunggung: west along the canal road, round and east to the terminus; then on east, up
+    // and onto the canal road eastward, deduped where it turns onto it, its end 9 m across the road.
+    const network = buildNetwork([line('6', 'BRT',
+      [at(600, 100), at(0, 100), at(0, 0), at(40, 0)],
+      [at(40, 0), at(190, 0), at(200, 109)])])
+    const loose = [...network.adjacency].filter(([, next]) => next.size === 1).map(([id]) => network.points[id]!)
+    expect(loose.map(p => Math.round(p.x / 10) * 10 - Math.round(LNG_X / 10) * 10)).toEqual([600])
+  })
+})
+
+describe('two lines round one terminal loop', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  // 4 and 6 at Galunggung: west along the street, round the block to the terminus, on round and
+  // back east along the street. Going round, they must change places once.
+  const loop = (code: string, termini?: LngLat[]): BundleLine => ({
+    code,
+    kind: 'BRT',
+    // Ordered as strokes, keyed by colour, as the generator gives them.
+    color: code === '4' ? '#512C62' : '#1BAC47',
+    pieces: [[at(800, 100), at(0, 100), at(0, 0), at(100, 0)], [at(100, 0), at(190, 0), at(200, 100), at(800, 100)]],
+    ...(termini ? { termini } : {})
+  })
+
+  it('crosses where the loop leaves the street, with no terminus to cross at', async () => {
+    const report = { local: 0, exact: 0, components: 0, fallbacks: 0 }
+    await bundle([loop('4'), loop('6')], report)
+    expect(report.exact).toBeGreaterThan(0)
+  })
+
+  it('crosses under the terminus, for nothing, when both end there', async () => {
+    const report = { local: 0, exact: 0, components: 0, fallbacks: 0 }
+    const termini = [at(100, 0), at(800, 100)]
+    const edges = await bundle([loop('4', termini), loop('6', termini)], report)
+    expect(report.exact).toBe(0)
+    // Cut there: the loop's two sides meet at the terminus.
+    const ends = edges.flatMap((e) => {
+      const p = decodePolyline(e.shape)
+      return [p[0]!, p[p.length - 1]!]
+    })
+    expect(ends.some(([lng, lat]) => Math.hypot((lng - LNG) * M_LNG - 100, (lat - LAT) * M_LAT) < 5)).toBe(true)
+  })
+})
+
 describe('rail beside a busway', () => {
   const north = (east: number): [number, number][] => [[LNG + east / M_LNG, LAT], [LNG + east / M_LNG, LAT + 1500 / M_LAT]]
   const shared = (east: number): boolean => {
@@ -519,6 +565,27 @@ describe('dropBypasses', () => {
     const main = run([0, 0], [0, 2000])
     const loop = run([0, 2000], [200, 2100], [300, 2000], [200, 1950], [10, 2000])
     expect(dropBypasses([main, loop])).toEqual([main, loop])
+  })
+
+  it('keeps the way back round a terminal loop cut at its terminus', () => {
+    // 4 and 6 at Galunggung: west along the canal road, down and east to the terminus, where the
+    // piece ends; the next from there east, up and back onto the canal road. Nothing else goes round.
+    const main = run([600, 100], [0, 100], [0, 0], [40, 0])
+    const back = run([40, 0], [190, 0], [210, 90], [230, 100], [600, 100])
+    const kept = dropBypasses([main, back])
+    expect(passes(kept, 190, 0)).toBe(true)
+    expect(passes(kept, 210, 90)).toBe(true)
+  })
+
+  it('keeps all of a terminal loop that brushes past the line on its way round', () => {
+    // 13E at Puri Beta 2: in along the south road to the terminus; out round the block north, past
+    // the line's end within metres, then east along the north road and down onto the line again.
+    const main = run([700, 0], [0, 0])
+    const loop = run([0, 0], [-30, 30], [0, 70], [60, 40], [100, 80], [250, 90], [330, 30], [350, 5])
+    const kept = dropBypasses([main, loop])
+    expect(passes(kept, -30, 30)).toBe(true)
+    expect(passes(kept, 100, 80)).toBe(true)
+    expect(passes(kept, 250, 90)).toBe(true)
   })
 
   it('keeps a branch that goes somewhere else', () => {
