@@ -799,6 +799,15 @@ export function popBubbles(network: Network, list: Chain[]): boolean {
  */
 const SAME_CROSSING = 4
 const SPLIT_CROSSING = 1
+
+/*
+ * Two lines side by side coming into a node that go on together with another
+ * between them part, though they ran as one: SEPARATION, the LOOM paper's
+ * (Bast, Brosi, Storandt) penalty for partners parting, at its weight against
+ * its crossings' (4 and 1). The LRT's BK and CB, or 13 and 13E, stay together
+ * where a line could as well join between them.
+ */
+const SEPARATION = 3
 const ORDER_PASSES = 30
 
 export interface PairRule {
@@ -1169,6 +1178,34 @@ function solveOrders(
     cost(crossed, weight)
     atLeast([[crossed, 1], [aLeft, -1], [aLeftOn, 1]], 0)
     atLeast([[crossed, 1], [aLeftOn, -1], [aLeft, 1]], 0)
+
+    // Partners parting (see SEPARATION): side by side coming in, another between them going on.
+    // Whether [d] lies between a and b on chain [c]: left of one and not of the other.
+    const between = (c: number, d: string, name: string): string => {
+      const u = before(c, rule.a, d)
+      const v = before(c, rule.b, d)
+      binaries.push(name)
+      atLeast([[name, 1], [u, -1], [v, 1]], 0)
+      atLeast([[name, 1], [v, -1], [u, 1]], 0)
+      atLeast([[u, 1], [v, 1], [name, -1]], 0)
+      atLeast([[name, -1], [u, -1], [v, -1]], -2)
+      return name
+    }
+    const others = (c: number): string[] => orders[c]!.filter(l => l !== rule.a && l !== rule.b)
+    const outOthers = others(rule.outChain)
+    if (outOthers.length === 0) return
+    const inBetween = others(rule.inChain).map((d, k) => between(rule.inChain, d, `bi${r}_${k}`))
+    const partners = `p${r}`
+    binaries.push(partners)
+    // Nothing between them coming in: partners.
+    atLeast([[partners, 1], ...inBetween.map((name): [string, number] => [name, 1])], 1)
+    const parted = `s${r}`
+    binaries.push(parted)
+    cost(parted, SEPARATION * scale)
+    outOthers.forEach((d, k) => {
+      const name = between(rule.outChain!, d, `bo${r}_${k}`)
+      atLeast([[parted, 1], [partners, -1], [name, -1]], -1)
+    })
   })
 
   const terms = [...objective].filter(([, k]) => k !== 0).map(([name, k]) => `${k >= 0 ? '+' : '-'} ${Math.abs(k)} ${name}`)
