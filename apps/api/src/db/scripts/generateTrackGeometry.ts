@@ -3,6 +3,7 @@ import type { Operator } from '@commute/constants'
 import { TOPOLOGY, type LineTopology, type Stop } from '../data/topology'
 import { haversineMeters } from '../../utils/geo'
 import { stopLists } from '../../utils/edgeChain'
+import { simplify, type LngLat } from '../../utils/polyline'
 
 /*
  * Physical track geometry for every rail adjacency in TOPOLOGY, traced out of
@@ -19,11 +20,16 @@ import { stopLists } from '../../utils/edgeChain'
  * How a segment is traced: the OSM running lines for the operator's mode are
  * built into an undirected graph, each station is projected onto its nearest
  * track segment, and the shortest path along the rails between the two
- * projections is the geometry. Yards, sidings and spurs are left out of the
- * graph so a path can't shortcut through a depot, and the Whoosh high-speed
+ * projections is the geometry. Yards, sidings and spurs cost five times their
+ * length so a path can't shortcut through a depot, and the Whoosh high-speed
  * line is left out because it is tagged as ordinary main-line rail.
  *
- * `lengthM` is measured on the full-resolution trace. Simplify only for
+ * That path follows one OSM running line, so on double track it sits on one
+ * side of the track bed. Each point is then moved to the middle of the bed
+ * (TrackGraph.bedShift, smoothed by centreTrace()) so the drawn line sits where a
+ * map reader expects it.
+ *
+ * `lengthM` is measured on the full-resolution trace, before centring. Simplify only for
  * shipping, never before measuring — simplification cuts curves and shortens
  * the distance.
  *
@@ -77,6 +83,38 @@ const JOIN_GAP_M = 15
 const PARALLEL_TRACK_M = 25
 // Metres per degree of latitude.
 const DEG_M = 111_320
+// Running lines of the same line this close side by side are one track bed
+// (double track, quadruple track, the loops through a station) and are centred
+// on together. Wide enough to span an island platform with room to spare: a station whose
+// tracks spread past it puts a kink in the line, snapping back onto one track.
+const TRACK_BED_GAP_M = 30
+// Furthest a parallel running line is looked for, either side of the path.
+const MAX_BED_HALF_WIDTH_M = 40
+// Running lines whose bearings differ by less than this count as parallel.
+const PARALLEL_COS = Math.cos((20 * Math.PI) / 180)
+// A parallel line counts only where it runs abeam of the point, not off past
+// the end of one of its segments.
+const ABEAM_TOLERANCE_M = 3
+// The trace is resampled this often before centring, so a change in bed width
+// ramps across many points instead of jumping between two OSM nodes.
+const SAMPLE_M = 5
+// Median radius, along the trace, that irons out spikes where the nearest
+// running line under a point is briefly a crossover or a turnout leg.
+const SPIKE_RADIUS_M = 15
+// Moving-average radius, along the trace, that ramps the line across a change
+// in bed width, and the distance over which a segment's ends ease onto their
+// stations' centred points.
+const RAMP_RADIUS_M = 60
+// A sideways move of the centred line bigger than this between two samples is
+// a change in bed width, to be ramped: a track joining or leaving the bed moves
+// the centre half a track spacing (2m or more) at once. Smaller moves are the
+// line curving, or tracks spreading apart gradually (Kalayang's ~0.5m a
+// sample), and are kept.
+const BED_STEP_M = 1
+// Douglas-Peucker tolerance that thins the resampled, centred line again.
+const OUTPUT_SIMPLIFY_M = 0.5
+// Spatial index cell for the running-line segments, in degrees (~55m).
+const GRID_DEG = 0.0005
 
 // A station further than this from its line's track is a bad coordinate or a
 // missing OSM way, not a real offset.
@@ -88,6 +126,11 @@ const MAX_DETOUR_RATIO = 1.5
 const MAX_CHAINAGE_DRIFT = 0.1
 
 interface Coord { lat: number, lng: number }
+
+// One piece of track between two OSM nodes. `name` is the way's line name
+// ("Jalur Kereta Api Jakarta Kota–Bogor"), when OSM gives one; `layer` is its
+// OSM layer, '0' when untagged.
+interface TrackSegment { a: number, b: number, name?: string, layer: string }
 
 interface OsmElement {
   type: 'node' | 'way'
@@ -147,9 +190,15 @@ class TrackGraph {
   readonly pos = new Map<number, Coord>()
   readonly adj = new Map<number, Map<number, number>>()
   // Running-line segments only: the candidates a station may snap onto.
-  readonly segments: [number, number][] = []
+  readonly segments: TrackSegment[] = []
+  // The tracks a track bed is measured across: the running lines, plus the
+  // numbered station tracks OSM tags as sidings (Manggarai's 1 and 4, which
+  // the Cikarang line calls at).
+  readonly bedSegments: TrackSegment[] = []
   // Spliced-in projection nodes take negative ids so they never collide with OSM's.
   private nextId = -1
+  // Bed segments by grid cell, built on first use by bedShift().
+  private grid: Map<string, TrackSegment[]> | null = null
 
   constructor(elements: OsmElement[], railway: string) {
     const nodes = new Map<number, Coord>()
@@ -162,6 +211,7 @@ class TrackGraph {
       if (e.type !== 'way' || t.railway !== railway) continue
       if (t.highspeed === 'yes' || /kereta cepat/i.test(t.operator ?? '')) continue
       const serviceTrack = SERVICE_TRACK.has(t.service ?? '')
+      const stationTrack = serviceTrack && t['railway:track_ref'] != null
       const ids = e.nodes!.filter(id => nodes.has(id))
       for (let i = 1; i < ids.length; i++) {
         const a = ids[i - 1]!
@@ -169,7 +219,9 @@ class TrackGraph {
         this.pos.set(a, nodes.get(a)!)
         this.pos.set(b, nodes.get(b)!)
         this.link(a, b, serviceTrack ? SERVICE_TRACK_COST : 1)
-        if (!serviceTrack) this.segments.push([a, b])
+        const seg = { a, b, name: t.name, layer: t.layer ?? '0' }
+        if (!serviceTrack) this.segments.push(seg)
+        if (!serviceTrack || stationTrack) this.bedSegments.push(seg)
       }
       if (ids.length > 1) wayEnds.push(ids[0]!, ids[ids.length - 1]!)
     }
@@ -226,7 +278,7 @@ class TrackGraph {
   snap(p: Coord): { id: number, offsetM: number } {
     const kx = Math.cos((p.lat * Math.PI) / 180)
     const candidates: { d: number, a: number, b: number, t: number }[] = []
-    for (const [a, b] of this.segments) {
+    for (const { a, b } of this.segments) {
       const A = this.pos.get(a)!
       const B = this.pos.get(b)!
       const ax = A.lng * kx, ay = A.lat
@@ -253,6 +305,91 @@ class TrackGraph {
       })
     for (const id of ids.slice(1)) this.link(ids[0]!, id, 1)
     return { id: ids[0]!, offsetM: nearest.d }
+  }
+
+  /*
+   * How far, in degrees, p moves to reach the middle of the track bed under it.
+   *
+   * The running lines parallel to the nearest one and abeam of p are measured
+   * as signed offsets across the track. Only tracks on the same OSM layer and
+   * of the same named line count, so Manggarai's ground-level platforms don't
+   * share a bed with the elevated Bogor line above them, and a corridor running alongside another (the Tanah Abang split, the
+   * approach to Jakarta Kota) stays on its own pair instead of drifting into
+   * the gap between them. A track OSM leaves unnamed counts with any line.
+   * Starting from p's own track, the bed takes in every line within
+   * TRACK_BED_GAP_M of the bed so far, and p moves to the middle of the
+   * outermost two. Single track has nothing alongside and stays where it is.
+   *
+   * Also returns the across-track unit vector (east, north), zero when there
+   * is no track near p. This is the raw shift at one point; centreTrace()
+   * smooths it along a trace.
+   */
+  bedShift(p: Coord): BedShift {
+    const kx = Math.cos((p.lat * Math.PI) / 180)
+    const px = p.lng * kx * DEG_M
+    const py = p.lat * DEG_M
+    const feet = this.nearbySegments(p).map(({ a, b, name, layer }) => {
+      const A = this.pos.get(a)!
+      const B = this.pos.get(b)!
+      const ax = A.lng * kx * DEG_M, ay = A.lat * DEG_M
+      const dx = B.lng * kx * DEG_M - ax, dy = B.lat * DEG_M - ay
+      const len = Math.hypot(dx, dy)
+      const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (len * len)))
+      const fx = ax + t * dx - px, fy = ay + t * dy - py
+      return { ux: dx / len, uy: dy / len, fx, fy, d: Math.hypot(fx, fy), name, layer }
+    }).filter(f => Number.isFinite(f.ux))
+    if (feet.length === 0) return { dLat: 0, dLng: 0, nx: 0, ny: 0 }
+    const own = feet.reduce((x, y) => (y.d < x.d ? y : x))
+    // Across-track unit vector, perpendicular to the point's own track.
+    const nx = -own.uy, ny = own.ux
+
+    const offsets = [0]
+    for (const f of feet) {
+      if (f.layer !== own.layer) continue
+      if (own.name && f.name && f.name !== own.name) continue
+      if (Math.abs(f.ux * own.ux + f.uy * own.uy) < PARALLEL_COS) continue
+      if (Math.abs(f.fx * own.ux + f.fy * own.uy) > ABEAM_TOLERANCE_M) continue
+      const across = f.fx * nx + f.fy * ny
+      if (Math.abs(across) <= MAX_BED_HALF_WIDTH_M) offsets.push(across)
+    }
+    let lo = 0, hi = 0
+    for (const o of offsets.filter(o => o > 0).sort((x, y) => x - y)) {
+      if (o - hi > TRACK_BED_GAP_M) break
+      hi = o
+    }
+    for (const o of offsets.filter(o => o < 0).sort((x, y) => y - x)) {
+      if (lo - o > TRACK_BED_GAP_M) break
+      lo = o
+    }
+    const shift = (lo + hi) / 2
+    return { dLat: (shift * ny) / DEG_M, dLng: (shift * nx) / (DEG_M * kx), nx, ny }
+  }
+
+  // Bed segments with any part within MAX_BED_HALF_WIDTH_M of p.
+  private nearbySegments(p: Coord): TrackSegment[] {
+    if (!this.grid) {
+      this.grid = new Map()
+      for (const seg of this.bedSegments) {
+        const A = this.pos.get(seg.a)!
+        const B = this.pos.get(seg.b)!
+        for (let i = Math.floor(Math.min(A.lat, B.lat) / GRID_DEG); i <= Math.floor(Math.max(A.lat, B.lat) / GRID_DEG); i++) {
+          for (let j = Math.floor(Math.min(A.lng, B.lng) / GRID_DEG); j <= Math.floor(Math.max(A.lng, B.lng) / GRID_DEG); j++) {
+            const key = `${i},${j}`
+            const cell = this.grid.get(key) ?? []
+            cell.push(seg)
+            this.grid.set(key, cell)
+          }
+        }
+      }
+    }
+    const r = MAX_BED_HALF_WIDTH_M / DEG_M
+    const found = new Set<TrackSegment>()
+    for (let i = Math.floor((p.lat - r) / GRID_DEG); i <= Math.floor((p.lat + r) / GRID_DEG); i++) {
+      for (let j = Math.floor((p.lng - r) / GRID_DEG); j <= Math.floor((p.lng + r) / GRID_DEG); j++) {
+        for (const seg of this.grid.get(`${i},${j}`) ?? []) found.add(seg)
+      }
+    }
+    return [...found]
   }
 
   shortestPath(from: number, to: number): number[] | null {
@@ -318,6 +455,100 @@ class MinHeap {
   }
 }
 
+interface BedShift { dLat: number, dLng: number, nx: number, ny: number }
+
+// A trace resampled every SAMPLE_M, with each point's distance along it and
+// raw bed shift.
+interface Sampled { points: Coord[], along: number[], shifts: BedShift[] }
+
+function sampleTrace(graph: TrackGraph, line: Coord[]): Sampled {
+  const points: Coord[] = [line[0]!]
+  const along = [0]
+  for (let i = 1; i < line.length; i++) {
+    const A = line[i - 1]!
+    const B = line[i]!
+    const d = haversineMeters(A.lat, A.lng, B.lat, B.lng)
+    const steps = Math.max(1, Math.ceil(d / SAMPLE_M))
+    for (let k = 1; k <= steps; k++) {
+      points.push({ lat: A.lat + (k / steps) * (B.lat - A.lat), lng: A.lng + (k / steps) * (B.lng - A.lng) })
+      along.push(along[along.length - 1]! + d / steps)
+    }
+  }
+  return { points, along, shifts: points.map(p => graph.bedShift(p)) }
+}
+
+// The values within `radius` of each index along the trace, reduced
+// coordinate by coordinate with `f`.
+function alongWindow(along: number[], values: Coord[], radius: number, f: (xs: number[]) => number): Coord[] {
+  let lo = 0
+  let hi = 0
+  return values.map((_, i) => {
+    while (along[i]! - along[lo]! > radius) lo++
+    while (hi + 1 < values.length && along[hi + 1]! - along[i]! <= radius) hi++
+    const window = values.slice(lo, hi + 1)
+    return { lat: f(window.map(c => c.lat)), lng: f(window.map(c => c.lng)) }
+  })
+}
+
+function median(xs: number[]): number {
+  const sorted = [...xs].sort((a, b) => a - b)
+  const mid = sorted.length >> 1
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+}
+const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length
+
+/*
+ * A sampled trace moved onto its track bed's centreline, before its ends are
+ * eased onto their stations (pinEnds).
+ *
+ * Each point first moves by its raw shift. Those centred points are already
+ * continuous where the trace hops tracks at a crossover, since both tracks
+ * share one centre, so the smoothing works on them and not on the shifts.
+ * A short median over the coordinates drops one-point spikes without pulling
+ * curves inwards. Then every sideways step bigger than BED_STEP_M, where the
+ * bed gains or loses a track, is collected, and replaced by its moving
+ * average: the step becomes a ramp, and curves, which never step, are left
+ * alone.
+ */
+function centreTrace({ points, along, shifts }: Sampled): Coord[] {
+  const raw = points.map((p, i) => ({ lat: p.lat + shifts[i]!.dLat, lng: p.lng + shifts[i]!.dLng }))
+  const despiked = alongWindow(along, raw, SPIKE_RADIUS_M, median)
+  const steps: Coord[] = [{ lat: 0, lng: 0 }]
+  for (let i = 1; i < despiked.length; i++) {
+    const prev = steps[i - 1]!
+    const { nx, ny } = shifts[i]!
+    const kx = Math.cos((despiked[i]!.lat * Math.PI) / 180)
+    const east = (despiked[i]!.lng - despiked[i - 1]!.lng) * kx * DEG_M
+    const north = (despiked[i]!.lat - despiked[i - 1]!.lat) * DEG_M
+    const across = east * nx + north * ny
+    steps.push(Math.abs(across) > BED_STEP_M
+      ? { lat: prev.lat + (across * ny) / DEG_M, lng: prev.lng + (across * nx) / (DEG_M * kx) }
+      : prev)
+  }
+  const ramps = alongWindow(along, steps, RAMP_RADIUS_M, mean)
+  return despiked.map((c, i) => ({
+    lat: c.lat - steps[i]!.lat + ramps[i]!.lat,
+    lng: c.lng - steps[i]!.lng + ramps[i]!.lng
+  }))
+}
+
+// A centred trace with its ends eased, over RAMP_RADIUS_M, onto the given
+// station points, which every segment ending at a station shares, so
+// consecutive segments join end to end.
+function pinEnds(line: Coord[], along: number[], start: Coord, end: Coord): Coord[] {
+  const total = along[along.length - 1]!
+  const first = line[0]!
+  const last = line[line.length - 1]!
+  return line.map((c, i) => {
+    const fromStart = Math.max(0, 1 - along[i]! / RAMP_RADIUS_M)
+    const fromEnd = Math.max(0, 1 - (total - along[i]!) / RAMP_RADIUS_M)
+    return {
+      lat: c.lat + (start.lat - first.lat) * fromStart + (end.lat - last.lat) * fromEnd,
+      lng: c.lng + (start.lng - first.lng) * fromStart + (end.lng - last.lng) * fromEnd
+    }
+  })
+}
+
 interface Segment {
   operator: Operator
   from: Stop
@@ -367,6 +598,8 @@ async function main(): Promise<void> {
   const problems: string[] = []
   const report: string[] = []
   const byOperator = new Map<string, unknown[]>()
+  // Traced segments, centred once every station's shift is known.
+  const traced: { seg: Segment, fromId: string, toId: string, lengthM: number, sampled: Sampled, ends: [string, string] }[] = []
 
   for (const seg of segments.values()) {
     const mode = MODE[seg.operator]!
@@ -420,11 +653,38 @@ async function main(): Promise<void> {
       String(lengthM).padStart(6)
     ].join(' '))
 
+    traced.push({
+      seg,
+      fromId,
+      toId,
+      lengthM,
+      sampled: sampleTrace(graph, line),
+      ends: [`${mode}:${fromId}`, `${mode}:${toId}`]
+    })
+  }
+
+  // Each station's point is the median of where the segments ending there
+  // centre it, so one segment's odd end can't pin the others.
+  const centred = traced.map(t => centreTrace(t.sampled))
+  const stationEnds = new Map<string, Coord[]>()
+  traced.forEach(({ ends }, i) => {
+    const line = centred[i]!
+    stationEnds.set(ends[0], [...stationEnds.get(ends[0]) ?? [], line[0]!])
+    stationEnds.set(ends[1], [...stationEnds.get(ends[1]) ?? [], line[line.length - 1]!])
+  })
+  const stationPoint = (key: string): Coord => {
+    const points = stationEnds.get(key)!
+    return { lat: median(points.map(c => c.lat)), lng: median(points.map(c => c.lng)) }
+  }
+
+  for (const [i, { seg, fromId, toId, lengthM, sampled, ends }] of traced.entries()) {
+    const pinned = pinEnds(centred[i]!, sampled.along, stationPoint(ends[0]), stationPoint(ends[1]))
+    const coordinates = simplify(pinned.map((p): LngLat => [p.lng, p.lat]), OUTPUT_SIMPLIFY_M)
     const features = byOperator.get(seg.operator) ?? []
     features.push({
       type: 'Feature',
       properties: { from: fromId, to: toId, lines: [...seg.lines], lengthM },
-      geometry: { type: 'LineString', coordinates: line.map(p => [round6(p.lng), round6(p.lat)]) }
+      geometry: { type: 'LineString', coordinates: coordinates.map(([lng, lat]) => [round6(lng), round6(lat)]) }
     })
     byOperator.set(seg.operator, features)
   }
