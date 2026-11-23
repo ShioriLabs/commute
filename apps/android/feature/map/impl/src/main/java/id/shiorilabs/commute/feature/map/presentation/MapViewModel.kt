@@ -227,9 +227,12 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** Experimental "Peta Jalan": the layer picker shows, the streets layer one of its choices. */
+    /**
+     * Experimental "Peta Jalan": the layer picker shows, the streets layer one of its choices. Never
+     * in release, which leaves the layer out ([STREETS_AVAILABLE]), whatever the switch was left at.
+     */
     val streetsEnabled: StateFlow<Boolean> =
-        developerPreferences.mapStreets.stateIn(viewModelScope, WhileUiSubscribed, false)
+        if (STREETS_AVAILABLE) developerPreferences.mapStreets.stateIn(viewModelScope, WhileUiSubscribed, false) else MutableStateFlow(false)
 
     /** The streets layer picked over the FDTJ artwork, as the map was last left. */
     val streetsPicked: StateFlow<Boolean> =
@@ -237,7 +240,7 @@ class MapViewModel @Inject constructor(
 
     /** Experimental "Panel Debug Peta": the streets layer's debug button and its panel. */
     val debugEnabled: StateFlow<Boolean> =
-        developerPreferences.mapDebug.stateIn(viewModelScope, WhileUiSubscribed, false)
+        if (STREETS_AVAILABLE) developerPreferences.mapDebug.stateIn(viewModelScope, WhileUiSubscribed, false) else MutableStateFlow(false)
 
     /** How the streets layer draws its lines: raw, processed or adjusted. */
     val streetsLines: StateFlow<StreetsLines> get() = session.streetsLines

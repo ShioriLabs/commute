@@ -67,6 +67,9 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import kotlin.math.roundToInt
 
+/** The streets layer is built in: debug builds only. Release has a stub in its place, and no MapLibre. */
+internal const val STREETS_AVAILABLE = true
+
 /**
  * The map's streets layer: shirase's finished style as served, Peta Bus's lines, haltes and rail
  * stations over it under the style's `commute-overlay` slot, and the rider's dot when location is

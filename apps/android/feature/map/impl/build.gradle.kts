@@ -68,7 +68,14 @@ val bundleMapData = tasks.register<BundleMapData>("bundleMapData") {
         webApp.file("app/data/label-points.json"),
         webApp.file("app/data/map-lines.json"),
         webApp.file("app/data/map-corridors.json"),
-        // Peta Bus: every TransJakarta line on its streets, for the streets layer.
+    )
+}
+
+// Peta Bus, for the streets layer: debug builds only, as is the layer (src/debug's StreetsMap) and
+// MapLibre under it. Release leaves all three out while they are still being worked on.
+val bundleBusMapData = tasks.register<BundleMapData>("bundleBusMapData") {
+    sources.from(
+        // Every TransJakarta line on its streets.
         webApp.file("app/data/bus-map.json"),
         // Its lines as the GTFS feed has them, for the map's debug panel.
         webApp.file("app/data/bus-map-feed.json"),
@@ -78,6 +85,9 @@ val bundleMapData = tasks.register<BundleMapData>("bundleMapData") {
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(bundleMapData, BundleMapData::outputDir)
+        if (variant.buildType == "debug") {
+            variant.sources.assets?.addGeneratedSourceDirectory(bundleBusMapData, BundleMapData::outputDir)
+        }
     }
 }
 
@@ -109,8 +119,9 @@ dependencies {
     implementation(project(":feature:journey:api"))
     // TripController: the running trip, drawn with the rider on it.
     implementation(project(":feature:trip:api"))
-    // The streets layer: shirase's styles, drawn as served, with Peta Bus over them.
-    implementation(libs.maplibre.android)
+    // The streets layer: shirase's styles, drawn as served, with Peta Bus over them. Debug builds
+    // only: release's StreetsMap is a stub (src/release), the layer switched off.
+    debugImplementation(libs.maplibre.android)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)

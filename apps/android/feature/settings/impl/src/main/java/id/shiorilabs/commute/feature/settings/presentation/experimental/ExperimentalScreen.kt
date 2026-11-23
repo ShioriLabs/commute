@@ -276,18 +276,21 @@ private fun ExperimentalContent(
             checked = mapHome,
             onCheckedChange = onMapHome,
         )
-        SettingsSwitch(
-            title = stringResource(R.string.settings_experimental_map_streets),
-            subtitle = stringResource(R.string.settings_experimental_map_streets_detail),
-            checked = mapStreets,
-            onCheckedChange = onMapStreets,
-        )
-        SettingsSwitch(
-            title = stringResource(R.string.settings_experimental_map_debug),
-            subtitle = null,
-            checked = mapDebug,
-            onCheckedChange = onMapDebug,
-        )
+        // Debug builds only: release leaves the streets layer out.
+        if (sensorData) {
+            SettingsSwitch(
+                title = stringResource(R.string.settings_experimental_map_streets),
+                subtitle = stringResource(R.string.settings_experimental_map_streets_detail),
+                checked = mapStreets,
+                onCheckedChange = onMapStreets,
+            )
+            SettingsSwitch(
+                title = stringResource(R.string.settings_experimental_map_debug),
+                subtitle = null,
+                checked = mapDebug,
+                onCheckedChange = onMapDebug,
+            )
+        }
         SettingsSwitch(
             title = stringResource(R.string.settings_experimental_imu_speed),
             subtitle = stringResource(R.string.settings_experimental_imu_speed_detail),
