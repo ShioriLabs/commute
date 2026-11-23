@@ -297,13 +297,13 @@ class TripNotifier @Inject constructor(
     }
 
     /**
-     * "Turun di sini" for ride [legIndex]: where, and what then. A change names the ride and when it
-     * leaves, and the one it stands in for when that was missed.
+     * "Turun di sini" for ride [legIndex]: where, said as a sentence ("Kamu telah tiba di Kranji"), and
+     * then a change when there is one, naming the ride, when it leaves and the one it stands in for
+     * when that was missed. At the trip's end, arriving says it all.
      */
     private fun alight(trip: ActiveTrip, legIndex: Int, estimated: Boolean): Pair<String, String> {
         val alighting = trip.plan.ride(legIndex).stops.last().name
-        val thenIndex = trip.plan.nextRideAfter(legIndex)
-        val next = thenIndex?.let { index ->
+        val next = trip.plan.nextRideAfter(legIndex)?.let { index ->
             val then = trip.plan.ride(index)
             val departs = then.departureAt?.let(::formatClock)
             val missed = reroute?.takeIf { it.startedAt == trip.state.startedAt && it.legIndex == index }
@@ -314,18 +314,16 @@ class TripNotifier @Inject constructor(
             } else {
                 context.getString(R.string.trip_then_change_at, rideName(then), departs) + missed
             }
-        } ?: context.getString(CopyR.string.trip_then_done)
+        }
         // Its own line, under where and what then: the expanded alert shows it, collapsed leads with the rest.
         val check = "\n" + context.getString(R.string.trip_alert_alight_check)
         val copy = copy()
         return if (estimated) {
             context.getString(R.string.trip_alert_alight_estimated_title) to
                 copy.sentences(context.getString(R.string.trip_alert_alight_estimated, alighting), next) + check
-        } else if (thenIndex == null) {
-            // The last stop: one sentence, as said aloud, not the stop's name then a label.
-            context.getString(R.string.trip_alert_alight_title) to context.getString(R.string.trip_alert_alight_arrived, alighting) + check
         } else {
-            context.getString(R.string.trip_alert_alight_title) to copy.sentences(alighting, next) + check
+            context.getString(R.string.trip_alert_alight_title) to
+                copy.sentences(context.getString(R.string.trip_alert_alight_arrived, alighting), next) + check
         }
     }
 
