@@ -873,7 +873,7 @@ describe('contractShortEdges', () => {
     const south = at(0, 0)
     const north = at(0, 250)
     const edges: BusMapEdge[] = [
-      { shape: encodePolyline([at(0, -300), south]), lines: ['KCI:A', 'KCI:T', 'KCI:C'] },
+      { shape: encodePolyline([at(0, -300), south]), lines: ['KCI:A', 'KCI:T', 'KCI:C'], shift: 0.5 },
       { shape: encodePolyline([south, at(8, 120), north]), lines: ['KCI:A', 'KCI:C'] },
       { shape: encodePolyline([south, at(-7, 120), north]), lines: ['KCI:A', 'KCI:T'] },
       { shape: encodePolyline([north, at(0, 800)]), lines: ['KCI:C'] }
@@ -882,6 +882,8 @@ describe('contractShortEdges', () => {
     const between = out.filter(e => e.lines.includes('KCI:A') && decodePolyline(e.shape).some(p => metres(p)[1] > 100 && metres(p)[1] < 200))
     expect(between.length).toBe(1)
     expect(between[0]!.lines).toEqual(['KCI:A', 'KCI:T', 'KCI:C'])
+    // Where they lie on the bundle it carries on from: its shift too, so nothing steps where they meet.
+    expect(between[0]!.shift).toBe(0.5)
   })
 
   it('leaves edges between a junction and a line end, and longer ones, as they are', () => {

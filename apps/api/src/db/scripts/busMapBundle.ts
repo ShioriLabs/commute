@@ -2622,15 +2622,22 @@ export function contractShortEdges(edges: readonly BusMapEdge[], minM: number): 
       // In the order of an edge going on from either end with them all (A, T and C south of Duri),
       // along keep's way; else each of the fold's beside the line it ran beside.
       const [start, end] = [keyOf(keep.path[0]!), keyOf(keep.path[keep.path.length - 1]!)]
-      const alongKeep = list.flatMap((other, j): string[][] => {
+      // Its shift too, so its lines carry on where they lie on that edge: kept as the old edge's, worked
+      // out for two of the three, Duri's bundle stepped half a width where the two met.
+      const alongKeep = list.flatMap((other, j): { lines: string[], shift: number }[] => {
         if (group.includes(j) || !lines.every(l => other.edge.lines.includes(l))) return []
         const [os, oe] = [keyOf(other.path[0]!), keyOf(other.path[other.path.length - 1]!)]
-        const kept = other.edge.lines.filter(l => lines.includes(l))
-        if (oe === start || os === end) return [kept]
-        if (os === start || oe === end) return [[...kept].reverse()]
-        return []
+        const along = oe === start || os === end
+        if (!along && !(os === start || oe === end)) return []
+        const sign = along ? 1 : -1
+        const theirs = new Map(strokePlaces(other.edge, new Map()).flatMap(st => st.lines.map(l => [l, sign * st.slot] as const)))
+        const inOrder = other.edge.lines.filter(l => lines.includes(l))
+        const kept = along ? inOrder : [...inOrder].reverse()
+        const ours = new Map(strokePlaces({ lines: kept }, new Map()).flatMap(st => st.lines.map(l => [l, st.slot] as const)))
+        const shift = kept.reduce((m, l) => m + theirs.get(l)! - ours.get(l)!, 0) / kept.length
+        return [{ lines: kept, shift: Math.round(shift * 4) / 4 }]
       })[0]
-      const merged = alongKeep ?? [...keep.edge.lines]
+      const merged = alongKeep?.lines ?? [...keep.edge.lines]
       if (!alongKeep) {
         order.forEach((line, k) => {
           if (merged.includes(line)) return
@@ -2638,7 +2645,8 @@ export function contractShortEdges(edges: readonly BusMapEdge[], minM: number): 
           merged.splice(before === undefined ? 0 : merged.indexOf(before) + 1, 0, line)
         })
       }
-      keep.edge = { ...keep.edge, lines: merged }
+      const shift = alongKeep ? alongKeep.shift : keep.edge.shift ?? 0
+      keep.edge = { shape: keep.edge.shape, lines: merged, ...(shift !== 0 ? { shift } : {}) }
       folded.add(i)
     }
   }
