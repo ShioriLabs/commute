@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, type LngLat } from '../../utils/polyline'
+import { networkScore, type ScoredMap } from './busMapStats'
 
 /*
  * Peta Bus as shipped (apps/web/app/data/bus-map.json, the generator's output), held to what was got
@@ -42,7 +43,8 @@ import { decodePolyline, type LngLat } from '../../utils/polyline'
  */
 
 const MAP = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../web/app/data/bus-map.json'), 'utf-8')) as {
-  lines: { code: string, drawn: string[] }[]
+  lines: { code: string, color: string, drawn: string[] }[]
+  edges: ScoredMap['edges']
   haltes: Record<string, [string, number, number]>
 }
 const FEED = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../web/app/data/bus-map-feed.json'), 'utf-8')) as {
@@ -229,3 +231,34 @@ describe('Peta Bus as shipped, on the streets round them', () => {
     expect(distanceTo(drawn('4'), north)).toBeLessThan(10)
   })
 })
+
+/*
+ * The drawing's score (busMapStats.ts networkScore), held to the one recorded in
+ * busMapScore.baseline.json: a change to the bundler goes in only if it leaves the
+ * whole network's score no worse, and no part of it more than SCORE_SLACK worse.
+ * One that makes it better rewrites the baseline in the same commit.
+ */
+describe('Peta Bus as shipped, scored whole', () => {
+  const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'busMapScore.baseline.json'), 'utf-8')) as Record<'jakarta' | 'nyc', Record<string, number>>
+  const parts = ['jog', 'sameCrossings', 'splitCrossings', 'separations', 'overlapM'] as const
+  const held = (name: string, map: ScoredMap, recorded: Record<string, number>): void => {
+    const score = networkScore(map)
+    expect(score.composite, `${name} composite`).toBeLessThanOrEqual(recorded.composite! + 1e-3)
+    for (const part of parts) {
+      const was = recorded[part]!
+      expect(score[part], `${name} ${part}`).toBeLessThanOrEqual(Math.max(was * (1 + SCORE_SLACK), was + 0.5) + 1e-3)
+    }
+  }
+
+  it('scores Jakarta no worse than recorded', () => {
+    held('jakarta', MAP, baseline.jakarta)
+  })
+
+  it('scores New York, the debug panel\'s second network, no worse than recorded', () => {
+    const nyc = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../android/feature/map/impl/src/debug/assets/map/bus-map-nyc.json'), 'utf-8')) as ScoredMap
+    held('nyc', nyc, baseline.nyc)
+  })
+})
+
+/** How much worse any one part of the score may get while the whole gets better. */
+const SCORE_SLACK = 0.05

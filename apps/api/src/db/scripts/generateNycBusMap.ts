@@ -16,6 +16,7 @@ import {
 } from './busMapBundle'
 import { decodePolyline, encodePolyline, simplify, type LngLat } from '../../utils/polyline'
 import { parseCSV } from './gtfs'
+import { formatScore, networkScore } from './busMapStats'
 
 async function main(): Promise<void> {
   const [feed, out] = process.argv.slice(2) as [string, string]
@@ -160,6 +161,7 @@ async function main(): Promise<void> {
   }
   fs.writeFileSync(out, JSON.stringify(map))
   console.log(`wrote ${out}: ${map.edges.length} edges, ${map.stopMarks.length} marks, ${Object.keys(haltes).length} stations`)
+  console.log(formatScore(networkScore(map, 10), 'score'))
 }
 
 /** Edges shorter than this between nodes drawn as one node: about a bundle's width at street zoom. */

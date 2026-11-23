@@ -33,6 +33,7 @@ import {
 import { koridorOf, loadRoads, snapPoint, snapToRoads, type Roads } from './busMapRoads'
 import { alignToTopology, passesBy, type TopologyLine } from './busMapTopology'
 import { parseCSV } from './gtfs'
+import { formatScore, networkScore } from './busMapStats'
 
 /*
  * The data behind Peta Bus, the geographic TransJakarta view on /map: every
@@ -669,6 +670,7 @@ async function main(): Promise<void> {
   const stopMarks = marksFor(edges, all, sortedHaltes)
   const map: BusMap = { attribution: ATTRIBUTION, lines: all, edges, stopMarks, haltes: sortedHaltes, rail }
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(map) + '\n')
+  printScore(map)
   feed.lines.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }))
   fs.writeFileSync(FEED_OUTPUT_PATH, JSON.stringify(feed) + '\n')
 
@@ -1011,6 +1013,15 @@ async function rebundle(): Promise<void> {
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(out) + '\n')
   console.log(`Rebundled ${OUTPUT_PATH}, ${(fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0)} KB, ${edges.length} edges`)
   console.log(`  haltes:   ${Object.keys(normal.haltes).length} (was ${Object.keys(map.haltes).length})`)
+  printScore(out)
+}
+
+/** The drawing's score (busMapStats.ts) against the one recorded: what the shipped-map test holds it to. */
+function printScore(map: BusMap): void {
+  const score = networkScore(map, 10)
+  const recorded = (JSON.parse(fs.readFileSync(`${__dirname}/busMapScore.baseline.json`, 'utf-8')) as { jakarta: { composite: number } }).jakarta
+  console.log(formatScore(score, '  score'))
+  console.log(`  (recorded ${recorded.composite.toFixed(1)}; busMapStats.ts --compare for the parts)`)
 }
 
 /** `--rail`: the rail stations alone rewritten, from the coordinate CSV and the topology. */

@@ -2279,6 +2279,77 @@ export function isDrawn(code: string): boolean {
   return /^\d+$/.test(code) || code === '13E' || code === 'L13E' || isRailCode(code)
 }
 
+/** A stroke across an edge: its lines (a run of one colour), its middle in line widths right of the edge's way, its width. */
+export interface StrokePlace {
+  key: string
+  lines: string[]
+  slot: number
+  width: number
+}
+
+/**
+ * [edge]'s strokes left to right along it, as clients draw them: each run of lines of one stroke
+ * ([strokeOf]: one colour) one stroke, as wide as it's drawn (a rail line RAIL_WEIGHT), side by side
+ * across the middle, the edge's shift added.
+ */
+export function strokePlaces(edge: Pick<BusMapEdge, 'lines' | 'shift'>, strokeOf: ReadonlyMap<string, string>): StrokePlace[] {
+  const runs: { key: string, lines: string[] }[] = []
+  for (const line of edge.lines) {
+    const key = strokeOf.get(line) ?? line
+    const run = runs[runs.length - 1]
+    if (run && run.key === key) run.lines.push(line)
+    else runs.push({ key, lines: [line] })
+  }
+  const widths = runs.map(run => (run.lines.some(isRailCode) ? RAIL_WEIGHT : 1))
+  let left = -widths.reduce((a, b) => a + b, 0) / 2
+  return runs.map((run, i) => {
+    const slot = left + widths[i]! / 2 + (edge.shift ?? 0)
+    left += widths[i]!
+    return { ...run, slot, width: widths[i]! }
+  })
+}
+
+/**
+ * How straight [path] (metres) runs about [at]: the chord over the length of the way, [windowM]
+ * either side of the point on it nearest [at] (less at its ends). 1 is dead straight; a line turning
+ * corners reads well under. A line's step sideways shows on a straight run and hides on a bendy one.
+ */
+export function straightnessAt(path: readonly [number, number][], at: readonly [number, number], windowM: number): number {
+  if (path.length < 2) return 1
+  const along = [0]
+  for (let i = 1; i < path.length; i++) along.push(along[i - 1]! + Math.hypot(path[i]![0] - path[i - 1]![0], path[i]![1] - path[i - 1]![1]))
+  // The point on the path nearest [at], as a distance along it.
+  let best = Infinity
+  let d0 = 0
+  for (let i = 1; i < path.length; i++) {
+    const [ax, ay] = path[i - 1]!
+    const [bx, by] = path[i]!
+    const dx = bx - ax
+    const dy = by - ay
+    const l2 = dx * dx + dy * dy
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((at[0] - ax) * dx + (at[1] - ay) * dy) / l2)) : 0
+    const d = Math.hypot(at[0] - (ax + t * dx), at[1] - (ay + t * dy))
+    if (d < best) {
+      best = d
+      d0 = along[i - 1]! + t * (along[i]! - along[i - 1]!)
+    }
+  }
+  const total = along[along.length - 1]!
+  const lo = Math.max(0, d0 - windowM)
+  const hi = Math.min(total, d0 + windowM)
+  if (hi - lo < 1) return 1
+  const pointAt = (d: number): [number, number] => {
+    let i = 1
+    while (i < along.length - 1 && along[i]! < d) i++
+    const span = along[i]! - along[i - 1]!
+    const t = span > 0 ? (d - along[i - 1]!) / span : 0
+    return [path[i - 1]![0] + (path[i]![0] - path[i - 1]![0]) * t, path[i - 1]![1] + (path[i]![1] - path[i - 1]![1]) * t]
+  }
+  const [x0, y0] = pointAt(lo)
+  const [x1, y1] = pointAt(hi)
+  return Math.min(1, Math.hypot(x1 - x0, y1 - y0) / (hi - lo))
+}
+
 /*
  * Lines changing sides where their bundle goes straight on through a node,
  * crossing over: drawn as offsets from the street's middle, a swap there is a
@@ -2307,23 +2378,7 @@ export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<st
   const paths = edges.map(e => toXYs(decodePolyline(e.shape)))
   const lengthOf = (xy: readonly XY[]): number => xy.reduce((m, p, i) => (i ? m + Math.hypot(p[0] - xy[i - 1]![0], p[1] - xy[i - 1]![1]) : 0), 0)
   /** Each stroke (a run of lines of one colour) of [edge], left to right along it, at its offset from the middle. */
-  const strokes = (edge: BusMapEdge): { key: string, lines: string[], slot: number }[] => {
-    const runs: { key: string, lines: string[] }[] = []
-    for (const line of edge.lines) {
-      const key = strokeOf.get(line) ?? line
-      const run = runs[runs.length - 1]
-      if (run && run.key === key) run.lines.push(line)
-      else runs.push({ key, lines: [line] })
-    }
-    // Each as wide as clients draw it (a rail line RAIL_WEIGHT), side by side across the middle.
-    const widths = runs.map(run => (run.lines.some(isRailCode) ? RAIL_WEIGHT : 1))
-    let left = -widths.reduce((a, b) => a + b, 0) / 2
-    return runs.map((run, i) => {
-      const slot = left + widths[i]! / 2 + (edge.shift ?? 0)
-      left += widths[i]!
-      return { ...run, slot }
-    })
-  }
+  const strokes = (edge: BusMapEdge): StrokePlace[] => strokePlaces(edge, strokeOf)
   // Each edge's ends at each node, and the way it leaves the node.
   interface End { edge: number, atStart: boolean, dx: number, dy: number }
   const ends = new Map<string, End[]>()
