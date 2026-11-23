@@ -252,6 +252,13 @@ class MapViewModel @Inject constructor(
         session.streetsDots.value = dots
     }
 
+    /** How the streets layer draws its lines zoomed out. */
+    val streetsOverview: StateFlow<StreetsOverview> get() = session.streetsOverview
+
+    fun showOverview(overview: StreetsOverview) {
+        session.streetsOverview.value = overview
+    }
+
     /** The lines as the feed has them, as GeoJSON; null until [loadFeed] has read them. */
     val feedLines: StateFlow<String?> get() = feed
     private val feed = MutableStateFlow<String?>(null)

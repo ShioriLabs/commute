@@ -28,6 +28,18 @@ class MapSession @Inject constructor() {
 
     /** The debug panel's pick: which of the streets layer's halte and station marks show. */
     val streetsDots = MutableStateFlow(StreetsDots.ALL)
+
+    /** The debug panel's pick: the streets layer's lines zoomed out bundled, or as at street zoom. */
+    val streetsOverview = MutableStateFlow(StreetsOverview.BUNDLED)
+}
+
+/** How the streets layer draws its lines below street zoom, picked in the map's debug panel. */
+enum class StreetsOverview {
+    /** Bundled side by side, as Transit draws them: the map as it shows. */
+    BUNDLED,
+
+    /** Each line on its own streets at every zoom, as at street zoom. */
+    ROUTES,
 }
 
 /** Which marks the streets layer draws, picked in the map's debug panel. */

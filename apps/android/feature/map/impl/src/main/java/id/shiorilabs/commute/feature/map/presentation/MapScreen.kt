@@ -480,6 +480,7 @@ private fun MapWithSheet(
     val debugEnabled by viewModel.debugEnabled.collectAsStateWithLifecycle()
     val streetsLines by viewModel.streetsLines.collectAsStateWithLifecycle()
     val streetsDots by viewModel.streetsDots.collectAsStateWithLifecycle()
+    val streetsOverview by viewModel.streetsOverview.collectAsStateWithLifecycle()
     val feedLines by viewModel.feedLines.collectAsStateWithLifecycle()
     val debugOffered = streets && debugEnabled
     var debugOpen by remember { mutableStateOf(false) }
@@ -662,6 +663,7 @@ private fun MapWithSheet(
                     lines = if (debugOffered) streetsLines else StreetsLines.ADJUSTED,
                     feed = feedLines,
                     dots = if (debugOffered) streetsDots else StreetsDots.ALL,
+                    overview = if (debugOffered) streetsOverview else StreetsOverview.BUNDLED,
                 )
                 val pill = streetsPill?.let { busMap?.lines?.get(it) }
                 if (pill != null && selection == null) {
@@ -1017,6 +1019,11 @@ private fun MapWithSheet(
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                     viewModel.showDots(dots)
                 },
+                overview = streetsOverview,
+                onOverview = { overview ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.showOverview(overview)
+                },
             )
         }
     }
@@ -1041,6 +1048,7 @@ private fun StreetsLayer(
     lines: StreetsLines,
     feed: String?,
     dots: StreetsDots,
+    overview: StreetsOverview,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -1064,6 +1072,7 @@ private fun StreetsLayer(
                 lines = lines,
                 feed = feed,
                 dots = dots,
+                overview = overview,
                 modifier = Modifier.fillMaxSize(),
             )
         }

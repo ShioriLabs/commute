@@ -29,8 +29,8 @@ import id.shiorilabs.commute.feature.map.R
 
 /**
  * "Debug Peta", Experimental "Panel Debug Peta": tools for checking Peta Bus on the streets layer,
- * one item under another: how the route lines are drawn ([StreetsLines]), and which halte and station
- * marks show ([StreetsDots]).
+ * one item under another: how the route lines are drawn ([StreetsLines]), which halte and station
+ * marks show ([StreetsDots]), and the lines zoomed out bundled or as at street zoom ([StreetsOverview]).
  */
 @Composable
 internal fun MapDebugPanel(
@@ -38,6 +38,8 @@ internal fun MapDebugPanel(
     onLines: (StreetsLines) -> Unit,
     dots: StreetsDots,
     onDots: (StreetsDots) -> Unit,
+    overview: StreetsOverview,
+    onOverview: (StreetsOverview) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val title = stringResource(R.string.map_debug_title)
@@ -72,6 +74,17 @@ internal fun MapDebugPanel(
                     ),
                     picked = dots,
                     onPick = onDots,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text = "Overview", style = MaterialTheme.typography.labelLarge)
+                Choice(
+                    options = listOf(
+                        "Bundled" to StreetsOverview.BUNDLED,
+                        "Zoomed in" to StreetsOverview.ROUTES,
+                    ),
+                    picked = overview,
+                    onPick = onOverview,
                 )
             }
         }

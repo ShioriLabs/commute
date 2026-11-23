@@ -89,6 +89,8 @@ fun StreetsMap(
     feed: String? = null,
     /** The halte and station marks drawn. */
     dots: StreetsDots = StreetsDots.ALL,
+    /** The debug panel's pick: the lines zoomed out bundled, or each on its own streets as at street zoom. */
+    overview: StreetsOverview = StreetsOverview.BUNDLED,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -191,7 +193,7 @@ fun StreetsMap(
         addBusMap(style, busMap, dark, screenDensity, roundelFace)
     }
     // As it shows, or raw or processed, and a line alone: the rest faded under it, it over them.
-    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed, dots) {
+    LaunchedEffect(state.style, busMap, dark, isolated, lines, feed, dots, overview) {
         val style = state.style ?: return@LaunchedEffect
         if (!style.isFullyLoaded || busMap == null) return@LaunchedEffect
         val debug = when (lines) {
@@ -200,7 +202,7 @@ fun StreetsMap(
             StreetsLines.ADJUSTED -> null
         }
         if (debug != null) style.getSourceAs<GeoJsonSource>(DEBUG_SOURCE)?.setGeoJson(debug)
-        showLines(style, debug = debug != null, code = isolated, dots = dots)
+        showLines(style, debug = debug != null, code = isolated, dots = dots, overview = overview)
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
@@ -771,11 +773,24 @@ private fun parseColor(hex: String): Int =
  * marks going with the network; line [code] drawn alone over the rest faded, or null for all of
  * them as they are.
  */
-private fun showLines(style: Style, debug: Boolean, code: String?, dots: StreetsDots = StreetsDots.ALL) {
+private fun showLines(
+    style: Style,
+    debug: Boolean,
+    code: String?,
+    dots: StreetsDots = StreetsDots.ALL,
+    overview: StreetsOverview = StreetsOverview.BUNDLED,
+) {
     fun visible(shown: Boolean) = PropertyFactory.visibility(if (shown) Property.VISIBLE else Property.NONE)
     val faded = PropertyFactory.lineOpacity(if (code != null) FADED_OPACITY else 1f)
-    for (id in LINE_LAYERS + CASING_LAYERS) style.getLayer(id)?.setProperties(visible(!debug), faded)
-    for (id in listOf(BAR_LAYER, MARK_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(!debug && dots.haltes))
+    // Zoomed out as at street zoom: the routes from the start, the bundles and the marks on them gone.
+    val routes = overview == StreetsOverview.ROUTES
+    for (id in LINE_LAYERS + CASING_LAYERS) {
+        val layer = style.getLayer(id) ?: continue
+        val route = id.removeSuffix(CASING_SUFFIX) in ROUTE_LAYERS
+        layer.setProperties(visible(!debug && (route || !routes)), faded)
+        if (route) layer.minZoom = if (routes) 0f else STREET_ZOOM
+    }
+    for (id in listOf(BAR_LAYER, MARK_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(!debug && !routes && dots.haltes))
     for (id in listOf(HALTE_LAYER, HALTE_NAME_LAYER)) style.getLayer(id)?.setProperties(visible(dots.haltes))
     for (id in listOf(RAIL_LAYER, RAIL_DOT_LAYER, RAIL_MINOR_DOT_LAYER)) style.getLayer(id)?.setProperties(visible(dots.stations))
     style.getLayer(DEBUG_LAYER)?.setProperties(visible(debug), faded)
@@ -878,6 +893,9 @@ private const val TRUNK_LAYER = "peta-bus-trunks"
 
 /** Every layer drawing lines, faded when one is drawn alone. */
 private val LINE_LAYERS = listOf(TRUNK_LAYER, AUI_LAYER, BRT_LAYER, AUI_ROUTE_LAYER, BRT_ROUTE_LAYER)
+
+/** The lines on their own streets, from street zoom (or every zoom, [StreetsOverview.ROUTES]). */
+private val ROUTE_LAYERS = setOf(AUI_ROUTE_LAYER, BRT_ROUTE_LAYER)
 
 /** Each line layer's casing ([LINE_FILL], [CASING_DP]), and the alone line's, its id with this after. */
 private const val CASING_SUFFIX = "-casing"
