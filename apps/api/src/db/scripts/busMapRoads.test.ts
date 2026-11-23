@@ -23,6 +23,13 @@ describe('snapPoint', () => {
     expect(north(snapPoint(at(0, -6), roads))).toBeCloseTo(-10, 0)
   })
 
+  it('keeps a node a koridor bundle goes straight through on its busway, not the carriageway beside it', () => {
+    // Rasuna Said by the Setiabudi reservoir: the busway down the middle, a carriageway 12 m east.
+    const split = new Roads([road([[0, -300], [0, 300]], { busway: true }), road([[12, -300], [12, 300]])])
+    expect(east(snapPoint(at(8, 0), split, [0, 1], true))).toBeCloseTo(0, 0)
+    expect(east(snapPoint(at(8, 0), split, [0, 1]))).toBeCloseTo(12, 0)
+  })
+
   it('keeps a node a bundle goes straight through on its street', () => {
     const p = snapPoint(at(0, -6), roads, [1, 0])
     expect(north(p)).toBeCloseTo(0, 0)

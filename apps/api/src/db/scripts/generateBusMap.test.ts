@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, type LngLat } from '../../utils/polyline'
-import { dedupePatterns, feedShapes, lengthM, parseRailCoords, railLines, railMajor, railNumbers, railPieces, sampleAlong } from './generateBusMap'
+import { dedupePatterns, feedShapes, lengthM, parseRailCoords, railLines, railMajor, railNumbers, railPieces, sampleAlong, takeWay } from './generateBusMap'
 
 /*
  * Synthetic streets near Monas. Metres to degrees at -6.2: one degree of
@@ -19,6 +19,24 @@ describe('sampleAlong', () => {
   it('samples every step and keeps both ends', () => {
     const samples = sampleAlong(east(0, 1000), 100)
     expect(samples.length).toBe(11)
+  })
+})
+
+describe('takeWay', () => {
+  it('draws the way named instead of the one the dedupe kept there', () => {
+    // 6 by the Setiabudi reservoir: the way out's turn (kept, 40 m north) cut, the way back's ramp drawn.
+    const outbound = east(0, 3000)
+    const back = east(0, 3000, 40)
+    const at = (m: number, north = 0): LngLat => [LNG + m / 110_670, LAT + north / 110_574]
+    const pieces = takeWay([outbound], [outbound, back], { drop: at(1500), dropM: 60, run: 1, take: at(1500, 40), takeM: 150 })
+    // The kept way cut either side of the place, the other way's stretch there drawn.
+    const north = (p: LngLat): number => (p[1] - LAT) * 110_574
+    const kept = pieces.filter(p => p.every(q => Math.abs(north(q)) < 1))
+    expect(kept).toHaveLength(2)
+    expect(kept.every(p => p.every(q => Math.abs((q[0] - LNG) * 110_670 - 1500) > 55))).toBe(true)
+    const taken = pieces.filter(p => p.some(q => Math.abs(north(q) - 40) < 1))
+    expect(taken).toHaveLength(1)
+    expect(taken[0]!.some(q => Math.abs((q[0] - LNG) * 110_670 - 1500) < 60)).toBe(true)
   })
 })
 

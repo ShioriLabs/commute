@@ -12,6 +12,7 @@ import {
   orderCost,
   orderLinesExact,
   orderLinesLocal,
+  pairRules,
   placeStops,
   roundCorners,
   roundJunctions,
@@ -466,6 +467,22 @@ describe('a piece ending across its own line', () => {
   })
 })
 
+describe('a line passing a node every way', () => {
+  it('still pays for changing sides along the way another line goes straight on', () => {
+    // 6 by the Setiabudi reservoir: up the bundle and back (to Flyover Kuningan), off it east to
+    // the reservoir road, and from there back down it; 13E straight up the bundle through the node.
+    const point = (x: number, y: number) => ({ x, y, ux: 0, uy: 1, piece: 0, index: 0, rail: false })
+    const network: Network = { points: [point(0, 0), point(0, 500), point(0, 1000), point(300, 500)], edges: new Map(), adjacency: new Map() }
+    const list: Chain[] = [
+      { path: [0, 1], lines: new Set(['6', '13E']) },
+      { path: [1, 2], lines: new Set(['6', '13E']) },
+      { path: [1, 3], lines: new Set(['6']) }
+    ]
+    const rules = pairRules(network, list)
+    expect(rules.some(r => [r.a, r.b].includes('6') && [r.a, r.b].includes('13E') && r.outChain !== undefined)).toBe(true)
+  })
+})
+
 describe('two lines round one terminal loop', () => {
   const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
   // 4 and 6 at Galunggung: west along the street, round the block to the terminus, on round and
@@ -562,6 +579,21 @@ describe('crossOver', () => {
     expect(out).toContainEqual(edges[0])
     expect(out).toContainEqual(edges[2])
     for (const piece of out.filter(e => e.lines.length === 1)) expect(metres(decodePolyline(piece.shape)[0]!)[0]).toBeLessThanOrEqual(0.5)
+  })
+
+  it('crosses a rail line too, placed by its heavier width', () => {
+    // As clients place them: 6 (1 wide) and LRT BK (RAIL_WEIGHT 1.5) side by side, centred.
+    const edges: BusMapEdge[] = [
+      { shape: encodePolyline([at(300, 0), at(0, 0)]), lines: ['6', 'LRTJBDB:BK'] },
+      { shape: encodePolyline([at(0, 0), at(-300, 0)]), lines: ['LRTJBDB:BK', '6'] }
+    ]
+    const out = crossOver(edges, new Map([['6', '6'], ['LRTJBDB:BK', 'BK']]))
+    const six = out.filter(e => e.lines.length === 1 && e.lines[0] === '6')
+      .map(e => ({ x: metres(decodePolyline(e.shape)[0]!)[0], shift: e.shift ?? 0 }))
+      .sort((a, b) => b.x - a.x)
+    // From -0.75 (left of the rail line) to 0.75 (right of it).
+    expect(six[0]!.shift).toBeLessThan(-0.6)
+    expect(six[six.length - 1]!.shift).toBeGreaterThan(0.6)
   })
 
   it('leaves lines keeping their sides, and a turn, as they are', () => {

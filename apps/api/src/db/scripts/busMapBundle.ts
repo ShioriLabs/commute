@@ -810,7 +810,8 @@ export interface PairRule {
 /**
  * A line's ways through a node, from its chain ends there: in along one, on along the other. One
  * here three times passes twice, along its street and out round a loop and back (4 and 6 at
- * Galunggung): the loop's two ends are the two whose chains come round to the same point.
+ * Galunggung): the loop's two ends are the two whose chains come round to the same point. With no
+ * loop, it goes every way: each pair of ends.
  */
 function passesThrough<E extends { chain: number, atStart: boolean }>(list: readonly Chain[], ends: readonly E[]): [E, E][] {
   if (ends.length === 2) return ends[0]!.chain !== ends[1]!.chain ? [[ends[0]!, ends[1]!]] : []
@@ -820,8 +821,11 @@ function passesThrough<E extends { chain: number, atStart: boolean }>(list: read
     return end.atStart ? path[path.length - 1]! : path[0]!
   }
   const street = ends.filter(x => ends.every(y => y === x || farOf(y) !== farOf(x)))
-  if (street.length !== 1) return []
-  return ends.filter(end => end !== street[0]).map(side => [street[0]!, side])
+  if (street.length === 1) return ends.filter(end => end !== street[0]).map(side => [street[0]!, side])
+  // No loop: it goes every way, as 6 by the Setiabudi reservoir (up the bundle and back, off it to
+  // the reservoir road, and from there down it). Each pair is a way through.
+  if (street.length === 3) return [[ends[0]!, ends[1]!], [ends[1]!, ends[2]!], [ends[0]!, ends[2]!]]
+  return []
 }
 
 /** The pairs of lines passing through each node, and what crossing there costs (see above). */
@@ -863,13 +867,19 @@ export function pairRules(network: Network, list: readonly Chain[]): PairRule[] 
       for (const line of list[end.chain]!.lines) endsOf.set(line, [...(endsOf.get(line) ?? []), end])
     }
     // Lines passing through: in on one chain, out on another. A line ending here crosses nothing.
-    const through: [string, [End, End], boolean][] = []
-    for (const [line, e] of endsOf) for (const pass of passesThrough(list, e)) through.push([line, pass, e.length === 3])
+    // Each with whether its line is here three times, and whether it goes every way (no loop).
+    const through: [string, [End, End], boolean, boolean][] = []
+    for (const [line, e] of endsOf) {
+      const passes = passesThrough(list, e)
+      for (const pass of passes) through.push([line, pass, e.length === 3, passes.length === 3])
+    }
     for (let i = 0; i < through.length; i++) {
       for (let j = i + 1; j < through.length; j++) {
-        const [a, [a1, a2], twiceA] = through[i]!
-        const [b, [b1, b2], twiceB] = through[j]!
+        const [a, [a1, a2], twiceA, everyA] = through[i]!
+        const [b, [b1, b2], twiceB, everyB] = through[j]!
         if (a === b) continue
+        // Two lines both going every way round a node can't keep their places through all three ways.
+        if (everyA && everyB) continue
         const shared = [a1, a2].filter(e => e === b1 || e === b2)
         const endA = ending?.get(a)
         const endB = ending?.get(b)
@@ -2267,7 +2277,7 @@ export function isDrawn(code: string): boolean {
  * on Jl. Galunggung, where the loop's way back lands). Over the first CROSS_M
  * of one side (the one the node's other edges don't go on along), in CROSS_STEPS pieces, each stroke is drawn alone at an offset
  * easing from where it comes in to where it goes on, so they cross as Transit
- * draws a crossing. Not rail: its strokes are heavier (RAIL_WEIGHT).
+ * draws a crossing; a rail line's stroke as wide as clients draw it (RAIL_WEIGHT).
  */
 const CROSS_M = 50
 const CROSS_STEPS = 10
@@ -2286,7 +2296,14 @@ export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<st
       if (run && run.key === key) run.lines.push(line)
       else runs.push({ key, lines: [line] })
     }
-    return runs.map((run, i) => ({ ...run, slot: i - (runs.length - 1) / 2 + (edge.shift ?? 0) }))
+    // Each as wide as clients draw it (a rail line RAIL_WEIGHT), side by side across the middle.
+    const widths = runs.map(run => (run.lines.some(isRailCode) ? RAIL_WEIGHT : 1))
+    let left = -widths.reduce((a, b) => a + b, 0) / 2
+    return runs.map((run, i) => {
+      const slot = left + widths[i]! / 2 + (edge.shift ?? 0)
+      left += widths[i]!
+      return { ...run, slot }
+    })
   }
   // Each edge's ends at each node, and the way it leaves the node.
   interface End { edge: number, atStart: boolean, dx: number, dy: number }
@@ -2309,9 +2326,6 @@ export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<st
       for (const b of here) {
         if (a.edge >= b.edge || crossed.has(a.edge) || crossed.has(b.edge)) continue
         if (-(a.dx * b.dx + a.dy * b.dy) < CROSS_TURN_COS) continue
-        const ea = edges[a.edge]!
-        const eb = edges[b.edge]!
-        if ([...ea.lines, ...eb.lines].some(isRailCode)) continue
         // The crossing on the side the node's other edges don't go straight on along (a way back landing
         // on the street goes on along the side it lands facing), else the longer; out from the node.
         const goingOn = (x: End, y: End): number => here.filter(c => c !== a && c !== b && -(c.dx * x.dx + c.dy * x.dy) > -(c.dx * y.dx + c.dy * y.dy)).length

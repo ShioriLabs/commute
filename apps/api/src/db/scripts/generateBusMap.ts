@@ -702,7 +702,8 @@ async function bundleShapes(lines: readonly BusMapLine[], roads: Roads, haltes: 
     const runs = l.shapes.map(s => decodePolyline(s))
     // A koridor's runs end where its trips turn round.
     const termini = l.kind === 'RAIL' ? [] : runs.flatMap(run => (run.length ? [run[0]!, run[run.length - 1]!] : []))
-    return { code: l.code, kind: l.kind, color: l.color, termini, pieces: dropBypasses(dedupePatterns(runs, keptApart), keptApart) }
+    const pieces = (OVERVIEW_WAYS[l.code] ?? []).reduce((kept, way) => takeWay(kept, runs, way), dedupePatterns(runs, keptApart))
+    return { code: l.code, kind: l.kind, color: l.color, termini, pieces: dropBypasses(pieces, keptApart) }
   }), order, keptApart)
   console.log(`  line order: crossings cost ${order.exact} solved exactly (local search: ${order.local}), ${order.components} component(s)`)
   if (order.fallbacks > 0) console.warn(`  ${order.fallbacks} component(s) unsolved in time, local order kept`)
@@ -776,13 +777,23 @@ function laidOnRoads(
     }
     return undefined
   }
+  // Nodes a koridor's edge ends at: laid on its busway when a bundle goes straight through.
+  const brtNodes = new Set<string>()
+  for (const edge of edges) {
+    if (!edge.lines.some(l => brt.has(l))) continue
+    const pts = decodePolyline(edge.shape)
+    if (pts.length < 2) continue
+    brtNodes.add(keyOf(pts[0]!))
+    brtNodes.add(keyOf(pts[pts.length - 1]!))
+  }
   const nodes = new Map<string, LngLat>()
   const node = (p: LngLat): LngLat => {
     const key = keyOf(p)
     if (!busNodes.has(key)) return p
     let snapped = nodes.get(key)
     if (!snapped) {
-      snapped = snapPoint(p, roads, straightThrough(key))
+      const heading = straightThrough(key)
+      snapped = snapPoint(p, roads, heading, heading !== undefined && brtNodes.has(key))
       nodes.set(key, snapped)
     }
     return snapped
@@ -873,6 +884,52 @@ function tjTopology(): TopologyLine[] {
  * which only its round trips run, comes from those (busMapTopology.ts turn).
  */
 const VIA: Record<string, Record<string, LngLat[]>> = {}
+
+/*
+ * Where a koridor's two ways part within the pattern dedupe's cover, only one is
+ * drawn, the longer run's, unless one is named here: the overview's pieces cut
+ * where the way not drawn runs (within dropM of a place on it), and the way to
+ * draw added, its run's stretch within takeM of a place on it. 6 by the
+ * Setiabudi reservoir: its way back leaves Jl. Gembira by the ramp onto Rasuna
+ * Said; its way out comes back down Rasuna Said and turns sharp into Gembira,
+ * 80 m north. The overview draws the ramp, as Transit would. Checked on the
+ * map; add one only for a spot you've looked at.
+ */
+export interface OverviewWay {
+  drop: LngLat
+  dropM: number
+  /** The run (its index in the line's shapes, its topology's: 0 out, 1 back) whose way is drawn. */
+  run: number
+  take: LngLat
+  takeM: number
+}
+
+const OVERVIEW_WAYS: Record<string, OverviewWay[]> = {
+  6: [{ drop: [106.8294, -6.2061], dropM: 45, run: 1, take: [106.82963, -6.20628], takeM: 70 }]
+}
+
+/** [pieces] with [way]'s way drawn there instead of the one the dedupe kept (see OVERVIEW_WAYS). */
+export function takeWay(pieces: readonly LngLat[][], runs: readonly LngLat[][], way: OverviewWay): LngLat[][] {
+  const near = (p: LngLat, to: LngLat, m: number): boolean => lengthM([p, to]) <= m
+  const kept: LngLat[][] = []
+  for (const piece of pieces) {
+    let part: LngLat[] = []
+    for (const p of sampleAlong(piece, 5).map(([x, y]): LngLat => [x / KX, y / KY])) {
+      if (!near(p, way.drop, way.dropM)) part.push(p)
+      else if (part.length) {
+        kept.push(part)
+        part = []
+      }
+    }
+    if (part.length) kept.push(part)
+  }
+  const run = runs[way.run] ?? []
+  const inside = run.map(p => near(p, way.take, way.takeM))
+  const from = inside.indexOf(true)
+  const to = inside.lastIndexOf(true)
+  const taken = from >= 0 && to > from ? [run.slice(Math.max(0, from - 1), to + 2)] : []
+  return [...kept.filter(p => p.length >= 2 && lengthM(p) >= 10).map(p => simplify(p, 1)), ...taken]
+}
 
 /**
  * Each koridor with a topology redrawn along it, its reroutes gone, and its

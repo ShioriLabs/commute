@@ -979,14 +979,26 @@ function foldAsides(matches: (Match | null)[], points: readonly [number, number]
  * meet and must go on meeting. With [heading] (a unit vector in metres), only
  * onto a road running that way, either way: a node a bundle goes straight
  * through stays on its street, not pulled onto the side road meeting it there
- * (4 and 6 back up onto Jl. Galunggung, its straight bundle dipping 10 m).
+ * (4 and 6 back up onto Jl. Galunggung, its straight bundle dipping 10 m). With
+ * [busway] (a koridor bundle's node), a busway that way first, as snapToRoads
+ * lays the koridors: not the carriageway beside it (Rasuna Said by the Setiabudi
+ * reservoir, 6's way back landing).
  */
-export function snapPoint(p: LngLat, roads: Roads, heading?: [number, number]): LngLat {
+export function snapPoint(p: LngLat, roads: Roads, heading?: [number, number], busway = false): LngLat {
+  if (busway) {
+    const onBusway = snapOnto(p, roads, heading, true)
+    if (onBusway) return onBusway
+  }
+  return snapOnto(p, roads, heading, false) ?? p
+}
+
+function snapOnto(p: LngLat, roads: Roads, heading: [number, number] | undefined, buswayOnly: boolean): LngLat | null {
   const [x, y] = toXY(p)
   let best: [number, number] | null = null
   let bestD = SNAP_M
   for (const { road: r, i: s } of roads.near(x, y)) {
     const road = roads.roads[r]!
+    if (buswayOnly && !road.busway) continue
     const [ax, ay] = road.xy[s]!
     const [bx, by] = road.xy[s + 1]!
     const dx = bx - ax
@@ -1002,5 +1014,5 @@ export function snapPoint(p: LngLat, roads: Roads, heading?: [number, number]): 
       best = q
     }
   }
-  return best ? toLngLat(best) : p
+  return best ? toLngLat(best) : null
 }
