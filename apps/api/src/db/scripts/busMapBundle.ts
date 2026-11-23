@@ -262,7 +262,15 @@ const LANES_APART_M = 4
 /** Whether two points, in metres, of a line heading [heading] lie either side of something keeping their streets apart. */
 export type KeptApart = (a: [number, number], b: [number, number], heading: [number, number]) => boolean
 
-export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart = () => false): Network {
+/**
+ * How the network is built. [railApart]: two rail lines share a stretch only as a rail line and a bus
+ * line do (RAIL_SHARE_M for RAIL_SHARE_MIN_M), not wherever they pass within SNAP_M: a subway's lines
+ * crossing at a shallow angle (New York's 1/2/3 and N/Q/R/W at Times Sq, 150 m within 20 m) cross,
+ * where Jakarta's few rail lines sharing a track run as one either way.
+ */
+export interface NetworkOptions { railApart?: boolean }
+
+export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart = () => false, options: NetworkOptions = {}): Network {
   const order = bundleOrder(lines)
   const byCode = new Map(lines.map(l => [l.code, l]))
   const points: Point[] = []
@@ -378,7 +386,8 @@ export function buildNetwork(lines: readonly BundleLine[], keptApart: KeptApart 
             for (const id of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
               const p = points[id]!
               if (p.piece === pieceId && (othersOnly || i - p.index < OWN_TAIL)) continue
-              if (across ? p.rail === rail : p.rail !== rail && !acrossOk[i]) continue
+              const other = p.rail !== rail || (options.railApart === true && rail && pieceCode[p.piece] !== code)
+              if (across ? !other : other && !acrossOk[i]) continue
               if (Math.abs(p.ux * ux + p.uy * uy) < SNAP_COS) continue
               // Either side of a toll road: a split road's two sides, drawn as two (Yos Sudarso).
               if (keptApart([x, y], [p.x, p.y], [ux, uy])) continue
@@ -1304,8 +1313,8 @@ let solver: Promise<LegacyHighs> | undefined
 export const loadSolver = (): Promise<LegacyHighs> => (solver ??= highsLoader())
 
 /** Peta Bus's lines as the edges of one network, each with its lines in order across it. */
-export async function bundle(lines: readonly BundleLine[], report?: OrderReport, keptApart?: KeptApart): Promise<BusMapEdge[]> {
-  const network = buildNetwork(lines, keptApart)
+export async function bundle(lines: readonly BundleLine[], report?: OrderReport, keptApart?: KeptApart, options?: NetworkOptions): Promise<BusMapEdge[]> {
+  const network = buildNetwork(lines, keptApart, options)
   let list = chains(network)
   for (let pass = 0; pass < 6; pass++) {
     const popped = popBubbles(network, list)
@@ -2283,8 +2292,18 @@ const CROSS_M = 50
 const CROSS_STEPS = 10
 const CROSS_TURN_COS = Math.cos((20 * Math.PI) / 180)
 
-/** [edges] with each straight-on change of sides drawn as a crossing (see above). */
-export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<string, string>): BusMapEdge[] {
+/** A stroke moving over this many line widths straight through a node is eased over (crossOver's jumps). */
+const JUMP_MIN = 0.5
+
+/** Straight on, for a jump: a line bending this little through the node still jumps across it. */
+const JUMP_TURN_COS = Math.cos((45 * Math.PI) / 180)
+
+/**
+ * [edges] with each straight-on change of sides drawn as a crossing (see above); with [jumps], a
+ * stroke going straight on that moves over by JUMP_MIN or more eased over the same way too, as
+ * Transit draws a line easing into its place where another joins (the E onto 53rd St beside B/D).
+ */
+export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<string, string>, jumps = false): BusMapEdge[] {
   const paths = edges.map(e => toXYs(decodePolyline(e.shape)))
   const lengthOf = (xy: readonly XY[]): number => xy.reduce((m, p, i) => (i ? m + Math.hypot(p[0] - xy[i - 1]![0], p[1] - xy[i - 1]![1]) : 0), 0)
   /** Each stroke (a run of lines of one colour) of [edge], left to right along it, at its offset from the middle. */
@@ -2325,7 +2344,7 @@ export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<st
     for (const a of here) {
       for (const b of here) {
         if (a.edge >= b.edge || crossed.has(a.edge) || crossed.has(b.edge)) continue
-        if (-(a.dx * b.dx + a.dy * b.dy) < CROSS_TURN_COS) continue
+        if (-(a.dx * b.dx + a.dy * b.dy) < (jumps ? JUMP_TURN_COS : CROSS_TURN_COS)) continue
         // The crossing on the side the node's other edges don't go straight on along (a way back landing
         // on the street goes on along the side it lands facing), else the longer; out from the node.
         const goingOn = (x: End, y: End): number => here.filter(c => c !== a && c !== b && -(c.dx * x.dx + c.dy * x.dy) > -(c.dx * y.dx + c.dy * y.dy)).length
@@ -2337,7 +2356,8 @@ export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<st
         const inward = new Map(strokes(edges[from.edge]!).map(s => [s.key, from.atStart ? -s.slot : s.slot]))
         const moving = outward.filter(s => inward.has(s.key))
         const swapped = moving.some((s, i) => moving.some((t, j) => i < j && (inward.get(s.key)! - inward.get(t.key)!) * (s.slot - t.slot) < 0))
-        if (!swapped) continue
+        const jumped = jumps && moving.some(s => Math.abs(inward.get(s.key)! - s.slot) >= JUMP_MIN)
+        if (!swapped && !jumped) continue
         const xy = host.atStart ? paths[host.edge]! : [...paths[host.edge]!].reverse()
         const length = lengthOf(xy)
         const span = Math.min(CROSS_M, length / 3)
@@ -2380,4 +2400,69 @@ export function crossOver(edges: readonly BusMapEdge[], strokeOf: ReadonlyMap<st
     }
   }
   return out.flat()
+}
+
+/*
+ * Knots of junctions drawn as one: where lines part and join again within a
+ * bundle's width or so (the E leaving 8th Av and joining B/D on 53rd St, three
+ * nodes 50 m apart; 1/2/3 and N/Q/R/W sharing 40 m where 7th Av and Broadway
+ * cross), the short edges between are narrower than the strokes drawn on them,
+ * and the lines kink through them. Each edge shorter than minM between two
+ * nodes (not a line's end) is drawn into one node at its middle, shortest first, the edges
+ * there ending at it; an edge left running from that node back to it is
+ * dropped while short. Its lines go on through the node.
+ */
+export function contractShortEdges(edges: readonly BusMapEdge[], minM: number): BusMapEdge[] {
+  const keyOf = (p: XY): string => `${p[0].toFixed(1)},${p[1].toFixed(1)}`
+  const lengthOf = (xy: readonly XY[]): number => xy.reduce((m, p, i) => (i ? m + Math.hypot(p[0] - xy[i - 1]![0], p[1] - xy[i - 1]![1]) : 0), 0)
+  const middleOf = (xy: readonly XY[]): XY => {
+    let left = lengthOf(xy) / 2
+    for (let i = 1; i < xy.length; i++) {
+      const leg = Math.hypot(xy[i]![0] - xy[i - 1]![0], xy[i]![1] - xy[i - 1]![1])
+      if (leg >= left) {
+        const t = leg ? left / leg : 0
+        return [xy[i - 1]![0] + (xy[i]![0] - xy[i - 1]![0]) * t, xy[i - 1]![1] + (xy[i]![1] - xy[i - 1]![1]) * t]
+      }
+      left -= leg
+    }
+    return xy[xy.length - 1]!
+  }
+  let list = edges.map(e => ({ edge: e, path: toXYs(decodePolyline(e.shape)) })).filter(e => e.path.length >= 2)
+  for (;;) {
+    const degree = new Map<string, number>()
+    for (const { path } of list) for (const p of [path[0]!, path[path.length - 1]!]) degree.set(keyOf(p), (degree.get(keyOf(p)) ?? 0) + 1)
+    let shortest = -1
+    let shortestM = minM
+    list.forEach(({ path }, i) => {
+      const [a, b] = [keyOf(path[0]!), keyOf(path[path.length - 1]!)]
+      if (a === b || degree.get(a)! < 2 || degree.get(b)! < 2) return
+      const m = lengthOf(path)
+      if (m < shortestM) {
+        shortest = i
+        shortestM = m
+      }
+    })
+    if (shortest < 0) break
+    const gone = list[shortest]!.path
+    const ends = new Set([keyOf(gone[0]!), keyOf(gone[gone.length - 1]!)])
+    const node = middleOf(gone)
+    list = list
+      .filter((_, i) => i !== shortest)
+      .map(({ edge, path }) => {
+        let moved = [...path]
+        // Its points the knot covered dropped, so it leaves the node straight on rather than hooking back.
+        const near = (p: XY): boolean => Math.hypot(p[0] - node[0], p[1] - node[1]) < shortestM
+        if (ends.has(keyOf(moved[0]!))) {
+          while (moved.length > 2 && near(moved[1]!)) moved = moved.slice(1)
+          moved[0] = node
+        }
+        if (ends.has(keyOf(moved[moved.length - 1]!))) {
+          while (moved.length > 2 && near(moved[moved.length - 2]!)) moved = moved.slice(0, -1)
+          moved[moved.length - 1] = node
+        }
+        return { edge, path: moved }
+      })
+      .filter(({ path }) => keyOf(path[0]!) !== keyOf(path[path.length - 1]!) || lengthOf(path) >= 3 * minM)
+  }
+  return list.map(({ edge, path }) => ({ ...edge, shape: encodePolyline(toLngLats(path)) }))
 }

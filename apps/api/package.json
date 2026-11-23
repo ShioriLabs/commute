@@ -25,6 +25,7 @@
     "generate:track-geometry": "tsx ./src/db/scripts/generateTrackGeometry.ts",
     "generate:track-shapes": "tsx ./src/db/scripts/generateTrackShapes.ts",
     "generate:bus-map": "tsx ./src/db/scripts/generateBusMap.ts",
+    "generate:nyc-bus-map": "tsx ./src/db/scripts/generateNycBusMap.ts",
     "generate:headways": "tsx ./src/db/scripts/generateHeadways.ts",
     "generate:service-hours": "tsx ./src/db/scripts/generateServiceHours.ts",
     "generate:trips": "tsx ./src/db/scripts/generateTrips.ts",

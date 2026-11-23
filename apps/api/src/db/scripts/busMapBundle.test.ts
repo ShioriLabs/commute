@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { decodePolyline, encodePolyline, type LngLat } from '../../utils/polyline'
 import {
+  contractShortEdges,
   bundle,
   bundleOrder,
   buildNetwork,
@@ -818,5 +819,43 @@ describe('cutLoops', () => {
   it('keeps a loop a bus turns round', () => {
     const turning = [at(0, 0), at(0, 100), at(100, 100), at(100, 200), at(-50, 50), at(-100, 50)]
     expect(cutLoops(turning, 40)).toHaveLength(turning.length)
+  })
+})
+
+describe('contractShortEdges', () => {
+  const at = (x: number, y: number): LngLat => [LNG + x / M_LNG, LAT + y / M_LAT]
+  const metres = ([lng, lat]: LngLat): [number, number] => [(lng - LNG) * M_LNG, (lat - LAT) * M_LAT]
+
+  it('draws a knot of junctions closer than a bundle is wide as one node', () => {
+    // 8th Av and 53rd St: A/C/B/D down from the north part at X, B/D off east to Z, A/C/E on south from
+    // Y 40 m below X, E off east from Y to Z, E/B/D on east from Z.
+    const X = at(0, 0)
+    const Y = at(-20, -35)
+    const Z = at(30, -40)
+    const edges: BusMapEdge[] = [
+      { shape: encodePolyline([at(0, 500), X]), lines: ['A', 'C', 'B', 'D'] },
+      { shape: encodePolyline([X, Y]), lines: ['A', 'C'] },
+      { shape: encodePolyline([X, Z]), lines: ['B', 'D'] },
+      { shape: encodePolyline([Y, Z]), lines: ['E'] },
+      { shape: encodePolyline([Y, at(-280, -500)]), lines: ['A', 'C', 'E'] },
+      { shape: encodePolyline([Z, at(500, -300)]), lines: ['E', 'B', 'D'] }
+    ]
+    const out = contractShortEdges(edges, 60)
+    expect(out.map(e => e.lines.join(' ')).sort()).toEqual(['A C B D', 'A C E', 'E B D'])
+    // Each edge's end in the knot: one node, the three edges meeting there.
+    const starts = out.map(e => decodePolyline(e.shape).map(metres)).map(p => [p[0]!, p[p.length - 1]!].find(q => Math.hypot(q[0], q[1]) < 100)!)
+    for (const s of starts) {
+      expect(s[0]).toBeCloseTo(starts[0]![0], 0)
+      expect(s[1]).toBeCloseTo(starts[0]![1], 0)
+    }
+  })
+
+  it('leaves edges between a junction and a line end, and longer ones, as they are', () => {
+    const edges: BusMapEdge[] = [
+      { shape: encodePolyline([at(0, 0), at(0, 30)]), lines: ['A'] },
+      { shape: encodePolyline([at(0, 0), at(300, 0)]), lines: ['A', 'B'] },
+      { shape: encodePolyline([at(0, 0), at(-300, 0)]), lines: ['B'] }
+    ]
+    expect(contractShortEdges(edges, 60)).toEqual(edges)
   })
 })
