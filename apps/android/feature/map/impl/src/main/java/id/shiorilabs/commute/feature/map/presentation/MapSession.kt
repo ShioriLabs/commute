@@ -31,6 +31,18 @@ class MapSession @Inject constructor() {
 
     /** The debug panel's pick: the streets layer's lines zoomed out bundled, or as at street zoom. */
     val streetsOverview = MutableStateFlow(StreetsOverview.BUNDLED)
+
+    /** The debug panel's pick: lines on their own streets side by side where they share a lane, or one over another. */
+    val streetsApart = MutableStateFlow(StreetsApart.SEPARATED)
+}
+
+/** How lines sharing a lane are drawn on their own streets, picked in the map's debug panel. */
+enum class StreetsApart {
+    /** Side by side, as the bundles: the map as it shows. */
+    SEPARATED,
+
+    /** One over another, each in its place. */
+    OVERLAPPED,
 }
 
 /** How the streets layer draws its lines below street zoom, picked in the map's debug panel. */

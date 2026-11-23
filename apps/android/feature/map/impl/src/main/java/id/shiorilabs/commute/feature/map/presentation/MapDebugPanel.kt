@@ -30,7 +30,8 @@ import id.shiorilabs.commute.feature.map.R
 /**
  * "Debug Peta", Experimental "Panel Debug Peta": tools for checking Peta Bus on the streets layer,
  * one item under another: how the route lines are drawn ([StreetsLines]), which halte and station
- * marks show ([StreetsDots]), and the lines zoomed out bundled or as at street zoom ([StreetsOverview]).
+ * marks show ([StreetsDots]), the lines zoomed out bundled or as at street zoom ([StreetsOverview]),
+ * and lines sharing a lane on their own streets side by side or not ([StreetsApart]).
  */
 @Composable
 internal fun MapDebugPanel(
@@ -40,6 +41,8 @@ internal fun MapDebugPanel(
     onDots: (StreetsDots) -> Unit,
     overview: StreetsOverview,
     onOverview: (StreetsOverview) -> Unit,
+    apart: StreetsApart,
+    onApart: (StreetsApart) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val title = stringResource(R.string.map_debug_title)
@@ -85,6 +88,17 @@ internal fun MapDebugPanel(
                     ),
                     picked = overview,
                     onPick = onOverview,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text = "Shared lanes", style = MaterialTheme.typography.labelLarge)
+                Choice(
+                    options = listOf(
+                        "Separated" to StreetsApart.SEPARATED,
+                        "Overlapped" to StreetsApart.OVERLAPPED,
+                    ),
+                    picked = apart,
+                    onPick = onApart,
                 )
             }
         }

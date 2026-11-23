@@ -285,7 +285,7 @@ object BusMapProps {
     /** A stroke's width, in bus line widths: [RAIL_LINE_WEIGHT] for a rail line's. */
     const val WEIGHT = "weight"
 
-    /** A line stretch's place across its street, in line widths to the right of its direction. */
+    /** A line stretch's place across its street, in line widths to the right of its direction: on a bundle, or among the lines running with it on its own streets. */
     const val SLOT = "slot"
 
     /** A trunk koridor's place among the trunks alone on its street, for the zoomed-out network. */
@@ -410,8 +410,8 @@ fun BusMap.toGeoJson(
     }
     return BusMapGeoJson(
         lines = collection(lineFeatures).toString(),
-        // Every line on its own geometry, one LineString per piece: laid on the roads, and as the feed has it.
-        routes = collection(pieceFeatures(lines.map { it to it.drawnPieces })).toString(),
+        // Every line on its own geometry, laid on the roads, cut where the lines running with it change.
+        routes = collection(routeFeatures()).toString(),
         marks = collection(markFeatures).toString(),
         haltes = collection(halteFeatures).toString(),
         rail = collection(railFeatures).toString(),
@@ -426,6 +426,38 @@ fun BusMap.toGeoJson(
 fun BusMap.feedGeoJson(feed: BusMapFeed): String {
     val byCode = lines.associateBy { it.code }
     return collection(pieceFeatures(feed.lines.mapNotNull { fed -> byCode[fed.code]?.let { line -> line to fed.shapes.map { decodePolyline(it) } } })).toString()
+}
+
+/**
+ * Each trunk line on its own streets ([separateRoutes]): a LineString per stretch carrying its code,
+ * kind, colour and [BusMapProps.SLOT], its place among the lines running with it.
+ */
+private fun BusMap.routeFeatures(): JsonArray {
+    val trunks = lines.filter { isTrunk(it.code) }
+    val runs = separateRoutes(trunks, trunks.associate { it.code to it.drawnPieces })
+    return buildJsonArray {
+        for (line in trunks) {
+            for (run in runs[line.code].orEmpty()) {
+                if (run.points.size < 2) continue
+                add(
+                    feature(
+                        geometry = buildJsonObject {
+                            put("type", "LineString")
+                            putJsonArray("coordinates") {
+                                for (p in run.points) add(buildJsonArray { add(p.longitude); add(p.latitude) })
+                            }
+                        },
+                        properties = buildJsonObject {
+                            put(BusMapProps.CODE, line.code)
+                            put(BusMapProps.KIND, line.kind)
+                            put(BusMapProps.COLOR, line.color)
+                            put(BusMapProps.SLOT, run.slot)
+                        },
+                    ),
+                )
+            }
+        }
+    }
 }
 
 /** Each trunk line's pieces, a LineString apiece carrying its code, kind and colour. */

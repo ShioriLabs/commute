@@ -481,6 +481,7 @@ private fun MapWithSheet(
     val streetsLines by viewModel.streetsLines.collectAsStateWithLifecycle()
     val streetsDots by viewModel.streetsDots.collectAsStateWithLifecycle()
     val streetsOverview by viewModel.streetsOverview.collectAsStateWithLifecycle()
+    val streetsApart by viewModel.streetsApart.collectAsStateWithLifecycle()
     val feedLines by viewModel.feedLines.collectAsStateWithLifecycle()
     val debugOffered = streets && debugEnabled
     var debugOpen by remember { mutableStateOf(false) }
@@ -664,6 +665,7 @@ private fun MapWithSheet(
                     feed = feedLines,
                     dots = if (debugOffered) streetsDots else StreetsDots.ALL,
                     overview = if (debugOffered) streetsOverview else StreetsOverview.BUNDLED,
+                    apart = if (debugOffered) streetsApart else StreetsApart.SEPARATED,
                 )
                 val pill = streetsPill?.let { busMap?.lines?.get(it) }
                 if (pill != null && selection == null) {
@@ -1024,6 +1026,11 @@ private fun MapWithSheet(
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                     viewModel.showOverview(overview)
                 },
+                apart = streetsApart,
+                onApart = { apart ->
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.showApart(apart)
+                },
             )
         }
     }
@@ -1049,6 +1056,7 @@ private fun StreetsLayer(
     feed: String?,
     dots: StreetsDots,
     overview: StreetsOverview,
+    apart: StreetsApart,
 ) {
     val description = stringResource(R.string.map_streets_description)
     val transitioning = LocalSharedTransitionScope.current?.isTransitionActive == true
@@ -1073,6 +1081,7 @@ private fun StreetsLayer(
                 feed = feed,
                 dots = dots,
                 overview = overview,
+                apart = apart,
                 modifier = Modifier.fillMaxSize(),
             )
         }

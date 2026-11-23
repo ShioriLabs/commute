@@ -259,6 +259,13 @@ class MapViewModel @Inject constructor(
         session.streetsOverview.value = overview
     }
 
+    /** Whether lines sharing a lane on their own streets are drawn side by side. */
+    val streetsApart: StateFlow<StreetsApart> get() = session.streetsApart
+
+    fun showApart(apart: StreetsApart) {
+        session.streetsApart.value = apart
+    }
+
     /** The lines as the feed has them, as GeoJSON; null until [loadFeed] has read them. */
     val feedLines: StateFlow<String?> get() = feed
     private val feed = MutableStateFlow<String?>(null)
