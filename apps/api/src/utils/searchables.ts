@@ -182,7 +182,7 @@ function groupDirectionalStations(stations: IndexableStation[]): IndexableStatio
     .filter(group => group.length > 0)
 }
 
-function stationToSearchable(group: IndexableStation[]): SearchableStation | null {
+function stationToSearchable(group: IndexableStation[], directionalHubOf: ReadonlyMap<string, string>): SearchableStation | null {
   // Lowest code wins, so the folded entry keeps a stable URL regardless of the
   // order D1 returned the rows in.
   const members = group.slice().sort((a, b) => a.code.localeCompare(b.code))
@@ -209,11 +209,21 @@ function stationToSearchable(group: IndexableStation[]): SearchableStation | nul
 
   const score = Math.max(...members.map(member => member.score ?? 0))
 
+  /*
+   * A folded Arah pair that is a `directional` hub opens the hub, on the side
+   * the entry is keyed by, so both sides are one tap apart. It stays a STATION
+   * entry, though: the fare picker reads `station-ids` off it to price either
+   * side, and never follows `to`. Pairs inside an integrated hub (Ciliwung,
+   * Pancoran) keep their station link, since that hub has its own entry.
+   */
+  const hubSlug = members.length > 1 ? directionalHubOf.get(primary.id) : undefined
+  const sameHub = hubSlug !== undefined && members.every(member => directionalHubOf.get(member.id) === hubSlug)
+
   return {
     type: 'STATION',
     title,
     subtitle: OPERATORS[primary.operator].name,
-    to: `/stations/${primary.operator}/${primary.code}`,
+    to: sameHub ? `/hubs/${hubSlug}?m=${encodeURIComponent(primary.id)}` : `/stations/${primary.operator}/${primary.code}`,
     keywords,
     lineKeys,
     data: {
@@ -234,7 +244,8 @@ function stationToSearchable(group: IndexableStation[]): SearchableStation | nul
        */
       ...(members.length > 1
         ? { 'station-ids': members.map(member => member.id).join(',') }
-        : {})
+        : {}),
+      ...(sameHub ? { 'hub-slug': hubSlug } : {})
     },
     operator: primary.operator,
     ...(score > 0 ? { score } : {})
@@ -339,12 +350,23 @@ export function buildSearchableIndex(
     && station.searchable
   )
 
+  // Station id -> slug of the `directional` hub it belongs to. Hub members carry
+  // no id, but a station id is always OPERATOR-CODE.
+  const directionalHubOf = new Map<string, string>()
+  for (const hub of hubs) {
+    if (hub.kind !== 'directional') continue
+    for (const member of hub.members) directionalHubOf.set(`${member.operator}-${member.code}`, hub.slug)
+  }
+
   for (const group of groupDirectionalStations(eligible)) {
-    const searchable = stationToSearchable(group)
+    const searchable = stationToSearchable(group, directionalHubOf)
     if (searchable) items.push(searchable)
   }
 
+  // A directional hub is one halte, already listed as its folded station entry
+  // above; a HUB entry beside it would be a duplicate.
   for (const hub of hubs) {
+    if (hub.kind === 'directional') continue
     items.push(hubToSearchable(hub))
   }
 

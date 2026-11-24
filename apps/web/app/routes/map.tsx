@@ -14,6 +14,7 @@ import type { StandardResponse } from '@schema/response'
 import type { Hub, Station } from '@commute/schemas'
 import { fetcher } from 'utils/fetcher'
 import { useLines } from '~/hooks/use-lines'
+import { useSearchables } from '~/hooks/use-searchables'
 import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
 import { staggerDelay, type StaggerOptions } from 'utils/stagger'
@@ -371,6 +372,24 @@ export default function MapPage() {
     for (const hub of hubs?.data ?? []) index.set(hub.id, hub.slug)
     return index
   }, [hubs, resolveLine])
+  /*
+   * Station id -> slug for TJ "Arah" haltes that form a `directional` hub. Those
+   * are left out of /hubs (they are one halte, not an interchange), so read them
+   * off the search index instead: its folded entry for the pair carries both
+   * station ids and the hub slug. A tap on either Arah dot then opens the hub on
+   * that side rather than a lone station.
+   */
+  const { searchables } = useSearchables()
+  const directionalHubByStation = useMemo(() => {
+    const index = new Map<string, string>()
+    for (const item of searchables) {
+      const slug = item.data?.['hub-slug']
+      const ids = item.data?.['station-ids']
+      if (!slug || !ids) continue
+      for (const id of ids.split(',')) index.set(id, slug)
+    }
+    return index
+  }, [searchables])
   // Spotlight halo color per hub, resolvable synchronously at tap time (the
   // hubs list is already loaded; stations need a fetch — see the effect below).
   const hubColorById = useMemo(() => {
@@ -803,6 +822,9 @@ export default function MapPage() {
   // `OPERATOR-CODE` (e.g. KCI-MRI); split on first hyphen.
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
   const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
+  // The member a hub opened on (the Arah dot tapped). Owned with selectedHubSlug
+  // by openDetailSurface.
+  const [selectedHubMember, setSelectedHubMember] = useState<string | null>(null)
   /*
    * The station whose line-card header opened the current isolate, if any.
    *
@@ -838,6 +860,7 @@ export default function MapPage() {
   const detailSurfaceOpen = isSurfaceOpen({
     station: selectedStation,
     hubSlug: selectedHubSlug,
+    hubMemberId: selectedHubMember,
     lineKey: openLineKey,
     fare: fareSheet
   })
@@ -936,11 +959,12 @@ export default function MapPage() {
    */
   const openDetailSurface = (open: OpenSurface) => {
     const next = openSurface(
-      { station: selectedStation, hubSlug: selectedHubSlug, lineKey: openLineKey, fare: fareSheet },
+      { station: selectedStation, hubSlug: selectedHubSlug, hubMemberId: selectedHubMember, lineKey: openLineKey, fare: fareSheet },
       open
     )
     setSelectedStation(next.station)
     setSelectedHubSlug(next.hubSlug)
+    setSelectedHubMember(next.hubMemberId)
     setOpenLineKey(next.lineKey)
     setFareSheet(next.fare)
   }
@@ -1001,6 +1025,11 @@ export default function MapPage() {
     setRouteEndpoint('to', `${selectedStation.operator}-${selectedStation.code}`)
     setPickingEndpoint('from')
   }, [selectedStation, setRouteEndpoint])
+  // The same action from a place hub's sheet, which names its member itself.
+  const handleHubSelectDeparture = useCallback((stationId: string) => {
+    setRouteEndpoint('to', stationId)
+    setPickingEndpoint('from')
+  }, [setRouteEndpoint])
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
   // currently draw. The rAF loop lerps rendered toward target each frame so
@@ -2556,7 +2585,10 @@ export default function MapPage() {
             // owns the camera from here.
             return false
           }
-          openDetailSurface({ kind: 'station', station: { operator, code } })
+          const directionalHub = directionalHubByStation.get(stationId)
+          openDetailSurface(directionalHub
+            ? { kind: 'hub', hubSlug: directionalHub, memberId: stationId }
+            : { kind: 'station', station: { operator, code } })
           haptic()
           // Spotlight the MARKER, not the shape that was tapped. For a station
           // pill they are the same point; for a label they are not — the name
@@ -3442,6 +3474,9 @@ export default function MapPage() {
 
         <HubSheet
           slug={selectedHubSlug}
+          initialMemberId={selectedHubMember}
+          onSelectDeparture={handleHubSelectDeparture}
+          onIsolateLine={handleIsolateLine}
           onClose={() => setSelectedHubSlug(null)}
           onDismissStart={() => {
             beginSurfaceDismiss()
