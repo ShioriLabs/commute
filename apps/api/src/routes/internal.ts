@@ -50,7 +50,7 @@ app.get('/searchables', async (c) => {
     async () => {
       const [stations, hubs] = await Promise.all([
         stationRepository.getAll(),
-        hubRepository.getAll()
+        hubRepository.getAllIncludingDirectional()
       ])
 
       return buildSearchableIndex(stations, hubs)

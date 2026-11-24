@@ -114,6 +114,64 @@ export const BOGUS_MEMBERSHIPS: { operator: Operator, station: string, lineCode:
 ]
 
 /*
+ * TransJakarta stationLines that are reroute / wrong-line artifacts, as
+ * `lineCode|stationCode`. The GTFS feed carries detour trip patterns alongside
+ * the normal ones, and the importer turns every pattern into memberships, so
+ * these come back on every feed refresh unless filtered. Reviewed by hand
+ * 2026-07-20; read by generateTJSQL (never emits them), generatePruneStationLinesSQL
+ * (deletes them) and generateRouteSnapshot (refuses to freeze a network that
+ * still has them). The 2026-11 refresh re-inserted all of them because none of
+ * those guards existed yet.
+ *
+ *   Koridor 1 western protest-day reroute (the nine): Petamburan, Rawa Barat,
+ *     Tarakan, Kota Bambu (N/S), Kemanggisan (N/S), Pasar Santa, Tomang Raya.
+ *   4  Bermis            — actually a Koridor 2 halte
+ *   5C/7F Gambir/Istiqlal — Koridor 2 haltes
+ *   6V Kejaksaan Agung    — no normal K6V pass
+ *   (8 Grogol/Roxy was here until 2026-11-24: ward shows 26-37 line-8 buses
+ *   through them every WEEKDAY, so it is real service again and was restored.)
+ *   1  Gerbang Pemuda (B/T) — a 5-hour "via Gerbang Pemuda" detour
+ *
+ * NOT listed (kept as real service / topology gaps to fix in the topology, never
+ * prune): 3 Monas; 4/4D Simpang Pramuka + Halte Manggarai Temporer B-codes; 4
+ * Simpang Pramuka (H00181P, a K4 topology gap); 6A/6B Kebon Sirih; 9A Tanjung
+ * Duren; 13 Puri Beta 2. Add a pair only once confirmed an artifact.
+ */
+export const TJ_REROUTE_ARTIFACTS: ReadonlySet<string> = new Set([
+  '1|H00036C', '1|H00192P', '1|H00201P', '1|H00204S', '1|H00209S', // K1 reroute…
+  '1|H00220S', '1|H00224S', '1|H00249P', '1|H00250P', //            …(nine total)
+  '4|H00011P', // Bermis
+  '5C|H00058P', '5C|H00078P', // Gambir, Istiqlal
+  '6V|H00266P', // Kejaksaan Agung
+  '7F|H00058P', '7F|H00078P', // Gambir, Istiqlal
+  // Added 2026-11-24: "Kota/Blok M via Gerbang Pemuda", one pattern each way,
+  // 5 hours, ~1% of K1 service. The other 2026-11 stale rows run all day as
+  // real "via"/short-turn variants and are deliberately kept.
+  '1|H00218S', '1|H00219S', // Gerbang Pemuda Arah Barat / Timur
+  /*
+   * Added 2026-11-24 from ward (apps/ward) vehicle logs, 29 Sep to 13 Oct 2026:
+   * every pair below had ZERO buses of that line naming the stop as their next
+   * stop in 15 days, although the GTFS feed lists it as a regular all-day
+   * pattern. Mid-route stops only: ward never reports a terminus as a next stop,
+   * so a zero there proves nothing (5C at PGC is kept for that reason).
+   *   3  Juanda, Pecenongan — Harmoni closed for MRT phase 2; line 3 now turns
+   *      at Monas via Petojo (user + ward). Restore if Harmoni reopens.
+   *   2A Gambir, Istiqlal, Juanda, Pecenongan — feed's "via Juanda", never seen
+   *   3F/9C Rawa Barat
+   *   6A on the Semanggi side, 6B on the Kuningan side — ward shows 6A runs via
+   *      Kuningan and 6B via Semanggi; the feed's crossover patterns never ran
+   *   1  Petojo — "via Cideng", 2 bus-days of 1,121
+   */
+  '3|H00092P', '3|H00155P', // Juanda, Pecenongan
+  '2A|H00058P', '2A|H00078P', '2A|H00092P', '2A|H00155P', // Gambir, Istiqlal, Juanda, Pecenongan
+  '3F|H00192P', '9C|H00192P', // Rawa Barat
+  '6A|H00047P', '6A|H00099P', '6A|H00120S', '6A|H00251P', // Dukuh Atas, Karet, Widya Chandra Timur, Tosari
+  '6B|H00043P', '6B|H00069P', '6B|H00098P', '6B|H00114P', // Kuningan, Rasuna Said, Karet Kuningan, Kuningan Madya
+  '6B|H00115P', '6B|H00154P', '6B|H00215P', // Underpass Kuningan, Patra Kuningan, Setiabudi Integritas
+  '1|H00170P' // Petojo
+])
+
+/*
  * Stops that are on a line's path but are not interchanges, so the interchange
  * count behind direction labels skips them.
  *

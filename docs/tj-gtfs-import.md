@@ -143,16 +143,29 @@ seeds. TJ routes churn often enough that one-off hand-massaging would rot.
    belongs in fare-summary once multi-operator TJ journeys exist; out of
    scope for the importer.
 
-## After a feed refresh: directional hubs
+## After a feed refresh: prune, then directional hubs
 
-Once the refreshed stations are applied, regenerate the `directional` hubs for
-the "Arah" halte pairs (see docs/transit-hubs.md) and apply them before the
-route snapshot, which refuses to run while any pair is not one place:
+Once the refreshed stations and stationLines are applied, two follow-ups run
+before the route snapshot. The snapshot refuses to run until both are done.
+
+1. **Prune reroute artifacts.** The feed carries detour trip patterns (the
+   Koridor 1 protest-day reroute through Kemanggisan, Petamburan, Kota Bambu…),
+   and every pattern becomes a stationLines row. `generateTJSQL` skips the
+   confirmed ones in `TJ_REROUTE_ARTIFACTS` (db/data/topology.ts), but a
+   hand-written refresh script does not: the 2026-11 refresh re-inserted all 17
+   and line 1 showed up in Kemanggisan's headways. Re-run the prune on every
+   refresh.
+2. **Regenerate the `directional` hubs** for the "Arah" halte pairs (see
+   docs/transit-hubs.md).
 
 ```sh
+pnpm --filter api generate:prune-stationlines
+wrangler d1 execute commute --local --file=src/db/scripts/prune_stationlines.sql
 pnpm --filter api generate:tj-directional-hubs
 wrangler d1 execute commute --local --file=src/db/scripts/tj_directional_hubs.sql
 pnpm --filter api generate:route-snapshot
 ```
 
-A pair that changes membership moves routes, so it needs an `API_VERSION` bump.
+Run both SQL files on `--remote` too. A pair that changes membership moves
+routes, so it needs an `API_VERSION` bump, as does any stationLines change
+(stations and headways are KV-cached per version).

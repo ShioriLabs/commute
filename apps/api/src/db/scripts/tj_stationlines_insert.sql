@@ -912,7 +912,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00132P-1', 'TJ-H00132P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00275P-1', 'TJ-H00275P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00068P-1', 'TJ-H00068P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00170P-1', 'TJ-H00170P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B05725P-1P', 'TJ-B05725P', '1P', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B01945P-1P', 'TJ-B01945P', '1P', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B00109P-1P', 'TJ-B00109P', '1P', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -1052,17 +1051,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B01094P-1Q', 'TJ-B01094P', '1Q', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B02218P-1Q', 'TJ-B02218P', '1Q', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B07329P-1Q', 'TJ-B07329P', '1Q', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00249P-1', 'TJ-H00249P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00192P-1', 'TJ-H00192P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00036C-1', 'TJ-H00036C', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00220S-1', 'TJ-H00220S', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00204S-1', 'TJ-H00204S', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00250P-1', 'TJ-H00250P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00201P-1', 'TJ-H00201P', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00209S-1', 'TJ-H00209S', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00224S-1', 'TJ-H00224S', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00218S-1', 'TJ-H00218S', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00219S-1', 'TJ-H00219S', '1', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B05725P-1R', 'TJ-B05725P', '1R', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B01945P-1R', 'TJ-B01945P', '1R', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B00109P-1R', 'TJ-B00109P', '1R', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -1149,10 +1137,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00084P-2A', 'TJ-H00084P', '2A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00193P-2A', 'TJ-H00193P', '2A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00059P-2A', 'TJ-H00059P', '2A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00058P-2A', 'TJ-H00058P', '2A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00078P-2A', 'TJ-H00078P', '2A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00092P-2A', 'TJ-H00092P', '2A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00155P-2A', 'TJ-H00155P', '2A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00284P-2B', 'TJ-H00284P', '2B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B06975P-2B', 'TJ-B06975P', '2B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B08524P-2B', 'TJ-B08524P', '2B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -1393,7 +1377,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00220S-3F', 'TJ-H00220S', '3F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00204S-3F', 'TJ-H00204S', '3F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00210S-3F', 'TJ-H00210S', '3F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00192P-3F', 'TJ-H00192P', '3F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00077P-3H', 'TJ-H00077P', '3H', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00083P-3H', 'TJ-H00083P', '3H', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00070P-3H', 'TJ-H00070P', '3H', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -1421,8 +1404,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00200P-3', 'TJ-H00200P', '3', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00170P-3', 'TJ-H00170P', '3', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00131P-3', 'TJ-H00131P', '3', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00155P-3', 'TJ-H00155P', '3', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00092P-3', 'TJ-H00092P', '3', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00271P-4B', 'TJ-H00271P', '4B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B07313P-4B', 'TJ-B07313P', '4B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B00799P-4B', 'TJ-B00799P', '4B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -1820,7 +1801,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00153P-4', 'TJ-H00153P', '4', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B08301P-4', 'TJ-B08301P', '4', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B08302P-4', 'TJ-B08302P', '4', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00011P-4', 'TJ-H00011P', '4', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00181P-4', 'TJ-H00181P', '4', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00128P-4', 'TJ-H00128P', '4', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00245P-4', 'TJ-H00245P', '4', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -1876,7 +1856,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00112P-5C', 'TJ-H00112P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00136P-5C', 'TJ-H00136P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00116P-5C', 'TJ-H00116P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00058P-5C', 'TJ-H00058P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00092P-5C', 'TJ-H00092P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00155P-5C', 'TJ-H00155P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00018P-5C', 'TJ-H00018P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -1885,7 +1864,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00172P-5C', 'TJ-H00172P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00006P-5C', 'TJ-H00006P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00131P-5C', 'TJ-H00131P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00078P-5C', 'TJ-H00078P', '5C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B05510P-5F', 'TJ-B05510P', '5F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B02282P-5F', 'TJ-B02282P', '5F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B01805P-5F', 'TJ-B01805P', '5F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -2171,10 +2149,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00207P-6A', 'TJ-H00207P', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00267S-6A', 'TJ-H00267S', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00268S-6A', 'TJ-H00268S', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00251P-6A', 'TJ-H00251P', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00047P-6A', 'TJ-H00047P', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00099P-6A', 'TJ-H00099P', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00120S-6A', 'TJ-H00120S', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00006P-6A', 'TJ-H00006P', '6A', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00191P-6B', 'TJ-H00191P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00044P-6B', 'TJ-H00044P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -2198,13 +2172,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00268S-6B', 'TJ-H00268S', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00120S-6B', 'TJ-H00120S', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00109S-6B', 'TJ-H00109S', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00215P-6B', 'TJ-H00215P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00114P-6B', 'TJ-H00114P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00098P-6B', 'TJ-H00098P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00069P-6B', 'TJ-H00069P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00043P-6B', 'TJ-H00043P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00154P-6B', 'TJ-H00154P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00115P-6B', 'TJ-H00115P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00006P-6B', 'TJ-H00006P', '6B', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00227P-6C', 'TJ-H00227P', '6C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B00591P-6C', 'TJ-B00591P', '6C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -2659,7 +2626,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00023P-6V', 'TJ-H00023P', '6V', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00067P-6V', 'TJ-H00067P', '6V', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00265P-6V', 'TJ-H00265P', '6V', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00266P-6V', 'TJ-H00266P', '6V', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B06578P-6W', 'TJ-B06578P', '6W', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B00178P-6W', 'TJ-B00178P', '6W', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B00772P-6W', 'TJ-B00772P', '6W', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -2970,8 +2936,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00092P-7F', 'TJ-H00092P', '7F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00141P-7F', 'TJ-H00141P', '7F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00239S-7F', 'TJ-H00239S', '7F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00058P-7F', 'TJ-H00058P', '7F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00078P-7F', 'TJ-H00078P', '7F', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00096P-7', 'TJ-H00096P', '7', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00238S-7', 'TJ-H00238S', '7', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00056P-7', 'TJ-H00056P', '7', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
@@ -3648,7 +3612,6 @@ INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, crea
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00241S-9C', 'TJ-H00241S', '9C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00063S-9C', 'TJ-H00063S', '9C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00061S-9C', 'TJ-H00061S', '9C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-H00192P-9C', 'TJ-H00192P', '9C', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B05715P-9D', 'TJ-B05715P', '9D', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B05716P-9D', 'TJ-B05716P', '9D', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES ('TJ-B02278P-9D', 'TJ-B02278P', '9D', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

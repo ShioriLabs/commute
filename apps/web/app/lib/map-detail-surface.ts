@@ -29,6 +29,9 @@ export interface FareSelection {
 export interface DetailSurfaceState {
   station: StationSelection | null
   hubSlug: string | null
+  /** The hub member to open on, e.g. the Arah dot that was tapped. Only ever
+   *  set alongside hubSlug; null opens the hub on its first member. */
+  hubMemberId: string | null
   lineKey: string | null
   fare: FareSelection | null
 }
@@ -36,6 +39,7 @@ export interface DetailSurfaceState {
 export const NO_DETAIL_SURFACE: DetailSurfaceState = {
   station: null,
   hubSlug: null,
+  hubMemberId: null,
   lineKey: null,
   fare: null
 }
@@ -44,7 +48,7 @@ export const NO_DETAIL_SURFACE: DetailSurfaceState = {
  *  compile error everywhere it has to be handled rather than a silent omission. */
 export type OpenSurface =
   | { kind: 'station', station: StationSelection }
-  | { kind: 'hub', hubSlug: string }
+  | { kind: 'hub', hubSlug: string, memberId?: string }
   | { kind: 'line', lineKey: string }
   | { kind: 'fare', snap: 'peek' | 'full' }
 
@@ -60,7 +64,7 @@ export function openSurface(state: DetailSurfaceState, open: OpenSurface): Detai
     case 'station':
       return { ...NO_DETAIL_SURFACE, station: open.station }
     case 'hub':
-      return { ...NO_DETAIL_SURFACE, hubSlug: open.hubSlug }
+      return { ...NO_DETAIL_SURFACE, hubSlug: open.hubSlug, hubMemberId: open.memberId ?? null }
     case 'line':
       return { ...NO_DETAIL_SURFACE, lineKey: open.lineKey }
     case 'fare':

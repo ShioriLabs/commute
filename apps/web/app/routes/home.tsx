@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import type { CompactLineGroupedTimetable, Station } from '@commute/schemas'
+import type { CompactLineGroupedTimetable, HeadwayRow, Station } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import LineCard from '~/components/line-card'
+import FrequencyList from '~/components/frequency-card'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
@@ -81,7 +82,14 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   // The service day, not the calendar one; see station-content's timetableUrl.
-  const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1&day=${serviceDayOf(new Date())}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const day = serviceDayOf(new Date())
+  // TransJakarta publishes no timetable, only headways, as on the station page:
+  // asking a TJ halte for a timetable could only 404.
+  const usesHeadway = operator === 'TJ'
+  const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(usesHeadway ? null : new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1&day=${day}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const headway = useSWR<StandardResponse<HeadwayRow[]>>(usesHeadway ? new URL(`/stations/${operator}/${code}/headway?day=${day}`, import.meta.env.VITE_API_BASE_URL).href : null, fetcher, swrConfig)
+  const board = usesHeadway ? headway : timetable
+  const frequencies = headway.data?.data ?? []
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const nextDayLine = useNextDayTimetable(operator, code)
   const networkStatus = useNetworkStatus()
@@ -110,12 +118,13 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
         <article className="content-fade">
           <h1 className="font-bold text-xl flex px-4 py-4 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
             <Link to={`/stations/${station.data.data.operator}/${station.data.data.code}`} className="group flex-grow">
-              Stasiun&nbsp;
+              {usesHeadway ? 'Halte' : 'Stasiun'}
+              &nbsp;
               { station.data.data.name }
               <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200 mb-1" />
             </Link>
           </h1>
-          { timetable.isLoading
+          { board.isLoading
             ? (
                 // One placeholder per line the station serves, rather than a
                 // single fixed block. /stations resolves before the timetable
@@ -130,37 +139,44 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
                 // absorbs what's left.
                 <div className="content-fade">
                   <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4 animate-pulse">
+                    {/* A headway row is one short line, not a departure card. */}
                     {station.data.data.lines.slice(0, MAX_SKELETON_LINES).map(lineKey => (
-                      <div key={lineKey} className="h-[280px] bg-slate-200 rounded-xl" />
+                      <div key={lineKey} className={clsx('bg-slate-200 rounded-xl', usesHeadway ? 'h-16' : 'h-[280px]')} />
                     ))}
                   </div>
                 </div>
               )
-            : timetableData?.length
+            : usesHeadway && frequencies.length > 0
               ? (
+                  <div className="content-fade mx-4">
+                    <FrequencyList rows={frequencies} />
+                  </div>
+                )
+              : timetableData?.length
+                ? (
                   // Fades in over the skeleton it replaces. The per-line
                   // placeholders above get the height close, so this only has
                   // to soften the remaining difference.
-                  <ul className="content-fade flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
-                    {timetableData.map(line => (
-                      <LineCard key={line.line} line={line} nextDayLine={nextDayLine(line)} />
-                    ))}
-                  </ul>
-                )
-              : (
-                  <div className="mx-4 p-4 bg-rose-50 rounded-xl flex flex-col gap-2 items-start">
-                    <span className="text-slate-700 font-semibold">
-                      {timetable.error ? 'Gagal memuat jadwal' : 'Jadwal tidak tersedia'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => { void timetable.mutate() }}
-                      className="bg-[#F55875] text-white font-bold px-4 py-2 rounded-lg cursor-pointer text-sm"
-                    >
-                      Coba Lagi
-                    </button>
-                  </div>
-                )}
+                    <ul className="content-fade flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
+                      {timetableData.map(line => (
+                        <LineCard key={line.line} line={line} nextDayLine={nextDayLine(line)} />
+                      ))}
+                    </ul>
+                  )
+                : (
+                    <div className="mx-4 p-4 bg-rose-50 rounded-xl flex flex-col gap-2 items-start">
+                      <span className="text-slate-700 font-semibold">
+                        {board.error ? 'Gagal memuat jadwal' : 'Jadwal tidak tersedia'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { void board.mutate() }}
+                        className="bg-[#F55875] text-white font-bold px-4 py-2 rounded-lg cursor-pointer text-sm"
+                      >
+                        Coba Lagi
+                      </button>
+                    </div>
+                  )}
         </article>
       )
     }
@@ -179,7 +195,7 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
           </span>
           <button
             type="button"
-            onClick={() => { void Promise.all([station.mutate(), timetable.mutate()]) }}
+            onClick={() => { void Promise.all([station.mutate(), board.mutate()]) }}
             className="bg-[#F55875] text-white font-bold px-4 py-2 rounded-lg cursor-pointer"
           >
             Coba Lagi

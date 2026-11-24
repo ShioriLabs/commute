@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { TOPOLOGY } from '../data/topology'
+import { TJ_REROUTE_ARTIFACTS as PRUNE_PAIRS, TOPOLOGY } from '../data/topology'
 
 /*
  * Prunes stale `stationLines` memberships: rows for a MANAGED BRT corridor (a
@@ -28,30 +28,11 @@ import { TOPOLOGY } from '../data/topology'
 const OUTPUT_SQL_PATH = `${__dirname}/prune_stationlines.sql`
 const CWD = `${__dirname}/../../..` // apps/api
 
-// Confirmed reroute / wrong-line `lineCode|station` artifacts to prune (reviewed
-// against STALE_STATIONLINES.md, 2026-07-20). Kept DB-independent (a hardcoded
-// allowlist, not "whatever is stale in the local D1 right now") so the emitted
-// DELETE is complete and idempotent on local, remote, and fresh reseeds alike.
-//
-//   Koridor 1 western protest-day reroute (the nine): Petamburan, Rawa Barat,
-//     Tarakan, Kota Bambu (N/S), Kemanggisan (N/S), Pasar Santa, Tomang Raya.
-//   4  Bermis            — actually a Koridor 2 halte
-//   5C/7F Gambir/Istiqlal — Koridor 2 haltes
-//   6V Kejaksaan Agung    — no normal K6V pass
-//   8  Grogol/Roxy        — original alignment, rerouted for MRT construction
-//
-// NOT pruned (kept as real service / topology gaps to fix): 3 Monas; 4/4D
-// Simpang Pramuka + Halte Manggarai Temporer B-codes; 4 Simpang Pramuka (H00181P,
-// a K4 topology gap); 6A/6B Kebon Sirih; 9A Tanjung Duren; 13 Puri Beta 2.
-const PRUNE_PAIRS = new Set([
-  '1|H00036C', '1|H00192P', '1|H00201P', '1|H00204S', '1|H00209S', // K1 reroute…
-  '1|H00220S', '1|H00224S', '1|H00249P', '1|H00250P', //            …(nine total)
-  '4|H00011P', // Bermis
-  '5C|H00058P', '5C|H00078P', // Gambir, Istiqlal
-  '6V|H00266P', // Kejaksaan Agung
-  '7F|H00058P', '7F|H00078P', // Gambir, Istiqlal
-  '8|H00070P', '8|H00200P' // Grogol, Roxy
-])
+// Confirmed artifacts to prune live in TJ_REROUTE_ARTIFACTS (db/data/topology.ts),
+// shared with generateTJSQL so a feed refresh never re-inserts them. Kept
+// DB-independent (a hardcoded allowlist, not "whatever is stale in the local D1
+// right now") so the emitted DELETE is complete and idempotent on local, remote,
+// and fresh reseeds alike.
 
 // stationLines.id follows `${stationId}-${lineCode}` (e.g. TJ-H00192P-1).
 const rowId = (pair: string): string => {

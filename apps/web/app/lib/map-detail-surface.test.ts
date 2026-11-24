@@ -4,6 +4,7 @@ import { openSurface, isSurfaceOpen, type DetailSurfaceState } from './map-detai
 const empty: DetailSurfaceState = {
   station: null,
   hubSlug: null,
+  hubMemberId: null,
   lineKey: null,
   fare: null
 }
@@ -29,6 +30,14 @@ describe('openSurface', () => {
     const next = openSurface({ ...empty, lineKey: 'KCI:C' }, { kind: 'hub', hubSlug: 'dukuh-atas' })
     expect(next.hubSlug).toBe('dukuh-atas')
     expect(next.lineKey).toBeNull()
+  })
+
+  it('opens a hub on the requested member, and forgets it on the next open', () => {
+    const tapped = openSurface(empty, { kind: 'hub', hubSlug: 'kali-grogol', memberId: 'TJ-H00197S' })
+    expect(tapped.hubMemberId).toBe('TJ-H00197S')
+    const plain = openSurface(tapped, { kind: 'hub', hubSlug: 'pancoran' })
+    expect(plain.hubMemberId).toBeNull()
+    expect(openSurface(tapped, { kind: 'line', lineKey: 'KCI:C' }).hubMemberId).toBeNull()
   })
 
   it('opening the fare sheet closes an open line', () => {

@@ -207,9 +207,17 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
    * when the service day actually turns over.
    */
   const day = serviceDayOf(new Date())
+  /*
+   * TransJakarta publishes no timetable, only headways, so a TJ page never asks
+   * for one: the request could only 404, and the page used to hold its skeleton
+   * on that 404 before even reaching the headway it actually shows.
+   */
+  const usesHeadway = operator === 'TJ'
   const timetableUrl = useMemo(() =>
-    new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1&day=${day}`, import.meta.env.VITE_API_BASE_URL).href,
-  [operator, code, day]
+    usesHeadway
+      ? null
+      : new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1&day=${day}`, import.meta.env.VITE_API_BASE_URL).href,
+  [operator, code, day, usesHeadway]
   )
   const transfersUrl = useMemo(() =>
     new URL(`/stations/${operator}/${code}/transfers`, import.meta.env.VITE_API_BASE_URL).href,
@@ -226,20 +234,20 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
    * timetable already exists.
    */
   const headwayUrl = useMemo(() =>
-    operator === 'TJ'
+    usesHeadway
       ? new URL(`/stations/${operator}/${code}/headway?day=${day}`, import.meta.env.VITE_API_BASE_URL).href
       : null,
-  [operator, code, day]
+  [operator, code, day, usesHeadway]
   )
   /*
    * Rail only, the mirror of headwayUrl: the density model has no TransJakarta
    * estimate (no usable departures per hour), so TJ pages skip the request.
    */
   const densityUrl = useMemo(() =>
-    operator !== 'TJ'
+    !usesHeadway
       ? new URL(`/stations/${operator}/${code}/density?day=${day}`, import.meta.env.VITE_API_BASE_URL).href
       : null,
-  [operator, code, day]
+  [operator, code, day, usesHeadway]
   )
 
   const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
@@ -262,7 +270,8 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
     )
   }
 
-  if (timetable.isLoading || station.isLoading) {
+  // Whichever board this page shows is the one worth waiting for.
+  if ((usesHeadway ? headway.isLoading : timetable.isLoading) || station.isLoading) {
     return (
       <div className="px-4 pb-8 mt-2 flex flex-col gap-2 max-w-3xl mx-auto">
         <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
@@ -357,27 +366,27 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
           )
         }
 
-        if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" onRetry={() => timetable.mutate()} />
         /*
-         * TransJakarta publishes no timetable — surface the boarding-board hint,
-         * not a load error. The station is fully routable, so it keeps the OTW
-         * button: a missing schedule is a fact about the operator, not a reason
-         * to withhold trip planning.
+         * TransJakarta publishes no timetable: surface its headways, not a load
+         * error. The station is fully routable, so it keeps the OTW button: a
+         * missing schedule is a fact about the operator, not a reason to
+         * withhold trip planning.
          *
-         * Deliberately not extended to the OFFLINE/ERROR branches below. Those
-         * mean "we could not load this station", where the fare lookup the
-         * button leads to would likely fail the same way.
+         * Checked before the offline branch so cached headways still show
+         * offline, and the skeleton above already waited for them, so "Jadwal
+         * Tidak Tersedia" only appears once the halte truly has none.
          */
-        if (operator === 'TJ') {
+        if (usesHeadway) {
           const frequencies = headway.data?.data ?? []
+          if (frequencies.length === 0 && headway.error) {
+            // No OTW button here: "we could not load this halte" means the fare
+            // lookup it leads to would likely fail the same way.
+            return networkStatus === 'OFFLINE'
+              ? <EmptyState mode="OFFLINE" onRetry={() => headway.mutate()} />
+              : <EmptyState mode="ERROR" onRetry={() => headway.mutate()} />
+          }
           return (
             <>
-              {/*
-                * While the request is in flight the empty state stays put rather
-                * than a skeleton: the answer is KV-cached and quick, and flashing
-                * "Jadwal Tidak Tersedia" before replacing it with rows reads worse
-                * than a beat of nothing.
-                */}
               {frequencies.length > 0
                 ? <FrequencyList rows={frequencies} />
                 : <EmptyState mode="NO_SCHEDULE" />}
@@ -385,6 +394,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
             </>
           )
         }
+        if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" onRetry={() => timetable.mutate()} />
         if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
         // A retired station has no schedule BY DEFINITION, and the banner above
         // has already said so in plain words. "Jadwal Tidak Tersedia" under it
