@@ -1,5 +1,5 @@
 import { db } from 'db'
-import type { HubKind } from 'db/schemas/hubs'
+import { type HubKind, PLACE_HUB_KINDS } from 'db/schemas/hubs'
 import { Repository } from 'models/repository'
 import { mapify } from 'utils/mapify'
 import { StationRef, StationRepository, toStationRef } from './stations'
@@ -74,10 +74,26 @@ export class HubRepository extends Repository {
     }
   }
 
+  /*
+   * `directional` hubs (TJ "Arah" halte pairs) are left out: they are one
+   * halte, not an interchange, so they do not belong in the /hubs list, the
+   * sitemap or search (which already folds the pair by name). Their own
+   * /hubs/:slug still resolves through getBySlug.
+   */
   async getAll() {
+    return this.list(false)
+  }
+
+  /** Every hub including `directional` ones, for generators that must see them all. */
+  async getAllIncludingDirectional() {
+    return this.list(true)
+  }
+
+  private async list(includeDirectional: boolean) {
     const hubs = await db(this.d1)
       .selectFrom('hubs')
       .selectAll()
+      .$if(!includeDirectional, qb => qb.where('kind', '!=', 'directional'))
       .orderBy('score desc')
       .execute()
 
@@ -85,16 +101,17 @@ export class HubRepository extends Repository {
   }
 
   /*
-   * Member station ids of every `integrated` hub, grouped by hub. Those are the
-   * hubs that are one place to a rider (utils/places.ts); a `hub`-kind complex
-   * like Dukuh Atas is several places and is deliberately left out.
+   * Member station ids of every `integrated` and `directional` hub, grouped by
+   * hub. Those are the hubs that are one place to a rider (utils/places.ts); a
+   * `hub`-kind complex like Dukuh Atas is several places and is deliberately
+   * left out.
    */
-  async getIntegratedMemberIds(): Promise<string[][]> {
+  async getPlaceMemberIds(): Promise<string[][]> {
     const rows = await db(this.d1)
       .selectFrom('hubStations')
       .innerJoin('hubs', 'hubs.id', 'hubStations.hubId')
       .select(['hubStations.hubId', 'hubStations.stationId'])
-      .where('hubs.kind', '=', 'integrated')
+      .where('hubs.kind', 'in', [...PLACE_HUB_KINDS])
       .execute()
 
     const byHub = new Map<string, string[]>()

@@ -116,8 +116,42 @@ type APIHub = Pick<Hub, 'name' | 'heroImage' | 'kind'> & {
 // Inlined rather than imported from @commute/constants: HUB_KIND_LABEL is a
 // value, and keeping this file's runtime imports at zero keeps the crawler path
 // dependency-free.
+const HUB_KIND_LABEL_INLINE: Record<APIHub['kind'], string> = {
+  hub: 'Pumpunan Moda',
+  integrated: 'Stasiun Terintegrasi',
+  directional: 'Halte'
+}
+
 function hubKindLabel(hub: APIHub): string {
-  return hub.kind === 'hub' ? 'Pumpunan Moda' : 'Stasiun Terintegrasi'
+  return HUB_KIND_LABEL_INLINE[hub.kind] ?? 'Stasiun Terintegrasi'
+}
+
+/*
+ * A `directional` hub is one TransJakarta halte split by direction, so its
+ * copy talks about buses and a halte, never "stasiun terintegrasi" (crossing
+ * sides needs a tap-out).
+ */
+export function hubCopy(hub: Pick<APIHub, 'name' | 'kind'>, memberNames: string) {
+  if (hub.kind === 'directional') {
+    return {
+      heading: `Jadwal Bus Halte ${hub.name}`,
+      intro: `Halte ${hub.name}, dua arah dalam satu tempat.`,
+      membersHeading: 'Sisi halte',
+      schemaType: 'BusStation',
+      description: memberNames
+        ? `Cek jadwal bus di Halte ${hub.name} kagak pake ribet. Dua arah: ${memberNames}.`
+        : `Cek jadwal bus di Halte ${hub.name} kagak pake ribet.`
+    }
+  }
+  return {
+    heading: `Jadwal Kereta ${hub.name}`,
+    intro: `Stasiun terintegrasi ${hub.name} di Jabodetabek.`,
+    membersHeading: 'Stasiun terhubung',
+    schemaType: 'TrainStation',
+    description: memberNames
+      ? `Cek jadwal kereta di ${hub.name} kagak pake ribet. Stasiun terintegrasi: ${memberNames}.`
+      : `Cek jadwal kereta di stasiun terintegrasi ${hub.name} kagak pake ribet.`
+  }
 }
 
 type APILineDetail = Pick<LineDetail, 'operator' | 'line'> & {
@@ -286,12 +320,15 @@ function buildLineBody(detail: APILineDetail, stationCount: number): string {
 }
 
 function buildHubBody(hub: APIHub, slug: string, memberNames: string): string {
+  const copy = hubCopy(hub, memberNames)
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@type': 'TrainStation',
+    '@type': copy.schemaType,
     'name': hub.name,
     'url': `${SITE_ORIGIN}/hubs/${slug}`,
-    'description': memberNames ? `Stasiun terintegrasi: ${memberNames}` : undefined
+    'description': memberNames
+      ? `${hub.kind === 'directional' ? 'Dua arah' : 'Stasiun terintegrasi'}: ${memberNames}`
+      : undefined
   }
   const items = hub.members
     .map(m => m.name)
@@ -300,9 +337,9 @@ function buildHubBody(hub: APIHub, slug: string, memberNames: string): string {
     .join('')
   return (
     `<section aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">`
-    + `<h1>Jadwal Kereta ${esc(hub.name)}</h1>`
-    + `<p>Stasiun terintegrasi ${esc(hub.name)} di Jabodetabek.</p>`
-    + (items ? `<h2>Stasiun terhubung</h2><ul>${items}</ul>` : '')
+    + `<h1>${esc(copy.heading)}</h1>`
+    + `<p>${esc(copy.intro)}</p>`
+    + (items ? `<h2>${esc(copy.membersHeading)}</h2><ul>${items}</ul>` : '')
     + `</section>`
     + `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
   )
@@ -366,11 +403,13 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
       .map(m => m.name)
       .filter(Boolean)
       .join(', ')
+    const copy = hubCopy(hub, memberNames)
     return {
-      title: `Jadwal Kereta ${hub.name} - ${hubKindLabel(hub)} - Commute`,
-      description: memberNames
-        ? `Cek jadwal kereta di ${hub.name} kagak pake ribet. Stasiun terintegrasi: ${memberNames}.`
-        : `Cek jadwal kereta di stasiun terintegrasi ${hub.name} kagak pake ribet.`,
+      // "Jadwal Bus Halte X - Halte" would say it twice.
+      title: hub.kind === 'directional'
+        ? `${copy.heading} - Commute`
+        : `${copy.heading} - ${hubKindLabel(hub)} - Commute`,
+      description: copy.description,
       image: hub.heroImage || hubOgImage(slug),
       bodyHtml: buildHubBody(hub, slug, memberNames)
     }
