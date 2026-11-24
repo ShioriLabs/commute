@@ -366,3 +366,63 @@ estimate. The gain is the median estimated gain of the changed pairs.
   against 514 s at 15:00, as buses are added toward the suburbs). 17:00 and 18:00
   are guessed between 16:00 and 19:00, and their CV is borrowed from 16:00.
 - **`moreDepartures` rows get no estimates.**
+
+## Wait over-prediction on sparse lines (diagnosed 2026-11-24, not fixed)
+
+Found by running Transit's ETA Accuracy Benchmark on the `/trips` estimates
+(github.com/TransitApp/ETA-Accuracy-Benchmark, replayed against ward's real
+buses): on lines with a planner headway of 15 min or more, the bus arrived
+*earlier* than estimated 47-57% of the time at 15-60 min horizons. The
+arrive-by backtest saw the same thing from the other side (`arrive-by.md`:
+one headway of budget is enough at 20+ min).
+
+**Method.** 13,771 (line-dir, boarding stop, day, hour) cells from ward's 15
+days, healthy collector time only. Ward's headway is the mean gap between
+consecutive buses at the stop. Its wait is the random-arrival wait
+Σg² / 2Σg. Both are compared with `plannerHeadways` and `expectedWaitS` for the
+same cell. Ride time for 5-stop legs is compared with `estimateTjLeg`'s median.
+
+| Cells (medians) | planner h / ward h | planner wait / ward wait | bunching, model | bunching, ward |
+|---|---|---|---|---|
+| all | 1.09 | 1.21 | 1.49 | 1.28 |
+| planner h < 10 min | 1.06 | 1.18 | 1.61 | 1.37 |
+| planner h ≥ 15 min | 1.23 | 1.35 | 1.27 | 1.14 |
+| planner h ≥ 20 min | **2.24** | **2.51** | 1.26 | 1.09 |
+| WD 05:00 only | 1.40 | 2.03 | 2.00 | 1.21 |
+| all, without 05:00 | 1.06 | 1.16 | 1.48 | 1.30 |
+| planner h ≥ 20, without 05:00 | 1.22 | 1.49 | 1.50 | 1.16 |
+
+Ride time is not the problem (+0.2 to +0.6 min). Two causes:
+
+1. **Partial-service hours dilute the headway profile (the big one).** `fit.ts`
+   computes a rate as arrivals ÷ *healthy collector seconds* in each (day type,
+   hour) column. A healthy second counts whether or not the line is running,
+   so an hour where service runs for only part of it reads as half as
+   frequent. The 20+ min tail is almost all weekday 05:00, the hour lines
+   start: 4D planned 39.4 min vs 11.4 observed, 6V 38.3 vs 11.1, 7F 21.6 vs
+   8.9, L13E 22.3 vs 6.2. The same dilution reaches the WE column through the
+   Sunday car-free mornings (9C, 4D, 6A, 6B, 6V start ~10:00 on Sundays but
+   are pooled with Saturdays) and the last hour of service. The service window
+   already decides *whether* a line runs, so the headway should be the
+   in-service rate: arrivals ÷ healthy seconds *while the line is in service*
+   that day (e.g. between that day's first and last stop-1 passing, which
+   `dayTrips` edges already record).
+2. **The bunching factor runs ~15% high on every line** (model 1.48 vs ward
+   1.30 without 05:00). Likely cause, unconfirmed: the CV is built from
+   `sumH`/`sumH2` pooled across days, so day-to-day differences in the mean
+   headway inflate it on top of within-day bunching. At WD 05:00 it also hits
+   the `MAX_WAIT_CV` cap (factor 2.00), the ramp-up case the cap's own comment
+   describes. Caveat: ward's per-cell wait uses a few gaps per hour, a ratio
+   estimator with a small downward bias, so part of the 15% may be the
+   measurement. The replay benchmark shows the over-prediction independently,
+   but not its split between the two causes.
+
+**Why not fixed yet.** Headways also price waits inside the search
+(`findRoutes`), so a refit changes routes, not just estimates. Fixing (1) means
+changing the exposure in `fit.ts` and the aggregate, refitting
+`headways.observed.ts`, then gating on the route regression suite and
+`auditRouter --baseline`. Ward data ended in October, so this refit uses the
+same closed sample; until a live source exists (Commute Network), treat this
+section as the pointer for where the TJ wait model is wrong. Ranking is
+affected too: sparse corridors look worse than they are, so the search
+under-uses them, most of all in the first service hour.
