@@ -63,6 +63,13 @@ const STYLE_FILE = /^([a-z0-9-]+)\.json$/
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+// Hono's default answers 500 and logs nothing, which hid the cause of the
+// cross-request promise failures (src/archive.ts) until a wrangler tail.
+app.onError((error, c) => {
+  console.error(`${c.req.method} ${c.req.path}`, error)
+  return c.text('Internal Server Error', 500)
+})
+
 app.use('*', async (c, next) => {
   const allowed = c.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
   return cors({ origin: allowed, allowMethods: ['GET', 'HEAD', 'OPTIONS'], maxAge: 86400 })(c, next)
