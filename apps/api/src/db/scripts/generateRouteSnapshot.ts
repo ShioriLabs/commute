@@ -5,6 +5,7 @@ import { HubRepository } from 'db/repositories/hubs'
 import { StationRepository } from 'db/repositories/stations'
 import { buildPlaceIndex, type PlaceIndex } from 'utils/places'
 import { directionalGroupKey } from 'utils/searchables'
+import { TJ_REROUTE_ARTIFACTS } from 'db/data/topology'
 
 /*
  * Freeze the routing network for the route regression suite
@@ -48,6 +49,23 @@ function assertDirectionalPairsArePlaces(index: PlaceIndex, stations: readonly {
   }
 }
 
+/*
+ * A TJ feed refresh re-inserts the detour memberships the prune removed (the
+ * 2026-11 one did, and line 1 reappeared at Kemanggisan). generateTJSQL now
+ * skips them, but a hand-written refresh script or an old seed would not, so
+ * refuse to freeze a network that still carries any of them.
+ */
+function assertNoRerouteArtifacts(stations: readonly { id: string, operator: string, code: string, lines: readonly string[] }[]) {
+  const found = stations
+    .filter(station => station.operator === 'TJ')
+    .flatMap(station => station.lines
+      .map(key => `${key.slice(key.indexOf(':') + 1)}|${station.code}`)
+      .filter(pair => TJ_REROUTE_ARTIFACTS.has(pair)))
+  if (found.length > 0) {
+    throw new Error(`TJ reroute artifacts still in stationLines (run generate:prune-stationlines and apply it): ${found.join(', ')}`)
+  }
+}
+
 async function main() {
   const { env, dispose } = await getPlatformProxy<{ DB: D1Database }>({ persist: true })
   try {
@@ -70,6 +88,7 @@ async function main() {
     // from: the suite needs which stations are one place, not why.
     const placeIndex = buildPlaceIndex(hubs)
     assertDirectionalPairsArePlaces(placeIndex, stations)
+    assertNoRerouteArtifacts(stations)
     const places = [...new Set(placeIndex.values())]
       .map(group => [...group].sort())
       .sort((a, b) => a[0]!.localeCompare(b[0]!))
