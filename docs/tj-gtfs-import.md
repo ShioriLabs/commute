@@ -142,3 +142,17 @@ seeds. TJ routes churn often enough that one-off hand-massaging would rot.
 5. **JakLingko integration cap** (Rp 10k / 3 h across TJ+MRT+LRT) — still
    belongs in fare-summary once multi-operator TJ journeys exist; out of
    scope for the importer.
+
+## After a feed refresh: directional hubs
+
+Once the refreshed stations are applied, regenerate the `directional` hubs for
+the "Arah" halte pairs (see docs/transit-hubs.md) and apply them before the
+route snapshot, which refuses to run while any pair is not one place:
+
+```sh
+pnpm --filter api generate:tj-directional-hubs
+wrangler d1 execute commute --local --file=src/db/scripts/tj_directional_hubs.sql
+pnpm --filter api generate:route-snapshot
+```
+
+A pair that changes membership moves routes, so it needs an `API_VERSION` bump.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { crawlerOgCacheKey, crawlerOgMaxAge, isCrawlablePage, sitemapUrls } from './_middleware'
+import { crawlerOgCacheKey, crawlerOgMaxAge, hubCopy, isCrawlablePage, sitemapUrls } from './_middleware'
 
 /*
  * The sitemap advertises what Google should crawl, so a URL in it that answers
@@ -150,5 +150,23 @@ describe('crawlerOgMaxAge', () => {
     expect(crawlerOgMaxAge('/stations/KCI/BOO')).toBe(3600)
     expect(crawlerOgMaxAge('/lines/KCI/C')).toBe(3600)
     expect(crawlerOgMaxAge('/hubs/dukuh-atas')).toBe(3600)
+  })
+})
+
+/*
+ * A `directional` hub is one TJ halte split by direction; crossing sides needs
+ * a tap-out, so its crawler copy must never call it an integrated station.
+ */
+describe('hubCopy', () => {
+  it('talks about a halte and buses for a directional hub', () => {
+    const copy = hubCopy({ name: 'Tebet Eco Park', kind: 'directional' }, 'Tebet Eco Park Arah Barat, Tebet Eco Park Arah Timur')
+    expect(copy.heading).toBe('Jadwal Bus Halte Tebet Eco Park')
+    expect(copy.schemaType).toBe('BusStation')
+    expect(JSON.stringify(copy).toLowerCase()).not.toContain('terintegrasi')
+  })
+
+  it('keeps the rail copy for integrated and hub kinds', () => {
+    expect(hubCopy({ name: 'Juanda', kind: 'integrated' }, '').heading).toBe('Jadwal Kereta Juanda')
+    expect(hubCopy({ name: 'Dukuh Atas', kind: 'hub' }, '').schemaType).toBe('TrainStation')
   })
 })

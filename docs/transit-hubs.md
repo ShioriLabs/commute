@@ -269,8 +269,40 @@ Useful non-discriminators, checked and rejected: **spread** and **operator
 count** do not separate the two — Cawang is tighter (218m, 3 operators) than
 Pasar Senen (486m, 2), yet Pasar Senen is the more hub-like of the pair.
 
-Defaults to `'hub'`, so the existing roster is unaffected. All three seeded hubs
-are `hub`; no `integrated` rows exist yet (none of those complexes are seeded).
+Defaults to `'hub'`, so the existing roster is unaffected.
+
+### `directional` — one halte split by direction (2026-11-24)
+
+A third kind, added without a migration (`kind` is an unchecked VARCHAR).
+TransJakarta splits 15 haltes into one row per direction ("Kali Grogol Arah
+Utara" / "Arah Selatan", 32–168 m apart, `S`-suffix ids). To a rider each pair is
+one halte, so it is one **place** for routing like `integrated`. But crossing
+sides needs a **tap-out**, so it must not carry the "Stasiun Terintegrasi" label:
+UI label is **"Halte"**.
+
+- **Generated, not curated:** `pnpm --filter api generate:tj-directional-hubs`
+  reads local D1 and writes `db/scripts/tj_directional_hubs.sql`, grouping with
+  `directionalGroupKey` (the same fold search uses). 13 hubs (`HUB-TJ-<code>`).
+  Pairs already inside an `integrated` hub are skipped (Ciliwung, Pancoran).
+  Nesting in a `hub`-kind complex is fine (Cikoko in Cawang).
+- **Places read hubs only.** `utils/places.ts` no longer folds Arah names itself.
+  `generate:route-snapshot` throws if any Arah pair is not one place, so a feed
+  refresh that forgets to re-run the generator cannot silently route from one
+  side.
+- **Out of every list.** `HubRepository.getAll()` drops them: not in `/hubs`,
+  the sitemap, the map's hub index or search (which still folds the pair by
+  name). `/hubs/:slug` serves them, for the merged hub sheet.
+- **Not merged into one station with platforms**, by decision. That would
+  collapse two routing nodes into one, turn the U-turn into a free transfer, and
+  churn ids everywhere.
+- **The feed's split IS the tap-out signal.** TJ only splits a halte by
+  direction when crossing needs a re-tap. Physically split haltes with a
+  connector (Simpang Kuningan, Grogol Reformasi, Pecenongan) are one `P` row.
+  If a pair gains a connector it collapses to one row, so the generated SQL
+  deletes all `directional` hubs before re-inserting.
+- Gambir / Gambir 2 and Puri Beta 1 / 2 are **not** pairs: separate locations.
+- Kali Grogol is the only pair with a cross-side transfer edge (`noTap = 0`,
+  distance unmeasured). Kept for now, pending a decision.
 
 ### Deferred: physical connection (roofed vs open-air)
 

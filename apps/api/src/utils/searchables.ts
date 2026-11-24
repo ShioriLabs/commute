@@ -1,4 +1,4 @@
-import { HUB_KIND_LABEL, Operator, OPERATORS } from '@commute/constants'
+import { HUB_KIND_LABEL, HubKind, Operator, OPERATORS } from '@commute/constants'
 import { Line } from 'models/line'
 import { ALL_LINES } from 'utils/line'
 import { lineKey } from 'utils/ids'
@@ -98,7 +98,7 @@ export interface IndexableStation {
 export interface IndexableHub {
   slug: string
   name: string
-  kind: 'hub' | 'integrated'
+  kind: HubKind
   score: number
   // Read off the members: each already carries operator-qualified line keys, so
   // a hub spanning operators stays unambiguous.

@@ -1,29 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { buildPlaceIndex, endpointsFor, placeOf } from 'utils/places'
 
-const station = (id: string, officialName: string) => ({ id, operator: id.split('-')[0]!, officialName })
-
 describe('buildPlaceIndex', () => {
-  const index = buildPlaceIndex(
-    [['LRTJBDB-RAS', 'TJ-RAS'], ['LRTJBDB-PAN', 'TJ-PAN-T']],
-    [
-      station('TJ-GGL-U', 'Kali Grogol Arah Utara'),
-      station('TJ-GGL-S', 'Kali Grogol Arah Selatan'),
-      station('TJ-PAN-T', 'Pancoran Arah Timur'),
-      station('TJ-PAN-B', 'Pancoran Arah Barat'),
-      station('TJ-RAS', 'Rasuna Said'),
-      // Same base name on another operator: never folded into the TJ pair.
-      station('KCI-GGL', 'Grogol Arah Utara')
-    ]
-  )
+  // Only `integrated` and `directional` hubs reach here (getPlaceMemberIds);
+  // `hub`-kind complexes like Cawang are filtered out before.
+  const index = buildPlaceIndex([
+    ['LRTJBDB-RAS', 'TJ-RAS'], // integrated
+    ['LRTJBDB-PAN', 'TJ-PAN-T'], // integrated, holding one side of a halte pair
+    ['TJ-GGL-S', 'TJ-GGL-U'], // directional
+    ['TJ-PAN-B', 'TJ-PAN-T'], // directional, overlapping the integrated hub
+    ['TJ-CKK-B', 'TJ-CKK-T'], // directional, nested in the Cawang `hub`
+    ['TJ-LONE'] // a one-member group is no place at all
+  ])
 
   it('makes an integrated hub one place', () => {
     expect([...placeOf(index, 'TJ-RAS')].sort()).toEqual(['LRTJBDB-RAS', 'TJ-RAS'])
   })
 
-  it('makes an Arah pair one place, per operator', () => {
+  it('makes a directional hub one place', () => {
     expect([...placeOf(index, 'TJ-GGL-S')].sort()).toEqual(['TJ-GGL-S', 'TJ-GGL-U'])
-    expect([...placeOf(index, 'KCI-GGL')]).toEqual(['KCI-GGL'])
   })
 
   it('unions a halte pair with the integrated hub one side belongs to', () => {
@@ -31,8 +26,14 @@ describe('buildPlaceIndex', () => {
     expect([...placeOf(index, 'LRTJBDB-PAN')].sort()).toEqual(['LRTJBDB-PAN', 'TJ-PAN-B', 'TJ-PAN-T'])
   })
 
+  it('keeps a directional pair nested in a hub-kind complex to the pair alone', () => {
+    expect([...placeOf(index, 'TJ-CKK-B')].sort()).toEqual(['TJ-CKK-B', 'TJ-CKK-T'])
+    expect([...placeOf(index, 'KCI-CW')]).toEqual(['KCI-CW'])
+  })
+
   it('answers an ungrouped station with just itself', () => {
     expect([...placeOf(index, 'MRTJ-LBB')]).toEqual(['MRTJ-LBB'])
+    expect(index.has('TJ-LONE')).toBe(false)
   })
 
   it('falls back to the exact stations when origin and destination are one place', () => {
