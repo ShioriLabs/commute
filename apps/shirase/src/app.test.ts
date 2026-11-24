@@ -77,6 +77,28 @@ describe('tiles', () => {
     expect((await request('/later-20261201/0/0/0.mvt').response).status).toBe(200)
   })
 
+  /*
+   * Production 500s: SharedPromiseCache handed one request's in-flight read
+   * to others, and a Worker promise cannot settle after its request ended.
+   * Node cannot reproduce that runtime rule, so this pins the two properties
+   * that avoid it: no request waits on another's read, and a failed read is
+   * not remembered.
+   */
+  it('lets each cold request do its own read rather than join another request\'s', async () => {
+    const path = `/${TILESET}/14/${MONAS.x}/${MONAS.y}.mvt`
+    const responses = await Promise.all([request(path).response, request(path).response, request(path).response])
+    expect(responses.map(r => r.status)).toEqual([200, 200, 200])
+    // A header read (which carries the root directory) and the tile bytes, per request: nothing was shared.
+    expect(bucket.gets).toBe(6)
+  })
+
+  it('does not remember a failed read', async () => {
+    const path = `/${TILESET}/14/${MONAS.x}/${MONAS.y}.mvt`
+    bucket.failNext.add(`${TILESET}.pmtiles`)
+    expect((await request(path).response).status).toBe(500)
+    expect((await request(path).response).status).toBe(200)
+  })
+
   it('re-reads the header when the archive is replaced under a live isolate', async () => {
     expect((await request(`/${TILESET}/0/0/0.mvt`).response).status).toBe(200)
     const replaced = new Uint8Array([5, 5, 5])

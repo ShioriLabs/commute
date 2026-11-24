@@ -1,4 +1,4 @@
-import { Compression, EtagMismatch, findTile, PMTiles, SharedPromiseCache, zxyToTileId, type Header, type RangeResponse, type Source } from 'pmtiles'
+import { Compression, EtagMismatch, findTile, PMTiles, ResolvedValueCache, zxyToTileId, type Header, type RangeResponse, type Source } from 'pmtiles'
 
 /*
  * A PMTiles archive in R2, read with ranged gets.
@@ -36,13 +36,24 @@ export class R2Source implements Source {
 
 export interface Archive {
   source: R2Source
-  cache: SharedPromiseCache
+  cache: ResolvedValueCache
   pmtiles: PMTiles
 }
 
 /*
  * One archive per tileset per isolate, so the header and directory cache
  * persist across requests instead of costing two extra R2 reads per tile.
+ *
+ * The cache is ResolvedValueCache, NOT SharedPromiseCache. The shared one
+ * stores the in-flight promise so concurrent requests join one read, but a
+ * Worker promise can only settle in the request that created it
+ * (handle_cross_request_promise_resolution, on by default since the
+ * compatibility_date). When the creating request ended first, every request
+ * awaiting its promise threw "This promise was created by a request that has
+ * since ended" and answered 500: ~14% of uncached tiles on a cold isolate,
+ * only a map view's burst of concurrent tiles. The resolved-value cache holds
+ * finished values only, so a cold burst may read a directory twice, and a
+ * failed read is never remembered.
  */
 const archives = new Map<string, Archive>()
 
@@ -51,7 +62,7 @@ export function openArchive(bucket: R2Bucket, tileset: string): Archive {
   const existing = archives.get(key)
   if (existing) return existing
   const source = new R2Source(bucket, key)
-  const cache = new SharedPromiseCache()
+  const cache = new ResolvedValueCache()
   const archive = { source, cache, pmtiles: new PMTiles(source, cache) }
   archives.set(key, archive)
   return archive
