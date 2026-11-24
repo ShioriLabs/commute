@@ -174,6 +174,40 @@ describe('buildSearchableIndex — filtering', () => {
   })
 })
 
+describe('buildSearchableIndex — directional hubs', () => {
+  const pair = [
+    station({ id: 'TJ-H00197S', name: 'Kali Grogol Arah Selatan', code: 'H00197S', lines: [key('TJ', '9')] }),
+    station({ id: 'TJ-H00138S', name: 'Kali Grogol Arah Utara', code: 'H00138S', lines: [key('TJ', '9'), key('TJ', '7R')] })
+  ]
+  const directional: IndexableHub = {
+    slug: 'kali-grogol',
+    name: 'Kali Grogol',
+    kind: 'directional',
+    score: 0,
+    members: pair.map(s => ({ name: s.name, officialName: s.officialName, code: s.code, operator: s.operator, lines: s.lines }))
+  }
+
+  it('opens the hub on the primary side, still as one STATION entry', () => {
+    const index = buildSearchableIndex(pair, [directional])
+    const [item] = stationItems(index)
+    expect(stationItems(index)).toHaveLength(1)
+    expect(item?.to).toBe('/hubs/kali-grogol?m=TJ-H00138S')
+    expect(item?.data?.['hub-slug']).toBe('kali-grogol')
+    // The fare picker still prices either side off these.
+    expect(item?.data?.['station-ids']).toBe('TJ-H00138S,TJ-H00197S')
+  })
+
+  it('never lists the directional hub as its own HUB entry', () => {
+    expect(hubItems(buildSearchableIndex(pair, [directional]))).toHaveLength(0)
+  })
+
+  it('keeps the station link for a pair that is not a directional hub', () => {
+    const [item] = stationItems(buildSearchableIndex(pair, []))
+    expect(item?.to).toBe('/stations/TJ/H00138S')
+    expect(item?.data?.['hub-slug']).toBeUndefined()
+  })
+})
+
 describe('buildSearchableIndex — hubs', () => {
   const hub: IndexableHub = {
     slug: 'dukuh-atas',
