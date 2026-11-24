@@ -25,7 +25,9 @@ export function useNextDayTimetable(operator: string, code: string) {
   const now = new Date()
   const day = serviceDayOf(now)
   const nextDay = nextServiceDayOf(now)
-  const differs = nextDay !== day
+  // TransJakarta publishes no timetable, so there is no next board to ask for:
+  // the request would only ever 404.
+  const differs = nextDay !== day && operator !== 'TJ'
 
   const next = useSWR<StandardResponse<CompactLineGroupedTimetable>>(
     differs
