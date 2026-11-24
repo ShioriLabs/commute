@@ -12,8 +12,8 @@ export const HubSchema = v.pipe(
     ),
     name: v.pipe(v.string(), v.metadata({ examples: ['Dukuh Atas'] })),
     kind: v.pipe(
-      v.picklist(['hub', 'integrated']),
-      v.description('`hub`: beberapa stasiun yang namanya berbeda tapi ada di satu kompleks, jadi pengelompokannya membawa informasi. `integrated`: buat penumpang ini satu tempat yang sama, terpisahnya cuma di data antar operator.'),
+      v.picklist(['hub', 'integrated', 'directional']),
+      v.description('`hub`: beberapa stasiun yang namanya berbeda tapi ada di satu kompleks, jadi pengelompokannya membawa informasi. `integrated`: buat penumpang ini satu tempat yang sama, terpisahnya cuma di data antar operator. `directional`: satu halte yang dipisah per arah perjalanan (misalnya Kali Grogol Arah Utara dan Arah Selatan), pindah sisi harus tap keluar dulu. Yang `directional` tidak muncul di daftar `/hubs`, tapi bisa diambil lewat slug-nya.'),
       v.metadata({ examples: ['hub'] })
     ),
     heroImage: v.pipe(

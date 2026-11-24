@@ -12,10 +12,18 @@ import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely'
  *   grouping carries information (Dukuh Atas: which member did you mean?).
  * `integrated` — one place to a rider, split across operators only in the data
  *   (Juanda KRL + Juanda BRT); the hub name alone is enough.
+ * `directional` — one halte split by direction of travel within one operator
+ *   (TransJakarta "Kali Grogol Arah Utara" / "Arah Selatan"). One place to a
+ *   rider like `integrated`, but crossing to the other side needs a tap-out, so
+ *   it must not be labelled as an integrated station. Generated, not curated:
+ *   db/scripts/generateDirectionalHubsSQL.ts.
  * Whether members are joined by a covered walkway is a separate, per-edge
  * property — see the note in 0014_add_hub_kind.sql.
  */
-export type HubKind = 'hub' | 'integrated'
+export type HubKind = 'hub' | 'integrated' | 'directional'
+
+/** Kinds whose members are one place to a rider (utils/places.ts). */
+export const PLACE_HUB_KINDS: readonly HubKind[] = ['integrated', 'directional']
 
 export interface HubSchema {
   id: string // stable PK, e.g. 'HUB-DKA'

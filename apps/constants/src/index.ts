@@ -222,24 +222,27 @@ export type AmenityType = keyof typeof AMENITY_TYPES
 /*
  * `hub` — several distinct, differently-named stations under one complex.
  * `integrated` — one place to a rider, split across operators only in the data.
+ * `directional` — one halte split by direction (TJ "Arah" pairs); tap out to cross.
  * The authoritative definition lives in apps/api/src/db/schemas/hubs.ts; this
  * mirrors it so both the API and the web app can label a hub without importing
  * across app boundaries.
  */
-export type HubKind = 'hub' | 'integrated'
+export type HubKind = 'hub' | 'integrated' | 'directional'
 
 /*
  * What we call each kind in the UI. "Pumpunan moda" is the operators' own term
  * for a multi-mode interchange building (CSW is officially Pumpunan Moda Cakra
  * Selaras Wahana), so a real complex gets that name; an `integrated` grouping is
- * one station to a rider and keeps the plainer label.
+ * one station to a rider and keeps the plainer label. A `directional` pair is
+ * just a halte: "Terintegrasi" would promise a crossing that needs a tap-out.
  *
  * Shared because the API builds hub subtitles for /_internal/searchables while
  * the web app still renders them directly on the hub pages.
  */
 export const HUB_KIND_LABEL: Record<HubKind, string> = {
   hub: 'Pumpunan Moda',
-  integrated: 'Stasiun Terintegrasi'
+  integrated: 'Stasiun Terintegrasi',
+  directional: 'Halte'
 }
 
 /**

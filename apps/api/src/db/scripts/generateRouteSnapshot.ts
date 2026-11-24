@@ -3,7 +3,8 @@ import { getPlatformProxy } from 'wrangler'
 import { EdgeRepository } from 'db/repositories/edges'
 import { HubRepository } from 'db/repositories/hubs'
 import { StationRepository } from 'db/repositories/stations'
-import { buildPlaceIndex } from 'utils/places'
+import { buildPlaceIndex, type PlaceIndex } from 'utils/places'
+import { directionalGroupKey } from 'utils/searchables'
 
 /*
  * Freeze the routing network for the route regression suite
@@ -26,12 +27,33 @@ import { buildPlaceIndex } from 'utils/places'
  */
 const OUTPUT_PATH = `${__dirname}/../data/network.snapshot.json`
 
+/*
+ * Routing reads directional halte pairs from `directional` hub rows only;
+ * search still folds them by their "Arah …" names. A feed refresh that adds or renames a pair without
+ * re-running generate:tj-directional-hubs would silently route from one side
+ * again, so refuse to freeze a network where the two disagree.
+ */
+function assertDirectionalPairsArePlaces(index: PlaceIndex, stations: readonly { id: string, operator: string, officialName: string }[]) {
+  const groups = new Map<string, string[]>()
+  for (const station of stations) {
+    const key = directionalGroupKey(station)
+    if (key.startsWith('id:')) continue
+    groups.set(key, [...groups.get(key) ?? [], station.id])
+  }
+  const missing = [...groups.entries()]
+    .filter(([, ids]) => ids.length > 1 && !ids.every(id => index.get(ids[0]!)?.has(id)))
+    .map(([key]) => key)
+  if (missing.length > 0) {
+    throw new Error(`Directional halte pairs not in one place (run generate:tj-directional-hubs and apply it): ${missing.join(', ')}`)
+  }
+}
+
 async function main() {
   const { env, dispose } = await getPlatformProxy<{ DB: D1Database }>({ persist: true })
   try {
     const [{ edges, transfers }, hubs, stations] = await Promise.all([
       new EdgeRepository(env.DB).getGraphInputs(),
-      new HubRepository(env.DB).getIntegratedMemberIds(),
+      new HubRepository(env.DB).getPlaceMemberIds(),
       new StationRepository(env.DB).getAll()
     ])
 
@@ -46,7 +68,9 @@ async function main() {
 
     // Stored as the resolved groups, not the hub and station rows they come
     // from: the suite needs which stations are one place, not why.
-    const places = [...new Set(buildPlaceIndex(hubs, stations).values())]
+    const placeIndex = buildPlaceIndex(hubs)
+    assertDirectionalPairsArePlaces(placeIndex, stations)
+    const places = [...new Set(placeIndex.values())]
       .map(group => [...group].sort())
       .sort((a, b) => a[0]!.localeCompare(b[0]!))
 
