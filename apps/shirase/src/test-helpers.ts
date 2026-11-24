@@ -101,6 +101,8 @@ interface StoredObject { bytes: Uint8Array, etag: string }
 export class FakeBucket {
   readonly objects = new Map<string, StoredObject>()
   gets = 0
+  /** Keys whose next get() throws once, as a transient R2 error does. */
+  failNext = new Set<string>()
   private version = 0
 
   put(key: string, bytes: Uint8Array): void {
@@ -109,6 +111,7 @@ export class FakeBucket {
 
   async get(key: string, options?: { range?: { offset: number, length: number } }) {
     this.gets++
+    if (this.failNext.delete(key)) throw new Error('R2 internal error')
     const stored = this.objects.get(key)
     if (!stored) return null
     const { offset = 0, length = stored.bytes.length - offset } = options?.range ?? {}

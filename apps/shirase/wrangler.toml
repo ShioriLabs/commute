@@ -28,3 +28,15 @@ ALLOWED_ORIGINS = "https://commute.shiorilabs.id,http://localhost:5173"
 [[r2_buckets]]
 binding = "TILES"
 bucket_name = "shirase"
+
+# Branch previews (Workers Builds) must declare their own vars and bindings.
+# They share production's bucket on purpose: this worker only ever READS from
+# R2 (tiles, glyphs, sprites), so a preview cannot damage anything, and an
+# empty preview bucket would just serve a blank map. Revisit if shirase ever
+# writes to R2.
+[previews.vars]
+ALLOWED_ORIGINS = "https://commute.shiorilabs.id,http://localhost:5173"
+
+[[previews.r2_buckets]]
+binding = "TILES"
+bucket_name = "shirase"
