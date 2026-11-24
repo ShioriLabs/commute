@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import { haversineMeters } from '../../utils/geo'
 import { TJ_COLOR_OVERRIDES, TJ_STOP_FOLD } from './tjStopFold'
+import { TJ_REROUTE_ARTIFACTS } from '../data/topology'
 
 /*
  * TransJakarta GTFS importer. Reads the static feed (extracted under
@@ -200,6 +201,7 @@ fs.writeFileSync(LINES_TS_PATH, linesTS)
 // ── stationLines (dedup station×line across trip variants) ───────────────────
 const stationLineKeys = new Set<string>()
 const stationLineRows: string[] = []
+let skippedArtifacts = 0
 for (const [tripId, list] of patterns) {
   const lineCode = tripRoute.get(tripId)
   if (!lineCode) continue
@@ -209,6 +211,12 @@ for (const [tripId, list] of patterns) {
     const key = `${sid}::${lineCode}`
     if (stationLineKeys.has(key)) continue
     stationLineKeys.add(key)
+    // A detour pattern's stop, not the line's service (db/data/topology.ts).
+    // Skipped here so a feed refresh cannot quietly re-add what the prune removed.
+    if (TJ_REROUTE_ARTIFACTS.has(`${lineCode}|${r.stop}`)) {
+      skippedArtifacts++
+      continue
+    }
     stationLineRows.push(
       `INSERT OR IGNORE INTO stationLines (id, stationId, lineCode, stationNumber, createdAt, updatedAt) VALUES `
       + `('${sid}-${esc(lineCode)}', '${sid}', '${esc(lineCode)}', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`
@@ -290,6 +298,6 @@ fs.writeFileSync(`${SCRIPTS_DIR}/tj_transfers_insert.sql`, transferRows.join('\n
 console.log('TransJakarta GTFS import — generated SQL seeds:')
 console.log(`  stations:     ${stationRows.length} (${searchableCount} searchable haltes, ${hiddenCount} hidden roadside)`)
 console.log(`  lines.ts:     ${lineEntries.length} corridor lines`)
-console.log(`  stationLines: ${stationLineRows.length}`)
+console.log(`  stationLines: ${stationLineRows.length} (${skippedArtifacts} reroute artifacts skipped)`)
 console.log(`  edges:        ${edgeRows.length} (${haversineFallbacks} haversine fallbacks)`)
 console.log(`  transfers:    ${transferRows.length}`)

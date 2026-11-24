@@ -114,6 +114,43 @@ export const BOGUS_MEMBERSHIPS: { operator: Operator, station: string, lineCode:
 ]
 
 /*
+ * TransJakarta stationLines that are reroute / wrong-line artifacts, as
+ * `lineCode|stationCode`. The GTFS feed carries detour trip patterns alongside
+ * the normal ones, and the importer turns every pattern into memberships, so
+ * these come back on every feed refresh unless filtered. Reviewed by hand
+ * 2026-07-20; read by generateTJSQL (never emits them), generatePruneStationLinesSQL
+ * (deletes them) and generateRouteSnapshot (refuses to freeze a network that
+ * still has them). The 2026-11 refresh re-inserted all of them because none of
+ * those guards existed yet.
+ *
+ *   Koridor 1 western protest-day reroute (the nine): Petamburan, Rawa Barat,
+ *     Tarakan, Kota Bambu (N/S), Kemanggisan (N/S), Pasar Santa, Tomang Raya.
+ *   4  Bermis            — actually a Koridor 2 halte
+ *   5C/7F Gambir/Istiqlal — Koridor 2 haltes
+ *   6V Kejaksaan Agung    — no normal K6V pass
+ *   8  Grogol/Roxy        — original alignment, rerouted for MRT construction
+ *   1  Gerbang Pemuda (B/T) — a 5-hour "via Gerbang Pemuda" detour
+ *
+ * NOT listed (kept as real service / topology gaps to fix in the topology, never
+ * prune): 3 Monas; 4/4D Simpang Pramuka + Halte Manggarai Temporer B-codes; 4
+ * Simpang Pramuka (H00181P, a K4 topology gap); 6A/6B Kebon Sirih; 9A Tanjung
+ * Duren; 13 Puri Beta 2. Add a pair only once confirmed an artifact.
+ */
+export const TJ_REROUTE_ARTIFACTS: ReadonlySet<string> = new Set([
+  '1|H00036C', '1|H00192P', '1|H00201P', '1|H00204S', '1|H00209S', // K1 reroute…
+  '1|H00220S', '1|H00224S', '1|H00249P', '1|H00250P', //            …(nine total)
+  '4|H00011P', // Bermis
+  '5C|H00058P', '5C|H00078P', // Gambir, Istiqlal
+  '6V|H00266P', // Kejaksaan Agung
+  '7F|H00058P', '7F|H00078P', // Gambir, Istiqlal
+  '8|H00070P', '8|H00200P', // Grogol, Roxy
+  // Added 2026-11-24: "Kota/Blok M via Gerbang Pemuda", one pattern each way,
+  // 5 hours, ~1% of K1 service. The other 2026-11 stale rows run all day as
+  // real "via"/short-turn variants and are deliberately kept.
+  '1|H00218S', '1|H00219S' // Gerbang Pemuda Arah Barat / Timur
+])
+
+/*
  * Stops that are on a line's path but are not interchanges, so the interchange
  * count behind direction labels skips them.
  *
