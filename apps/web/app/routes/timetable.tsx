@@ -4,6 +4,7 @@ import { useNavigate, useNavigationType } from 'react-router'
 import { XIcon } from '@phosphor-icons/react'
 import { useStationHeader } from '~/components/station-content'
 import TimetableContent from '~/components/timetable-content'
+import { timetablePageTitle } from '~/lib/page-titles'
 
 // A route-param title rather than a "loading" placeholder: the SPA shell's
 // crawler-rewritten title is replaced on hydration, and the real name only
@@ -11,7 +12,7 @@ import TimetableContent from '~/components/timetable-content'
 // whenever its render snapshot wins that race.
 export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: `${params.code.toUpperCase()} - Jadwal Lengkap - Commute` },
+    { title: timetablePageTitle(params.operator, null, params.code) },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }
@@ -24,9 +25,9 @@ export default function TimetablePage({ params }: Route.ComponentProps) {
   useEffect(() => {
     if (header.isLoading) return
     if (header.name) {
-      document.title = `${header.name} - Jadwal Lengkap - Commute`
+      document.title = timetablePageTitle(params.operator, header.name, params.code)
     }
-  }, [header.isLoading, header.name])
+  }, [header.isLoading, header.name, params.operator, params.code])
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
@@ -63,7 +64,11 @@ export default function TimetablePage({ params }: Route.ComponentProps) {
           </div>
         </div>
       </div>
-      <TimetableContent operator={params.operator} code={params.code} />
+      {/* The live board is noise as a search snippet ("22.0522.2222.52"), so
+          Google is pointed at the meta description instead. */}
+      <div data-nosnippet>
+        <TimetableContent operator={params.operator} code={params.code} />
+      </div>
     </div>
   )
 }

@@ -4,6 +4,98 @@
 Captures a decision made during brainstorming so context isn't lost before
 implementation starts.
 
+## When to build it (decided 2026-11-25)
+
+**Not for POIs.** POI access walks are a small, fixed set (batch 1 is about 11 POIs
+with 2–3 entrances each, ~30 walks), and they change only when the curation does.
+Measure them once and store them in `poiStations.distance`: by hand with osm.org's
+walking directions, or with a throwaway offline run (a local Valhalla/OSRM
+container, or a script over shirase's `fetch:osm` extract). A live service is far
+too much infrastructure for that.
+
+**Walk time doesn't need it either.** Minutes are distance ÷ pace, and the pace
+comes from the rider's walking-speed tier (BRISK/AVERAGE/SLOW/SLOWEST, 1.5/1.2/0.9/0.7
+m/s in `libs/tsundere/src/planner/departures.ts`). That tracks the rider's own setting, which a fixed
+Valhalla duration wouldn't.
+
+**Build it when one end of a walk is an arbitrary point**, not a curated POI:
+"from my location", a Sokin recipient entering where they are (`sokin.md`), or
+an address search. Those walks can't be measured in advance, so that's when a
+live service earns its place.
+
+Whatever computes a distance, Jakarta's footpath data is the weak part
+(footbridges, GBK/Monas gates that open only sometimes, unmapped crossings).
+A computed walk is a starting number to check on the ground, not the answer.
+
+Door-to-door is a soft target for 2027, limited by what the infrastructure and
+OSM data can handle. It comes in two steps: a baked walk grid first (below),
+live Valhalla only when the grid stops being enough.
+
+## Step 0: baked walk grid (before any live service)
+
+Precompute walks instead of serving them. The output is static files on
+R2/shirase, cached at the edge like tiles. No droplet, no tunnel, nothing that
+runs continuously.
+
+**A grid, not isochrone polygons.** Polygons answer "which stations are
+within 10 minutes" in coarse bands and need a point-in-polygon test per
+station. Flip it around: divide the area into small cells (H3, roughly 25–65 m
+across; resolution to be picked by testing). For each cell, store the nearest
+few station entrances within ~1.5 km and the **walking metres** to each:
+
+```
+cell → [(stationId, exitId?, metres), …]
+```
+
+One key lookup gives real distances instead of bands. Store metres, not minutes,
+so time still comes from the rider's walking-speed tier. Isochrone shading for
+the map can be drawn from the same data if it's ever wanted.
+
+**It reuses the POI mechanism.** A rider's location becomes a virtual node
+injected for one request, with walk edges to the cell's candidates. That's the
+same per-request injection `points-of-interest.md` designs for POIs (and the same
+guarantee: the node never enters the cached graph, so it can't become a
+mid-route shortcut). Door-to-door step 1 adds no router changes on top of POIs.
+
+**Privacy by construction** (`commute-network.md` rule zero, never enable
+stalking). The client downloads the grid tile and looks up its own cell, then
+sends only `[(stationId, exitId, metres)…]`. The server never sees coordinates.
+A cell id is itself a location, so the lookup stays on the device and cell ids
+are never sent, logged or used in cache keys.
+
+**Building it:**
+
+- **Engine:** a one-off local run of Valhalla (its pedestrian matrix/isochrone API)
+  or OSRM in Docker, or our own shortest-path script over the footway graph from
+  shirase's `fetch:osm` extract. All throwaway; only the output is kept.
+- **Measure from exits**, not station centroids, wherever `stationExits` has
+  coordinates. Fall back to the centroid, flagged, so those cells can be redone
+  when exits land.
+- **Order:** rail stations first (~150), then TJ haltes (~2,200). Rail is the
+  smaller set and where exits matter most.
+- **Ties to OSM:** bake from the same `fetch:osm` extract shirase uses, and
+  refresh them together. The output is derived from OSM, so it carries ODbL
+  attribution and stays a separable dataset, same as OSM-sourced exits.
+
+**Checking it:** the curated POI walks (`poiStations.distance`, measured on the
+ground) are the test set. For each POI, compare the grid's distance from the
+POI's cell to each access station against the curated one. A big gap means a
+footpath problem in OSM (a missing footbridge, a gate) for recon to fix.
+
+**What it can't do:**
+
+- **No path to draw.** The grid gives a distance, not a route, so a locality
+  map can't trace the walk. Drawing the actual path is what live Valhalla is
+  for.
+- **OSM's gaps get baked in** until the next refresh. Recon fixes go into OSM
+  (or our overrides) and only show up after the next bake.
+- **Grid resolution vs size.** Finer cells are more accurate and bigger. The
+  first build should measure tile size at two resolutions before picking one.
+
+**When live Valhalla is still needed:** drawing the walk path on a map,
+destinations outside the grid's coverage, and any walk longer than the
+grid's ~1.5 km cap.
+
 ## Why
 
 Every walk distance in this repo today is either hand-curated or a haversine

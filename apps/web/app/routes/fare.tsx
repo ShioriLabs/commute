@@ -4,10 +4,11 @@ import { Dialog, DialogPanel } from '@headlessui/react'
 import { useNavigate } from 'react-router'
 import { readDismissContext, resolveDismiss } from '~/lib/sheet-route-dismiss'
 import { useIsEmbed } from '~/hooks/use-is-embed'
+import { FARE_PAGE_TITLE } from '~/components/fare-sheet/use-fare-query'
 
 export function meta() {
   return [
-    { title: 'Cek Tarif - Commute' },
+    { title: FARE_PAGE_TITLE },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }

@@ -10,6 +10,7 @@ import LineStrip from '~/components/line-strip'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
 import { useNetworkStatus } from '~/hooks/network'
+import { linePageTitle } from '~/lib/page-titles'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -24,7 +25,7 @@ const swrConfig = {
 // whenever its render snapshot wins that race.
 export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: `${params.lineCode.toUpperCase()} - Commute` },
+    { title: linePageTitle(params.operator, params.lineCode, null) },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }
@@ -42,7 +43,7 @@ export default function LinePage({ params }: Route.ComponentProps) {
   const detail = data?.data
 
   useEffect(() => {
-    if (detail) document.title = `${detail.line.name} - Commute`
+    if (detail) document.title = linePageTitle(detail.operator.code, detail.line.lineCode, detail.line.name)
   }, [detail])
 
   const handleBackButton = useCallback(() => {

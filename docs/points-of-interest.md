@@ -253,6 +253,87 @@ building on a corner is a better POI than a nationally significant one set back 
 wall, because the test is "can the walker confirm they're on track", not "does this
 matter". Curate `pois` rows against these, not against a mental list of famous places.
 
+### Roster
+
+Fixed 2026-11-25. The first batch was picked so that every POI archetype and
+every failure mode in this doc shows up at least once. Everything else goes in
+the backlog below.
+
+Why POIs earn their keep in this network: with ~2,200 TJ haltes, plenty of
+landmark names already match *some* stop ("Ragunan" hits 15+ haltes, "Monas 2",
+"St. Gambir 1"). So a POI adds the most value where the name is either
+**ambiguous** (many stops match it and the rider can't tell which one is the
+place) or **misleading** (the stop named after a place doesn't actually serve
+it). Plain name-matching is already mostly covered.
+
+#### Batch 1
+
+Access points are **candidates to verify**, not curated rows. Distances, exits and
+the final station set come out of the seeding pass below. Station ids were checked
+against `stations_lat_lng.csv` and `edges.sql`. The CSV is stale: it lacks newer
+stations like KCI-JIS, so check against `edges.sql` instead.
+
+| id | Name | Category | Keywords (seed) | Candidate access | Why it's in batch 1 |
+|---|---|---|---|---|---|
+| `POI-GBK` | Gelora Bung Karno | `LANDMARK` | GBK, Senayan, Gelora | MRTJ-IST, MRTJ-SNY, KCI-PLM, TJ around GBK | The textbook multi-entrance POI: the router picks the gate per destination |
+| `POI-JCC` | Jakarta Convention Center | `LANDMARK` | JCC, Balai Sidang | MRTJ-IST, TJ around GBK | Shares access with GBK: the "one station, many POIs" case. Expo traffic |
+| `POI-MONAS` | Monas | `MONUMEN` | Monas, Monumen Nasional, Medan Merdeka | KCI-GDD, KCI-JUA, TJ Monas, TJ St. Gambir | Huge park where the gate matters. Overlaps Gambir |
+| `POI-KOTU` | Kawasan Kota Tua | `DISTRICT` | Kotu, Kota Tua, Fatahillah, Museum Fatahillah | KCI-JAKK, TJ Kota | A complex, not a pin: museums and the square share one access set |
+| `POI-JIS` | Jakarta International Stadium | `SARANA OLAHRAGA` | JIS, Stadion JIS | KCI-JIS (line TP), TJ `Jakarta International Stadium` (H00273P) | Concert-night demand. The station already matches "JIS", so the POI's value is the stadium itself: KRL vs TJ entrance per destination, and the gate walk. KCI-JIS runs every 30 min on the TP branch only, so the TJ side may often win. Note: KCI-JIS is missing from `stations_lat_lng.csv` |
+| `POI-JIEXPO` | JIExpo Kemayoran | `LANDMARK` | JIExpo, PRJ, Jakarta Fair, Kemayoran | KCI-RJW, KCI-KMO, TJ JIExpo | Seasonal crowd magnet (Jakarta Fair, Java Jazz). Two KRL stations compete |
+| `POI-ICE` | ICE BSD | `LANDMARK` | ICE, ICE BSD, Indonesia Convention Exhibition | KCI-CSK | Out-of-core expo (GIIAS, Comic Frontier). The last stretch is a shuttle, so this tests "resolve to the station, invent no walk leg" |
+| `POI-GAMBIR` | Stasiun Gambir | `LANDMARK` | Gambir, Stasiun Gambir | KCI-GDD, KCI-JUA, TJ St. Gambir 1/2 | **Misleading name:** KRL doesn't stop at Gambir (no `KCI-GMR` row). Intercity riders need the nearest KRL/TJ stop and should be told why |
+| `POI-WHOOSH` | Stasiun Kereta Cepat Halim | `LANDMARK` | Whoosh, Kereta Cepat, KCIC, Halim | LRTJBDB-HAL, TJ `St. Kereta Cepat Halim` | **Misleading name:** people type "Whoosh", not "Halim". Must not be confused with Halim airport (a separate POI, backlog) |
+| `POI-SENOPATI` | Senopati | `DISTRICT` | Senop, Senopati, SCBD malam | MRTJ-SNY, MRTJ-SSM, TJ | The nightlife district and the nickname-only case: the reason `keywords` exists |
+| `POI-TEBET-ECO-PARK` | Tebet Eco Park | `TAMAN/RPTRA` | TEP, Tebet Eco Park | KCI-TEB, TJ | A weekly everyday place (north star), not a tourist pin. A short, honest walk from a KRL station |
+
+Decisions batch 1 forces, deliberately:
+
+- **Max walk radius** (ICE): the call is made per POI, per the
+  `poi-behind-planner` note. Beyond a walkable range, resolve to the station
+  with no walk leg shown.
+- **Overlapping POIs** (GBK/JCC, Monas/Gambir): two POIs share access rows. Check
+  that "what's nearby" ranking still reads sensibly.
+- **Misleading-name UX** (Gambir, Whoosh): the result needs a line that explains
+  the access station, not just a walk leg. That copy doesn't exist yet.
+- **Exits**: `stationExits` shipped (migrations 0017/0018), so MRTJ-IST,
+  MRTJ-SNY and MRTJ-SSM rows can carry `exitId` from day one.
+
+#### Backlog
+
+Documented, not scheduled. Grouped by the reason each one would be worth adding.
+
+- **Obvious landmarks:** Ancol/Dufan (also a misleading name: KRL Ancol is *not*
+  Ancol Dreamland), Ragunan (the disambiguation poster child), TMII
+  (LRTJBDB-TMI, TJ TMII Pintu 3), Blok M (district), SCBD (district),
+  Bundaran HI / Grand Indonesia / Plaza Indonesia, Istiqlal + Katedral (KCI-JUA),
+  big malls (Kokas, Central Park, Taman Anggrek, Plaza Senayan / Senayan City / FX,
+  Pacific Place).
+- **More misleading names:** Halim airport (vs LRT Halim / Whoosh), AEON Tanjung
+  Barat (at KCI-TB, but nobody thinks of it by the station name), Mangga Dua
+  (KCI-KPB often beats Jakarta Kota).
+- **Fixed-time one-off trips** (a natural fit for `arrive-by.md`): VFS Global
+  Kuningan City, US Embassy (Medan Merdeka Selatan), Japan and Australia
+  embassies (Kuningan), Kantor Imigrasi (Kemayoran, Jaksel), Polda Metro Jaya
+  (SKCK), Satpas Daan Mogot (SIM), Mal Pelayanan Publik. Hospitals: RSCM,
+  RS Fatmawati, Harapan Kita/Dharmais, RS Persahabatan.
+- **Event venues:** Indonesia Arena, Istora, Tennis Indoor (all inside the GBK
+  complex, so they become children of the GBK POI), Beach City International
+  Stadium Ancol.
+- **Bus terminals and ports** (mudik, Kepulauan Seribu): Terminal Pulo Gebang,
+  Kampung Rambutan, Kalideres, Lebak Bulus; Muara Angke / Kaliadem, Tanjung
+  Priok passenger port.
+- **Everyday places:** campuses (UI with two candidate stations, Binus
+  Syahdan/Anggrek, Trisakti/Untar at Grogol, Atma Jaya at Semanggi,
+  UNJ Rawamangun), Taman Literasi Martha Tiahahu (MRTJ-BLM), Hutan Kota GBK,
+  M Bloc, Pos Bloc, TIM Cikini, Pasar Santa.
+- **Time-of-day / seasonal** (needs calendar-aware `score`, not designed): the
+  Bundaran HI CFD (Sunday mornings), Glodok / Petak Sembilan / Vihara Dharma
+  Bhakti (Imlek), Monas + Bundaran HI (New Year's Eve), DPR/MPR at KCI-PLM
+  (demo days, as somewhere to *avoid*).
+- **Districts that test the radius rule:** Kemang (resolve to the station, no walk
+  leg), Cikini, Melawai, PIK (TJ only).
+
 ### Seeding — coords make this semi-automatic
 
 You already have station coords. For each curated POI (coords in hand), compute the
@@ -426,7 +507,7 @@ crow-flies distance.
 
 ## Open / to decide later
 
-- Final POI roster + slugs + walking thresholds per POI.
+- Slugs + walking thresholds per POI (the roster is fixed, see "Roster").
 - Max access-walk radius before a district is "out of scope for rail" (the Kemang line).
 - Walk-distance source: hand-tuned metres vs a routing/maps estimate.
 - Whether POIs get their own `/places/:slug` page (like hubs) or live only inside fares.

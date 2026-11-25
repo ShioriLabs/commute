@@ -1,4 +1,5 @@
 import type { CompactGroupedTimetable, Hub, Line, LineDetail, OperatorWithLines, Station } from '@commute/schemas'
+import { hubHeading, hubPageTitle, linePageTitle, stationPageTitle, vocabFor } from '../app/lib/page-titles'
 
 /**
  * Pages Function middleware: crawler-facing SEO for the client-rendered SPA.
@@ -59,28 +60,9 @@ const CRAWLER_UA = [
   'baiduspider'
 ]
 
-// Per-operator search vocabulary. Commute is not KRL-only - an MRT/LRT station
-// page must not say "Jadwal KRL". `mode` is the short term people actually
-// search ("KRL", "MRT", "LRT"); `vehicle` is the vehicle noun ("kereta"/"bus")
-// and `stop` the stop noun ("Stasiun"/"Halte"). Keyed by operator code; unknown
-// operators fall back to a generic rail vocabulary.
-interface OperatorVocab {
-  mode: string
-  vehicle: string
-  stop: string
-}
-const OPERATOR_VOCAB: Record<string, OperatorVocab> = {
-  KCI: { mode: 'KRL', vehicle: 'kereta', stop: 'Stasiun' },
-  MRTJ: { mode: 'MRT', vehicle: 'kereta', stop: 'Stasiun' },
-  LRTJ: { mode: 'LRT', vehicle: 'kereta', stop: 'Stasiun' },
-  LRTJBDB: { mode: 'LRT', vehicle: 'kereta', stop: 'Stasiun' },
-  TJ: { mode: 'TransJakarta', vehicle: 'bus', stop: 'Halte' },
-  APCGK: { mode: 'Kalayang', vehicle: 'kereta', stop: 'Stasiun' }
-}
-const GENERIC_VOCAB: OperatorVocab = { mode: 'kereta', vehicle: 'kereta', stop: 'Stasiun' }
-function vocabFor(operator: string): OperatorVocab {
-  return OPERATOR_VOCAB[operator] ?? GENERIC_VOCAB
-}
+// Per-operator vocabulary ("KRL", "Stasiun", ...) and the page titles live in
+// app/lib/page-titles.ts, shared with the app: Google indexes the title the SPA
+// sets after rendering, so the two must say the same thing.
 
 interface OgData {
   title: string
@@ -113,19 +95,6 @@ type APIHub = Pick<Hub, 'name' | 'heroImage' | 'kind'> & {
   members: APIStation[]
 }
 
-// Inlined rather than imported from @commute/constants: HUB_KIND_LABEL is a
-// value, and keeping this file's runtime imports at zero keeps the crawler path
-// dependency-free.
-const HUB_KIND_LABEL_INLINE: Record<APIHub['kind'], string> = {
-  hub: 'Pumpunan Moda',
-  integrated: 'Stasiun Terintegrasi',
-  directional: 'Halte'
-}
-
-function hubKindLabel(hub: APIHub): string {
-  return HUB_KIND_LABEL_INLINE[hub.kind] ?? 'Stasiun Terintegrasi'
-}
-
 /*
  * A `directional` hub is one TransJakarta halte split by direction, so its
  * copy talks about buses and a halte, never "stasiun terintegrasi" (crossing
@@ -134,7 +103,7 @@ function hubKindLabel(hub: APIHub): string {
 export function hubCopy(hub: Pick<APIHub, 'name' | 'kind'>, memberNames: string) {
   if (hub.kind === 'directional') {
     return {
-      heading: `Jadwal Bus Halte ${hub.name}`,
+      heading: hubHeading(hub.name, hub.kind),
       intro: `Halte ${hub.name}, dua arah dalam satu tempat.`,
       membersHeading: 'Sisi halte',
       schemaType: 'BusStation',
@@ -144,7 +113,7 @@ export function hubCopy(hub: Pick<APIHub, 'name' | 'kind'>, memberNames: string)
     }
   }
   return {
-    heading: `Jadwal Kereta ${hub.name}`,
+    heading: hubHeading(hub.name, hub.kind),
     intro: `Stasiun terintegrasi ${hub.name} di Jabodetabek.`,
     membersHeading: 'Stasiun terhubung',
     schemaType: 'TrainStation',
@@ -345,6 +314,64 @@ function buildHubBody(hub: APIHub, slug: string, memberNames: string): string {
   )
 }
 
+/*
+ * /fare copy, generic or for one station pair.
+ *
+ * People search "tarif KRL" far more than "Commuter Line", but both appear in
+ * queries, so the generic copy carries "KRL Commuter Line". Without either in
+ * the description Google built the snippet from the picker's UI text instead
+ * ("DariPilih stasiun. KeTARawa Buaya..."). The generic title matches
+ * FARE_PAGE_TITLE in the app, which is what Google indexes after rendering.
+ *
+ * A pair names its mode only when both ends share one ("Tarif KRL Bogor ke
+ * Tebet"); a KRL-to-MRT pair has no single mode word that fits.
+ */
+interface FarePairEnd {
+  name: string
+  operator: string
+}
+export function fareCopy(pair?: { from: FarePairEnd, to: FarePairEnd }) {
+  if (!pair) {
+    return {
+      title: 'Cek Tarif KRL, MRT, LRT & TransJakarta - Commute',
+      heading: 'Cek Tarif KRL Commuter Line, MRT, LRT, dan TransJakarta',
+      description: 'Cek tarif KRL Commuter Line, MRT, LRT, dan TransJakarta se-Jabodetabek kagak pake ribet, biar pas tap out gak ada drama saldo kurang.'
+    }
+  }
+  const { from, to } = pair
+  const mode = from.operator === to.operator ? `${vocabFor(from.operator).mode} ` : ''
+  return {
+    title: `Cek Tarif ${mode}${from.name} ke ${to.name} - Commute`,
+    heading: `Tarif ${mode}${from.name} ke ${to.name}`,
+    description: `Cek tarif ${mode}dari ${from.name} ke ${to.name} kagak pake ribet, biar pas tap out gak ada drama saldo kurang.`
+  }
+}
+
+// Crawlable body for /fare. Without it the only text a crawler finds is the
+// station picker's UI, which is what ended up as the search snippet.
+export function buildFareBody(copy: ReturnType<typeof fareCopy>): string {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    'name': 'Commute',
+    'url': `${SITE_ORIGIN}/fare`,
+    'applicationCategory': 'TravelApplication',
+    'operatingSystem': 'Web',
+    'inLanguage': 'id',
+    'description': copy.description,
+    'offers': { '@type': 'Offer', 'price': '0', 'priceCurrency': 'IDR' }
+  }
+  return (
+    `<section aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">`
+    + `<h1>${esc(copy.heading)}</h1>`
+    + `<p>${esc(copy.description)}</p>`
+    + `<p>Hitung tarif antarstasiun KRL Commuter Line Jabodetabek, MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan TransJakarta. Cek dulu saldo kartu cukup sebelum tap in. Gratis di Commute.</p>`
+    + `</section>`
+    // `<` escaped so a name can never close the script element early.
+    + `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>`
+  )
+}
+
 async function resolveOg(pathname: string, searchParams: URLSearchParams, env: Env): Promise<OgData | null> {
   // NOTE: the homepage "/" is intentionally not handled here. Under the current
   // deploy the static index.html shadows this middleware for "/", so a "/" case
@@ -377,20 +404,25 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
       ])
 
       if (fromStation && toStation) {
-        const fromName = fromStation.name
-        const toName = toStation.name
+        const copy = fareCopy({
+          from: { name: fromStation.name, operator: fromOp },
+          to: { name: toStation.name, operator: toOp }
+        })
         return {
-          title: `Cek Tarif ${fromName} ke ${toName} - Commute`,
-          description: `Cek tarif dari ${fromName} ke ${toName} kagak pake ribet, biar pas tap out gak ada drama saldo kurang.`,
-          image: fareOgImage(fromId, toId)
+          title: copy.title,
+          description: copy.description,
+          image: fareOgImage(fromId, toId),
+          bodyHtml: buildFareBody(copy)
         }
       }
     }
 
+    const copy = fareCopy()
     return {
-      title: 'Kalkulator Tarif KRL, MRT, dan LRT - Commute',
-      description: 'Cek tarif KRL, MRT, dan LRT se-Jabodetabek kagak pake ribet, biar pas tap out gak ada drama saldo kurang.',
-      image: DEFAULT_OG_IMAGE
+      title: copy.title,
+      description: copy.description,
+      image: DEFAULT_OG_IMAGE,
+      bodyHtml: buildFareBody(copy)
     }
   }
 
@@ -405,10 +437,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
       .join(', ')
     const copy = hubCopy(hub, memberNames)
     return {
-      // "Jadwal Bus Halte X - Halte" would say it twice.
-      title: hub.kind === 'directional'
-        ? `${copy.heading} - Commute`
-        : `${copy.heading} - ${hubKindLabel(hub)} - Commute`,
+      title: hubPageTitle(hub.name, hub.kind),
       description: copy.description,
       image: hub.heroImage || hubOgImage(slug),
       bodyHtml: buildHubBody(hub, slug, memberNames)
@@ -425,7 +454,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     if (!detail) return null
     const stationCount = detail.segments.reduce((n, s) => n + s.stations.length, 0)
     return {
-      title: `Jadwal ${detail.line.name} - Rute & Jam Keberangkatan - Commute`,
+      title: linePageTitle(detail.operator.code, detail.line.lineCode, detail.line.name),
       description: `Cek rute, ${stationCount} stasiun, dan jam keberangkatan ${detail.line.name} (${detail.operator.name}) kagak pake ribet.`,
       image: lineOgImage(detail.operator.code, detail.line.lineCode),
       bodyHtml: buildLineBody(detail, stationCount)
@@ -444,7 +473,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     const name = station.name
     const vocab = vocabFor(operator)
     return {
-      title: `Jadwal ${vocab.mode} ${vocab.stop} ${name} (${code}) - Commute`,
+      title: stationPageTitle(operator, name, code),
       description: `Cek jadwal & jam keberangkatan ${vocab.mode} di ${vocab.stop} ${name} kagak pake ribet, lengkap per jalur. Gratis di Commute.`,
       image: stationOgImage(station.id),
       bodyHtml: buildStationBody(station, operator, code, timetable)
