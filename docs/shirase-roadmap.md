@@ -35,9 +35,11 @@ Our edge is the same as Yandex's: local knowledge, fed in as recon notes.
 7. **Numbered MRT exits.** Exit numbers at stations, from Commute's exit data, as Naver numbers subway exits.
 8. **Peta Bus's own lines and stations.** One line per route in the `commute-overlay` slot. The basemap's `roads_rail` and station POIs give way to the app's own, client-side first and later as a style option (for example `/styles/light.json?transit=app`), so web and Android don't hard-code Protomaps layer ids.
 
+9. **Signage theme for locality and complex maps.** A dark palette in `src/flavors.ts` and a matching theme in `src/style.ts`. It takes its colours from the Jak Lingko signage palette, baked road surfaces and junction shapes without the `jp` markings (yellow is reserved for exits), and Jak Lingko pictograms through its own mapping table rather than `pois.json`. The app frames it on an exit or a POI footprint and adds the curated gate/venue overlay on top. See `interior-and-locality-maps.md` → "Complex maps".
+
 ## Signature pieces
 
-9. **3D landmarks.** Monas, Istiqlal and Katedral, modelled low-poly in Blender, as glTF on a MapLibre custom layer over shirase. Yandex's Kremlin is the bar.
+10. **3D landmarks.** Monas, Istiqlal and Katedral, modelled low-poly in Blender, as glTF on a MapLibre custom layer over shirase. Yandex's Kremlin is the bar.
 
 ## Ongoing
 
