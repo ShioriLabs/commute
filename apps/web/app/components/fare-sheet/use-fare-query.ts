@@ -19,6 +19,14 @@ import { resolveStationId, toPickableStations, type PickableStation } from './pi
 /** Leading words of the tab title on the surfaces that own one. */
 const DOCUMENT_TITLE_PREFIX = 'Cek Tarif'
 
+/*
+ * /fare's title before a pair is picked. Google renders the SPA, so this, not
+ * the middleware's crawler title, is what it indexes. It carries the mode words
+ * people actually search ("tarif KRL"); keep it in step with the `/fare` copy
+ * in functions/_middleware.ts.
+ */
+export const FARE_PAGE_TITLE = 'Cek Tarif KRL, MRT, LRT & TransJakarta - Commute'
+
 export interface FareQueryOptions {
   // Station ids to preselect, from a `/fare?from=&to=` deep link. Applied once,
   // the first time at least one side resolves — see deepLinkApplied. The search
@@ -303,7 +311,7 @@ export function useFareQuery({
     if (origin && destination) {
       document.title = `${DOCUMENT_TITLE_PREFIX} ${origin.name} ke ${destination.name} - Commute`
     } else {
-      document.title = `${DOCUMENT_TITLE_PREFIX} - Commute`
+      document.title = FARE_PAGE_TITLE
     }
   }, [origin, destination, syncDocumentTitle])
 

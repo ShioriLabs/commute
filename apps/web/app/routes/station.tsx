@@ -7,6 +7,7 @@ import LineRoundel from '~/components/line-roundel'
 import { sortLineKeysForDisplay } from '~/utils/lines'
 import { useLines } from '~/hooks/use-lines'
 import { readSavedStations, toggleSavedStation } from 'utils/saved-stations'
+import { stationPageTitle } from '~/lib/page-titles'
 
 // A route-param title rather than a "loading" placeholder: the SPA shell's
 // crawler-rewritten title is replaced on hydration, and the real name only
@@ -14,7 +15,7 @@ import { readSavedStations, toggleSavedStation } from 'utils/saved-stations'
 // whenever its render snapshot wins that race.
 export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: `${params.code.toUpperCase()} - Commute` },
+    { title: stationPageTitle(params.operator, null, params.code) },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }
@@ -36,9 +37,9 @@ export default function StationPage({ params }: Route.ComponentProps) {
     setSaved(readSavedStations().includes(header.stationId))
 
     if (header.name) {
-      document.title = `${header.name} - Commute`
+      document.title = stationPageTitle(params.operator, header.name, params.code)
     }
-  }, [header.isLoading, header.name, header.stationId])
+  }, [header.isLoading, header.name, header.stationId, params.operator, params.code])
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
@@ -110,7 +111,11 @@ export default function StationPage({ params }: Route.ComponentProps) {
           </div>
         </div>
       </div>
-      <StationContent operator={params.operator} code={params.code} />
+      {/* The live board is noise as a search snippet ("22.0522.2222.52"), so
+          Google is pointed at the meta description instead. */}
+      <div data-nosnippet>
+        <StationContent operator={params.operator} code={params.code} />
+      </div>
     </div>
   )
 }

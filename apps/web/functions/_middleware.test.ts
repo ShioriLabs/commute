@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { crawlerOgCacheKey, crawlerOgMaxAge, hubCopy, isCrawlablePage, sitemapUrls } from './_middleware'
+import { buildFareBody, crawlerOgCacheKey, crawlerOgMaxAge, fareCopy, hubCopy, isCrawlablePage, sitemapUrls } from './_middleware'
 
 /*
  * The sitemap advertises what Google should crawl, so a URL in it that answers
@@ -168,5 +168,46 @@ describe('hubCopy', () => {
   it('keeps the rail copy for integrated and hub kinds', () => {
     expect(hubCopy({ name: 'Juanda', kind: 'integrated' }, '').heading).toBe('Jadwal Kereta Juanda')
     expect(hubCopy({ name: 'Dukuh Atas', kind: 'hub' }, '').schemaType).toBe('TrainStation')
+  })
+})
+
+/*
+ * Google showed /fare as "Cek Tarif - Commute" with a snippet scraped from the
+ * picker UI. The copy has to carry the words people search: "KRL" first, and
+ * "Commuter Line" as well.
+ */
+describe('fareCopy', () => {
+  it('names both KRL and Commuter Line in the generic copy', () => {
+    const copy = fareCopy()
+    expect(copy.title).toContain('KRL')
+    expect(copy.description).toContain('KRL Commuter Line')
+    expect(copy.heading).toContain('KRL Commuter Line')
+  })
+
+  it('names the mode when both ends share an operator', () => {
+    expect(fareCopy({ from: { name: 'Bogor', operator: 'KCI' }, to: { name: 'Tebet', operator: 'KCI' } }).title)
+      .toBe('Cek Tarif KRL Bogor ke Tebet - Commute')
+    expect(fareCopy({ from: { name: 'Lebak Bulus', operator: 'MRTJ' }, to: { name: 'Bundaran HI', operator: 'MRTJ' } }).title)
+      .toBe('Cek Tarif MRT Lebak Bulus ke Bundaran HI - Commute')
+  })
+
+  it('drops the mode word for a cross-operator pair', () => {
+    const copy = fareCopy({ from: { name: 'Bogor', operator: 'KCI' }, to: { name: 'Bundaran HI', operator: 'MRTJ' } })
+    expect(copy.title).toBe('Cek Tarif Bogor ke Bundaran HI - Commute')
+    expect(copy.description).toBe('Cek tarif dari Bogor ke Bundaran HI kagak pake ribet, biar pas tap out gak ada drama saldo kurang.')
+  })
+})
+
+describe('buildFareBody', () => {
+  it('renders a heading and WebApplication JSON-LD', () => {
+    const html = buildFareBody(fareCopy())
+    expect(html).toContain('<h1>Cek Tarif KRL Commuter Line, MRT, LRT, dan TransJakarta</h1>')
+    expect(html).toContain('"@type":"WebApplication"')
+  })
+
+  it('escapes station names', () => {
+    const html = buildFareBody(fareCopy({ from: { name: 'A<b>', operator: 'KCI' }, to: { name: 'C&D', operator: 'KCI' } }))
+    expect(html).toContain('<h1>Tarif KRL A&lt;b&gt; ke C&amp;D</h1>')
+    expect(html).not.toContain('<b>')
   })
 })

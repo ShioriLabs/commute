@@ -6,6 +6,7 @@ import { HUB_KIND_LABEL } from '@commute/constants'
 import HubContent, { HubContentSkeleton, HubPlaceContent, useHub } from '~/components/hub-content'
 import { HubMemberSummary, HubPlaceTitle, useHubSelection } from '~/components/hub-switcher'
 import { isPlaceHub, type HubMember } from '~/utils/hub-members'
+import { hubPageTitle } from '~/lib/page-titles'
 
 // A route-param title rather than a "loading" placeholder: the SPA shell's
 // crawler-rewritten title is replaced on hydration, and the real name only
@@ -45,8 +46,8 @@ export default function HubPage({ params }: Route.ComponentProps) {
   const selection = useHubSelection(place, initialMemberId, handleSelectionChange)
 
   useEffect(() => {
-    if (hub?.name) document.title = `${hub.name} - Commute`
-  }, [hub?.name])
+    if (hub?.name) document.title = hubPageTitle(hub.name, hub.kind)
+  }, [hub?.name, hub?.kind])
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
@@ -86,11 +87,15 @@ export default function HubPage({ params }: Route.ComponentProps) {
           {selection && <HubMemberSummary selection={selection} />}
         </div>
       </div>
-      {!hub
-        ? <HubContentSkeleton />
-        : selection
-          ? <HubPlaceContent selection={selection} />
-          : <HubContent hub={hub} />}
+      {/* The live board is noise as a search snippet ("22.0522.2222.52"), so
+          Google is pointed at the meta description instead. */}
+      <div data-nosnippet>
+        {!hub
+          ? <HubContentSkeleton />
+          : selection
+            ? <HubPlaceContent selection={selection} />
+            : <HubContent hub={hub} />}
+      </div>
     </div>
   )
 }
