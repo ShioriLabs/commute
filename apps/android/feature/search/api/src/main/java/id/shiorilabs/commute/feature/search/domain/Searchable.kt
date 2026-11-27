@@ -50,6 +50,11 @@ sealed interface Searchable {
          * index lists once. The OTW picker resolves a link to any of them back to this row.
          */
         val siblingIds: List<String> = emptyList(),
+        /**
+         * The directional hub this row stands for, by slug: a folded halte opens its hub page on
+         * [stationId]'s side rather than the lone station. Null for every other station.
+         */
+        val hubSlug: String? = null,
     ) : Searchable {
         override val key: String get() = "STATION:$to"
     }

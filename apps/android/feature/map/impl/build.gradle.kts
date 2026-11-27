@@ -113,6 +113,8 @@ dependencies {
     implementation(project(":feature:station:api"))
     // HubSheet and HubDirectory: the hub sheet, and the `HUB-…` tap targets' slugs.
     implementation(project(":feature:hub:api"))
+    // The search index: which halte is one side of a directional hub.
+    implementation(project(":feature:search:api"))
     // LineSheet: an isolated line's sheet.
     implementation(project(":feature:line:api"))
     // MapRouteSheet, Journey: OTW in the map's sheet, and the journey drawn.

@@ -65,6 +65,11 @@ sealed interface Route : NavKey {
         /** The hub's URL key, e.g. `dukuh-atas`. */
         val slug: String,
         val title: String? = null,
+        /**
+         * The member the page opens on (the web's `?m=`): the side of a split halte a link or a tap
+         * named. Null, or an id from another hub, opens the first.
+         */
+        val memberId: String? = null,
     ) : Route
 
     /**

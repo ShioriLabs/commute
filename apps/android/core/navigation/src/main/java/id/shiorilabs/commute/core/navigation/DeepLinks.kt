@@ -30,7 +30,7 @@ fun routeForLink(link: String): Route? {
     when {
         path == null -> return null
         path.startsWith("/stations/") -> return stationRoute(path)
-        path.startsWith("/hubs/") -> return hubRoute(path)
+        path.startsWith("/hubs/") -> return hubRoute(path, queryParams(uri.rawQuery))
         path.startsWith("/lines/") -> return lineRoute(path)
     }
     return when (path) {
@@ -98,10 +98,13 @@ private fun stationRoute(path: String): Route? {
     }
 }
 
-/** `/hubs/dukuh-atas`. A slug is lower case on the web, and the API matches it exactly. */
-private fun hubRoute(path: String): Route? {
+/**
+ * `/hubs/dukuh-atas`, with `?m=` naming the member it opens on (the side of a split halte). A slug
+ * is lower case on the web, and the API matches it exactly.
+ */
+private fun hubRoute(path: String, params: Map<String, String>): Route? {
     val slug = path.removePrefix("/hubs/").takeIf { it.isNotEmpty() && '/' !in it } ?: return null
-    return Route.Hub(slug)
+    return Route.Hub(slug, memberId = params["m"]?.ifEmpty { null })
 }
 
 /**

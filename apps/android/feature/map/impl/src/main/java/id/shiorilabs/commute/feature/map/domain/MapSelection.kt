@@ -11,8 +11,11 @@ sealed interface MapSelection {
     /** A station's marker, or a name resolved to the marker it names. */
     data class Station(val stationId: String, override val point: MapPoint) : Spotlit
 
-    /** A hub's region, by the [slug] its page opens by. */
-    data class Hub(val slug: String, override val point: MapPoint) : Spotlit
+    /**
+     * A hub's region, by the [slug] its page opens by. [memberId] is the side of a split halte that
+     * was tapped, for the sheet to open on.
+     */
+    data class Hub(val slug: String, override val point: MapPoint, val memberId: String? = null) : Spotlit
 
     /**
      * A [line] isolated, the rest of the network faded. [fromStationId] is the station whose sheet

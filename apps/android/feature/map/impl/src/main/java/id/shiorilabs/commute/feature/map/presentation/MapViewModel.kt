@@ -9,6 +9,8 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.hub.data.HubDirectory
 import id.shiorilabs.commute.feature.hub.data.HubSummary
+import id.shiorilabs.commute.feature.search.data.SearchRepository
+import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
 import id.shiorilabs.commute.feature.journey.domain.StationPair
 import id.shiorilabs.commute.feature.journey.presentation.MapRouteShown
@@ -54,6 +56,7 @@ class MapViewModel @Inject constructor(
     private val environment: Environment,
     private val hubDirectory: HubDirectory,
     private val stationDirectory: StationDirectory,
+    private val searchRepository: SearchRepository,
     private val lineRepository: LineRepository,
     tripController: TripController,
 ) : ViewModel() {
@@ -71,8 +74,32 @@ class MapViewModel @Inject constructor(
     /** Every hub by the id its tap target carries (`HUB-DKA`), once loaded. */
     private val hubs = MutableStateFlow(hubDirectory.cachedHubs().orEmpty().associateBy { it.id })
 
+    /**
+     * Every halte that is one side of a directional hub, by id, to the hub's slug: from the search
+     * index, as the web's map builds it. Empty until the index loads; a tap before then opens the
+     * lone station, as before.
+     */
+    private val directionalHubs = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    private fun loadDirectionalHubs() {
+        viewModelScope.launch {
+            searchRepository.searchables().onRight { all ->
+                directionalHubs.value = buildMap {
+                    for (station in all.filterIsInstance<Searchable.Station>()) {
+                        val slug = station.hubSlug ?: continue
+                        station.stationId?.let { put(it, slug) }
+                        station.siblingIds.forEach { put(it, slug) }
+                    }
+                }
+            }
+        }
+    }
+
+    fun directionalHubOf(stationId: String): String? = directionalHubs.value[stationId]
+
     init {
         load()
+        loadDirectionalHubs()
         if (hubs.value.isEmpty()) {
             viewModelScope.launch { hubDirectory.hubs().onRight { list -> hubs.value = list.associateBy { it.id } } }
         }
@@ -102,6 +129,7 @@ class MapViewModel @Inject constructor(
             initialCamera = session.camera,
             initialSnapshot = session.snapshot,
             hubFor = ::hubFor,
+            directionalHubOf = ::directionalHubOf,
             ringColorOf = ::ringColorOf,
             lineColorOf = { key -> lineRepository.dictionary.value[key]?.colorCode },
         ).also { controller = data to it }

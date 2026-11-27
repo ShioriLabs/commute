@@ -3,6 +3,7 @@
     <!-- Header. The kind labels are the web's HUB_KIND_LABEL. -->
     <string name="hub_kind_hub">Pumpunan Moda</string>
     <string name="hub_kind_integrated">Stasiun Terintegrasi</string>
+    <string name="hub_kind_directional">Halte</string>
     <string name="hub_close_description">Tutup halaman hub</string>
     <string name="hub_open_page_description">Buka halaman hub</string>
 

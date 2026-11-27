@@ -82,6 +82,15 @@ class DeepLinksTest {
     }
 
     @Test
+    fun `a hub link's member opens the page on that side`() {
+        assertEquals(
+            Route.Hub("kali-grogol", memberId = "TJ-H00138S"),
+            routeForLink("https://commute.shiorilabs.id/hubs/kali-grogol?m=TJ-H00138S"),
+        )
+        assertEquals(Route.Hub("kali-grogol"), routeForLink("https://commute.shiorilabs.id/hubs/kali-grogol?m="))
+    }
+
+    @Test
     fun `a line link opens its page, its operator upper-cased and its code as written`() {
         assertEquals(Route.Line("KCI", "B"), routeForLink("https://commute.shiorilabs.id/lines/KCI/B"))
         assertEquals(Route.Line("LRTJBDB", "BK"), routeForLink("https://commute.shiorilabs.id/lines/lrtjbdb/BK/"))

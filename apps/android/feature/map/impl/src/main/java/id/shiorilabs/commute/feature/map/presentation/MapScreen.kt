@@ -803,9 +803,16 @@ private fun MapWithSheet(
                 is MapSelection.Hub -> key(shown.slug) {
                     hubSheet.Content(
                         slug = shown.slug,
+                        initialMemberId = shown.memberId,
                         onClose = controller::clearSelection,
-                        onOpenPage = { navigator.goTo(Route.Hub(shown.slug)) },
+                        onOpenPage = { memberId -> navigator.goTo(Route.Hub(shown.slug, memberId = memberId)) },
                         onOpenStation = openStation,
+                        // The destination set, the origin picked on the map, as a station's sheet does.
+                        onOtw = { stationId ->
+                            viewModel.otwTo(stationId)
+                            controller.clearSelection()
+                        },
+                        onIsolateLine = { lineKey -> controller.isolateLine(lineKey) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }

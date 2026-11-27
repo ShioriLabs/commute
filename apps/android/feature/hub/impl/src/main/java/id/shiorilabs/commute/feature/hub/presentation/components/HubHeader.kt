@@ -89,6 +89,7 @@ fun HubHeader(
                         when (loaded.kind) {
                             HubKind.HUB -> R.string.hub_kind_hub
                             HubKind.INTEGRATED -> R.string.hub_kind_integrated
+                            HubKind.DIRECTIONAL -> R.string.hub_kind_directional
                         },
                     ),
                     style = MaterialTheme.typography.bodyMedium,

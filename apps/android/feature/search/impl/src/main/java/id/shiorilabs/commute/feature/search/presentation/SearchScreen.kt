@@ -321,7 +321,13 @@ private fun Searchable.isPinned(savedStationIds: Set<String>): Boolean =
  */
 internal fun routeFor(searchable: Searchable): Route? = when (searchable) {
     is Searchable.Station -> searchable.stationId?.let { stationId ->
-        Route.Station(stationId = stationId, title = searchable.title, lineKeys = searchable.lines.map { it.key })
+        // A folded directional halte opens its hub, on the side the row names.
+        val slug = searchable.hubSlug
+        if (slug != null) {
+            Route.Hub(slug, title = searchable.title, memberId = stationId)
+        } else {
+            Route.Station(stationId = stationId, title = searchable.title, lineKeys = searchable.lines.map { it.key })
+        }
     }
 
     // The slug is the hub's `hub-id`, or else the tail of its `/hubs/{slug}` link.

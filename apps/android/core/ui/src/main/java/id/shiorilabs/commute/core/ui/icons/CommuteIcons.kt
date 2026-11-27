@@ -11,7 +11,10 @@ import com.adamglin.phosphoricons.bold.BellSimpleRinging
 import com.adamglin.phosphoricons.bold.BellSimple
 import com.adamglin.phosphoricons.bold.Bug
 import com.adamglin.phosphoricons.bold.Alarm
+import com.adamglin.phosphoricons.bold.ArrowDown
+import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.ArrowRight
+import com.adamglin.phosphoricons.bold.ArrowUp
 import com.adamglin.phosphoricons.bold.ArrowSquareOut
 import com.adamglin.phosphoricons.bold.ArrowsDownUp
 import com.adamglin.phosphoricons.bold.Bus
@@ -67,7 +70,12 @@ import com.adamglin.phosphoricons.fill.MapTrifold
 import com.adamglin.phosphoricons.fill.PushPin
 import com.adamglin.phosphoricons.fill.PushPinSimple
 import com.adamglin.phosphoricons.fill.Ticket
+import com.adamglin.phosphoricons.fill.Bus
+import com.adamglin.phosphoricons.fill.Subway
+import com.adamglin.phosphoricons.fill.Train
+import com.adamglin.phosphoricons.fill.TrainRegional
 import com.adamglin.phosphoricons.fill.TrainSimple
+import com.adamglin.phosphoricons.fill.Tram
 import com.adamglin.phosphoricons.fill.Trash
 import com.adamglin.phosphoricons.fill.WarningCircle
 import com.adamglin.phosphoricons.fill.XCircle
@@ -210,4 +218,14 @@ object CommuteIcons {
     val BikeParking: ImageVector = PhosphorIcons.Duotone.Bicycle
     val Lockers: ImageVector = PhosphorIcons.Duotone.Lockers
     val NursingRoom: ImageVector = PhosphorIcons.Duotone.Baby
+
+    // A hub's operator tiles, as filled mode glyphs, and its sides' arrows.
+    val ModeRail: ImageVector = PhosphorIcons.Fill.Train
+    val ModeAirportRail: ImageVector = PhosphorIcons.Fill.TrainRegional
+    val ModeSubway: ImageVector = PhosphorIcons.Fill.Subway
+    val ModeTram: ImageVector = PhosphorIcons.Fill.Tram
+    val ModeBus: ImageVector = PhosphorIcons.Fill.Bus
+    val ArrowUp: ImageVector = PhosphorIcons.Bold.ArrowUp
+    val ArrowDown: ImageVector = PhosphorIcons.Bold.ArrowDown
+    val ArrowLeft: ImageVector = PhosphorIcons.Bold.ArrowLeft
 }

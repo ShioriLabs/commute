@@ -7,6 +7,8 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.feature.station.navigation.StationNavContribution
+import id.shiorilabs.commute.feature.station.presentation.StationBody
+import id.shiorilabs.commute.feature.station.presentation.StationBodyImpl
 import id.shiorilabs.commute.feature.station.presentation.StationSheet
 import id.shiorilabs.commute.feature.station.presentation.StationSheetImpl
 
@@ -21,4 +23,8 @@ abstract class StationNavModule {
     /** The station page in the map's sheet. */
     @Binds
     abstract fun bindStationSheet(impl: StationSheetImpl): StationSheet
+
+    /** The station page under a hub's own header. */
+    @Binds
+    abstract fun bindStationBody(impl: StationBodyImpl): StationBody
 }

@@ -54,9 +54,28 @@ class HubRepositoryImplTest {
             listOf("KCI-SUD", "KCI-SUDB", "MRTJ-DKA", "LRTJBDB-DKA", "TJ-H00047P", "TJ-B07663P", "TJ-H00283P"),
             hub.members.map { it.id },
         )
-        assertEquals(HubMember("KCI-SUDB", "BNI City", "KCI", listOf("KCI:A", "KCI:C")), hub.members[1])
+        assertEquals(HubMember("KCI-SUDB", "BNI City", "KCI", listOf("KCI:A", "KCI:C"), officialName = "SUDIRMAN BARU"), hub.members[1])
     }
 
+
+    @Test
+    fun `a directional hub reads as one, its sides carrying their official names`() = runTest {
+        val service = FakeCommuteService().apply {
+            hub = {
+                fixture().copy(
+                    kind = "directional",
+                    members = fixture().members.take(2).mapIndexed { index, member ->
+                        member.copy(officialName = "Kali Grogol Arah ${if (index == 0) "Utara" else "Selatan"}")
+                    },
+                )
+            }
+        }
+
+        val hub = HubRepositoryImpl(service, queries()).hub("kali-grogol").fetch().getOrNull()!!
+
+        assertEquals(HubKind.DIRECTIONAL, hub.kind)
+        assertEquals(listOf("Kali Grogol Arah Utara", "Kali Grogol Arah Selatan"), hub.members.map { it.officialName })
+    }
     @Test
     fun `a kind the app doesn't know reads as an integrated station`() = runTest {
         val service = FakeCommuteService().apply {

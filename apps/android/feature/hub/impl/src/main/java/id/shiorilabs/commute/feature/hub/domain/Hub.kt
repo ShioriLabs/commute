@@ -19,6 +19,13 @@ enum class HubKind {
 
     /** One place to a rider, split only in the operators' data ("Stasiun Terintegrasi"). */
     INTEGRATED,
+
+    /** One TransJakarta halte split by direction of travel ("Halte"). */
+    DIRECTIONAL,
+    ;
+
+    /** One place to a rider, which the page shows as tiles and sides rather than a member list. */
+    val isPlace: Boolean get() = this != HUB
 }
 
 /** A station in a hub. */
@@ -29,4 +36,6 @@ data class HubMember(
     val operator: String,
     /** `OPERATOR:CODE`, resolved through the line dictionary by whoever draws them. */
     val lineKeys: List<String>,
+    /** The operator's own name, which carries a split halte's "Arah …". Falls back to [name]. */
+    val officialName: String = name,
 )

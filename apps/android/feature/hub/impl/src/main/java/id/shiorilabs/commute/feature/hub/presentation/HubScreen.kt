@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -40,7 +41,10 @@ import id.shiorilabs.commute.feature.hub.domain.HubKind
 import id.shiorilabs.commute.feature.hub.domain.HubMember
 import id.shiorilabs.commute.feature.hub.presentation.components.HubHeader
 import id.shiorilabs.commute.feature.hub.presentation.components.HubMemberRow
+import id.shiorilabs.commute.feature.hub.presentation.components.HubPlaceHeader
+import id.shiorilabs.commute.feature.hub.presentation.components.rememberHubSelection
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.presentation.StationBody
 
 /** The page is white, as on the web, like the station page. */
 private val HubBackground: Color
@@ -56,6 +60,9 @@ fun HubScreen(
     slug: String,
     innerPadding: PaddingValues,
     placeholderTitle: String? = null,
+    /** The member a `?m=` link names, or null for the first. */
+    initialMemberId: String? = null,
+    stationBody: StationBody? = null,
     viewModel: HubViewModel = hiltViewModel<HubViewModel, HubViewModel.Factory>(
         creationCallback = { factory -> factory.create(slug) },
     ),
@@ -70,11 +77,16 @@ fun HubScreen(
         innerPadding = innerPadding,
         offline = offline,
         placeholderTitle = placeholderTitle,
+        initialMemberId = initialMemberId,
+        stationBody = stationBody,
         onClose = { navigator.pop() },
         onRetry = viewModel::retry,
         onOpenStation = { member ->
             navigator.goTo(Route.Station(member.id, title = member.name, lineKeys = member.lineKeys))
         },
+        onOpenStationId = { id -> navigator.goTo(Route.Station(id)) },
+        // Plans a trip here, as the station page's own button does.
+        onOtw = { id -> navigator.goTo(Route.Otw(toId = id)) },
     )
 }
 
@@ -86,12 +98,40 @@ internal fun HubContent(
     innerPadding: PaddingValues,
     offline: Boolean = false,
     placeholderTitle: String? = null,
+    initialMemberId: String? = null,
+    /** Draws a place hub's member under its own header; without it the member list stands in. */
+    stationBody: StationBody? = null,
     onClose: () -> Unit = {},
     onRetry: () -> Unit = {},
     onOpenStation: (HubMember) -> Unit = {},
+    /** A transfer tapped inside a place hub's member, by station id. */
+    onOpenStationId: (stationId: String) -> Unit = {},
+    /** "OTW Ke Sini" on a place hub's member, by station id. */
+    onOtw: (stationId: String) -> Unit = {},
+    /** A line card's name tapped: false when it can't be handled in place, for its page to open. */
+    onIsolateLine: (lineKey: String) -> Boolean = { false },
+    /** A place hub's member picked, for a link to it to follow. */
+    onSelectMember: (HubMember) -> Unit = {},
     /** In the map's sheet: opens the full page. */
     onOpenPage: (() -> Unit)? = null,
 ) {
+    val hub = (state.hub as? UIState.Success)?.data
+    if (hub != null && hub.kind.isPlace && hub.members.isNotEmpty() && stationBody != null) {
+        HubPlaceContent(
+            hub = hub,
+            lines = state.lines,
+            innerPadding = innerPadding,
+            initialMemberId = initialMemberId,
+            stationBody = stationBody,
+            onClose = onClose,
+            onOpenPage = onOpenPage,
+            onOpenStation = onOpenStationId,
+            onOtw = onOtw,
+            onIsolateLine = onIsolateLine,
+            onSelectMember = onSelectMember,
+        )
+        return
+    }
     FrostedHeaderPage(
         surfaceColor = HubBackground,
         header = {
@@ -161,6 +201,47 @@ internal fun HubContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * A place hub (integrated or directional): its operator tiles, sides and lines as the header, and
+ * the selected member's own station page as the body, fresh for each member.
+ */
+@Composable
+private fun HubPlaceContent(
+    hub: Hub,
+    lines: Map<String, LineInfo>,
+    innerPadding: PaddingValues,
+    initialMemberId: String?,
+    stationBody: StationBody,
+    onClose: () -> Unit,
+    onOpenPage: (() -> Unit)?,
+    onOpenStation: (stationId: String) -> Unit,
+    onOtw: (stationId: String) -> Unit,
+    onIsolateLine: (lineKey: String) -> Boolean,
+    onSelectMember: (HubMember) -> Unit,
+) {
+    val selection = rememberHubSelection(hub, initialMemberId, onSelectMember)
+    val member = selection.member
+    key(member.id) {
+        stationBody.Content(
+            stationId = member.id,
+            header = {
+                HubPlaceHeader(
+                    selection = selection,
+                    lines = lines,
+                    onClose = onClose,
+                    topInset = innerPadding.calculateTopPadding(),
+                    onOpenPage = onOpenPage,
+                )
+            },
+            innerPadding = innerPadding,
+            onOpenStation = onOpenStation,
+            onOtw = { onOtw(member.id) },
+            onIsolateLine = onIsolateLine,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

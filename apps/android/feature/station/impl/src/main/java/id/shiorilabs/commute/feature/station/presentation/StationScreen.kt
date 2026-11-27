@@ -162,6 +162,8 @@ internal fun StationContent(
     onOpenLine: (lineKey: String) -> Unit = {},
     /** A line card's name tapped: its page, or in the map's sheet the line isolated on the map. */
     onOpenLineCard: (lineKey: String) -> Unit = onOpenLine,
+    /** Stands in for the station's own header, as under a hub's title ([StationBodyImpl]). */
+    header: (@Composable () -> Unit)? = null,
 ) {
     val hazeState = rememberHazeState()
     val listState = rememberLazyListState()
@@ -184,7 +186,11 @@ internal fun StationContent(
             .background(StationBackground),
     ) { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val header = subcompose(StationSlot.HEADER) {
+        val headerPlaceables = subcompose(StationSlot.HEADER) {
+            if (header != null) {
+                header()
+                return@subcompose
+            }
             StationHeader(
                 stationId = board.stationId,
                 station = board.station,
@@ -200,7 +206,7 @@ internal fun StationContent(
                 onOpenPage = onOpenPage,
             )
         }.map { it.measure(loose) }
-        val headerHeight = header.maxOfOrNull { it.height } ?: 0
+        val headerHeight = headerPlaceables.maxOfOrNull { it.height } ?: 0
 
         // Behind the header, which draws no surface of its own, and running a little past it.
         val backdrop = subcompose(StationSlot.BACKDROP) {
@@ -237,7 +243,7 @@ internal fun StationContent(
         layout(constraints.maxWidth, constraints.maxHeight) {
             list.forEach { it.placeRelative(0, 0) }
             backdrop.forEach { it.placeRelative(0, 0) }
-            header.forEach { it.placeRelative(0, 0) }
+            headerPlaceables.forEach { it.placeRelative(0, 0) }
         }
     }
 }
@@ -507,29 +513,36 @@ private fun LazyListScope.departures(
                 lastTrains(timetable.data, lines)
             }
 
-            // Offline before anything else, as on the web: an empty board then says nothing about
-            // the station, and a retry once connected may well fill it.
-            offline -> item(key = "departures-offline") {
-                LoadProblemState(problem = LoadProblem.OFFLINE, onRetry = onRetry, modifier = inset)
-            }
-
-            // A missing schedule is a fact about the operator, so trip planning stays on offer. The
-            // skeleton holds while the frequencies load alongside the board, rather than flashing
-            // the no-schedule note before they replace it.
+            // A halte's frequencies are its board, asked for in place of a timetable that is always
+            // a 404, so they come before the offline check, as on the web: cached ones show offline
+            // too. The skeleton holds while they load, rather than flashing the no-schedule note
+            // before they replace it. A missing schedule is a fact about the operator, so trip
+            // planning stays on offer, but not over a failed load, which says nothing yet.
             isTransJakarta(board.stationId) -> when (val frequencies = board.frequencies) {
                 is UIState.Idle, is UIState.Loading -> skeleton()
-                is UIState.Success, is UIState.Error -> {
+
+                is UIState.Error -> item(key = "departures-failed") {
+                    LoadProblemState(
+                        problem = if (offline || frequencies.isOffline()) LoadProblem.OFFLINE else LoadProblem.ERROR,
+                        onRetry = onRetry,
+                        modifier = inset,
+                    )
+                }
+
+                is UIState.Success -> {
                     item(key = "departures-frequencies") {
-                        HalteFrequencies(
-                            frequencies = (frequencies as? UIState.Success)?.data,
-                            lines = lines,
-                            modifier = inset,
-                        )
+                        HalteFrequencies(frequencies = frequencies.data, lines = lines, modifier = inset)
                     }
                     item(key = "actions") {
                         StationActions(onOtw = onOtw, modifier = inset.padding(top = 16.dp))
                     }
                 }
+            }
+
+            // Offline before anything else, as on the web: an empty board then says nothing about
+            // the station, and a retry once connected may well fill it.
+            offline -> item(key = "departures-offline") {
+                LoadProblemState(problem = LoadProblem.OFFLINE, onRetry = onRetry, modifier = inset)
             }
 
             // A retired station has no schedule by definition, and its notice above already says

@@ -184,6 +184,18 @@ class StationBoardsTest {
     }
 
     @Test
+    fun `a halte never asks for a timetable, today's or tomorrow's`() = runTest {
+        val repository = FakeStationRepository().apply { station = halte.right() }
+
+        // A Friday: a rail station would also ask for Saturday's board.
+        val boards = repository.board("TJ-H00001P", LocalDateTime.parse("2026-10-02T08:00:00")).toList()
+
+        assertTrue(repository.asked.isEmpty())
+        assertEquals(emptyList<LineTimetable>(), (boards.last().timetable as UIState.Success).data)
+        assertTrue(boards.last().frequencies is UIState.Success)
+    }
+
+    @Test
     fun `a halte asks for the hour's frequencies, the service day's after midnight`() = runTest {
         val repository = FakeStationRepository().apply {
             station = halte.right()

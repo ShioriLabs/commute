@@ -1,6 +1,5 @@
 package id.shiorilabs.commute.feature.station.data
 
-import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.toUIState
 import id.shiorilabs.commute.core.time.nextServiceDayOf
 import id.shiorilabs.commute.core.time.serviceDayOf
@@ -32,21 +31,29 @@ fun StationRepository.board(stationId: String, now: LocalDateTime): Flow<Station
     val day = serviceDayOf(now)
     val nextDay = nextServiceDayOf(now)
     val halte = isTransJakarta(stationId)
-    val nextBoard = if (nextDay != day) timetable(stationId, nextDay).observe() else flowOf(null)
+    // A halte's timetable is a 404 on the API, so it is never asked for, today's or tomorrow's:
+    // its frequencies are its board, as on the web.
+    val today = if (halte) flowOf(null) else timetable(stationId, day).observe()
+    val nextBoard = if (nextDay != day && !halte) timetable(stationId, nextDay).observe() else flowOf(null)
     val frequencies = if (halte) frequencies(stationId, day, now.hour).observe() else flowOf(null)
 
     return combine(
         station(stationId).observe(),
-        timetable(stationId, day).observe(),
+        today,
         nextBoard,
         frequencies,
     ) { station, timetable, next, frequency ->
         val stationState = station.toUIState()
-        val shown = listOfNotNull(station, timetable.takeUnless { halte }, frequency)
+        val shown = listOfNotNull(station, timetable, frequency)
         StationBoard(
             stationId = stationId,
             station = stationState,
-            timetable = if (stationState is UIState.Loading) UIState.Loading else timetable.toBoardState(halte),
+            timetable = when {
+                stationState is UIState.Loading -> UIState.Loading
+                // A halte's is the empty one it really is, with its frequencies standing in.
+                timetable == null -> UIState.Success(emptyList())
+                else -> timetable.toUIState()
+            },
             nextDayBoard = next?.data?.associateBy { it.lineKey },
             nextDayDiffers = nextDay != day,
             frequencies = frequency?.toUIState() ?: UIState.Idle,
@@ -57,32 +64,30 @@ fun StationRepository.board(stationId: String, now: LocalDateTime): Flow<Station
 }
 
 /**
- * The API answers a halte's timetable with a 404 ("not available yet"), so for TransJakarta a
- * board with none held is the empty one it really is, as the web treats it: its frequencies stand
- * in. Not loading while it's asked for either: nothing is held to show, and waiting on an answer
- * that is a 404 would only hold the board (and the splash, for one home opens on) on the network.
- */
-private fun Query<List<LineTimetable>>.toBoardState(halte: Boolean): UIState<List<LineTimetable>> =
-    if (halte && data == null) UIState.Success(emptyList()) else toUIState()
-
-/**
  * [stationId]'s board for the service day running at [now] from what has already been loaded this
- * session, or null when the station or today's board hasn't been. The next day's board and a
- * halte's frequencies are filled in when they are there too; without them the board is still whole
- * enough to show, and a halte's frequencies are left [UIState.Loading] for [board] to fill.
+ * session, or null when the station or today's board hasn't been (a halte's board is its
+ * frequencies, which fill in when held and are otherwise left [UIState.Loading] for [board] to
+ * fill). The next day's board is filled in when it is there too; without it the board is still
+ * whole enough to show.
  */
 fun StationRepository.cachedBoard(stationId: String, now: LocalDateTime): StationBoard? {
     val day = serviceDayOf(now)
     val nextDay = nextServiceDayOf(now)
+    val halte = isTransJakarta(stationId)
     val station = station(stationId).cached() ?: return null
-    val timetable = timetable(stationId, day).cached() ?: return null
+    // A halte has no timetable to hold: it is the empty one it really is.
+    val timetable = if (halte) emptyList<LineTimetable>() else timetable(stationId, day).cached() ?: return null
     return StationBoard(
         stationId = stationId,
         station = UIState.Success(station),
         timetable = UIState.Success(timetable),
-        nextDayBoard = if (nextDay != day) timetable(stationId, nextDay).cached()?.associateBy { it.lineKey } else null,
+        nextDayBoard = if (nextDay != day && !halte) {
+            timetable(stationId, nextDay).cached()?.associateBy { it.lineKey }
+        } else {
+            null
+        },
         nextDayDiffers = nextDay != day,
-        frequencies = if (isTransJakarta(stationId)) {
+        frequencies = if (halte) {
             frequencies(stationId, day, now.hour).cached()?.let { UIState.Success(it) } ?: UIState.Loading
         } else {
             UIState.Idle

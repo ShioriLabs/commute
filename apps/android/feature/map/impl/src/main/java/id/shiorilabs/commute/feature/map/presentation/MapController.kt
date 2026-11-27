@@ -78,6 +78,7 @@ import kotlin.math.min
  * @param initialCamera where the camera was when the map last left the screen, if it did.
  * @param hubFor the hub a `HUB-…` tap target names, with its ring colour; null while unknown.
  * @param ringColorOf a station's line colour for the ring, once it can be looked up.
+ * @param directionalHubOf the slug of the directional hub a halte is one side of; null for any other.
  * @param lineColorOf a line's `#RRGGBB` by `OPERATOR:CODE`, for a drawn route; null while unknown.
  *
  * Held by the map's view model, so it outlives the screen while the map stays on the back stack:
@@ -91,6 +92,7 @@ class MapController(
     initialSnapshot: Bitmap?,
     private val hubFor: (hubId: String) -> Pair<String, Rgb?>?,
     private val ringColorOf: suspend (stationId: String) -> Rgb?,
+    private val directionalHubOf: (stationId: String) -> String? = { null },
     private val lineColorOf: (lineKey: String) -> String? = { null },
 ) {
 
@@ -393,9 +395,14 @@ class MapController(
      */
     fun selectStation(stationId: String): Boolean {
         val marker = data.points.markerOf(stationId) ?: return false
-        select(MapSelection.Station(stationId, marker), null)
+        select(stationSelection(stationId, marker), null)
         return true
     }
+
+    /** A station's selection: one side of a split halte opens its hub on that side, as on the web. */
+    private fun stationSelection(stationId: String, point: MapPoint): MapSelection.Spotlit =
+        directionalHubOf(stationId)?.let { slug -> MapSelection.Hub(slug, point, memberId = stationId) }
+            ?: MapSelection.Station(stationId, point)
 
     /**
      * Draws [legs] from [fromId] to [toId] over the map, which fades back behind it once a line is
@@ -553,11 +560,16 @@ class MapController(
             fadeFrom = seedFadeFrom(spotlight?.lastFade, isolate?.lastFade),
         )
         isolate?.exit(now)
-        if (selection is MapSelection.Station && color == null) {
+        // A side of a split halte tints like the station it is, a hub otherwise by the caller's colour.
+        val tintStationId = when (selection) {
+            is MapSelection.Station -> selection.stationId
+            is MapSelection.Hub -> selection.memberId
+        }
+        if (tintStationId != null && color == null) {
             scope.launch {
-                val tint = ringColorOf(selection.stationId) ?: return@launch
+                val tint = ringColorOf(tintStationId) ?: return@launch
                 val current = spotlight ?: return@launch
-                if (current.point.stationId == selection.stationId) {
+                if (current.point === point) {
                     current.color = tint
                     invalidate()
                 }
@@ -904,7 +916,7 @@ class MapController(
         }
         val opened = when (val hit = hitTest(worldX, worldY, data.points, data.labels, slop)) {
             is MapHit.Station -> {
-                select(MapSelection.Station(hit.point.stationId, hit.point), null)
+                select(stationSelection(hit.point.stationId, hit.point), null)
                 true
             }
 
